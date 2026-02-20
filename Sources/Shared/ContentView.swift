@@ -14,7 +14,7 @@ struct ContentView: View {
                 colors[selectedNoteIndex].opacity(0.15)
                     .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
             }
-            
+
             VStack(spacing: 0) {
                 #if os(iOS)
                 // Tab Bar (iOS)
@@ -22,7 +22,7 @@ struct ContentView: View {
                     .padding(.vertical, 8)
                     .padding(.horizontal, 12)
                 #endif
-                
+
                 // Editor Area
                 if notes.count == 7 {
                     let note = notes[selectedNoteIndex]
@@ -54,7 +54,7 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Close window")
             }
-        
+
             ToolbarItem(placement: .principal) {
                 colorPickerRow
             }
@@ -82,7 +82,7 @@ struct ContentView: View {
         let ringOpacity = 0.7
         let lineWidth: CGFloat = 2
         let ringScale: CGFloat = 1.2
-        
+
         Circle()
             .fill(colors[index])
             .frame(width: size, height: size)
@@ -100,16 +100,21 @@ struct ContentView: View {
     }
 
     private func initializeIfNeeded() {
-        if notes.count != 7 {
-            // Clear existing if mismatch (e.g. during development)
-            for note in notes {
-                modelContext.delete(note)
-            }
-            for i in 0..<7 {
-                let newItem = NoteItem(id: i, colorHex: "")
+        if notes.count >= 7 {
+            return
+        }
+
+        // Find existing IDs
+        let existingIds = Set(notes.map { $0.id })
+
+        // Create missing
+        for i in 0..<7 {
+            if !existingIds.contains(i) {
+                let newItem = NoteItem(id: i)
                 modelContext.insert(newItem)
             }
-            try? modelContext.save()
         }
+
+        try? modelContext.save()
     }
 }
