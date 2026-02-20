@@ -11,7 +11,8 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             if notes.count == 7 {
-                colors[selectedNoteIndex].opacity(0.15).ignoresSafeArea()
+                colors[selectedNoteIndex].opacity(0.15)
+                    .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
             }
             
             VStack(spacing: 0) {
@@ -40,21 +41,20 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(minWidth: 300, minHeight: 400)
+        .frame(minWidth: 500, minHeight: 400)
         #if os(macOS)
         .toolbar {
-            ToolbarItem(placement: .navigation) {
+            ToolbarItem(placement: .automatic) {
                 Button(action: {
                     NSApp.windows.first(where: { $0.isVisible && $0 is NSPanel })?.orderOut(nil)
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary.opacity(0.6))
+                        .font(.system(size: 18))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Close window")
             }
-            
+        
             ToolbarItem(placement: .principal) {
                 colorPickerRow
             }
@@ -67,40 +67,36 @@ struct ContentView: View {
 
     @ViewBuilder
     private var colorPickerRow: some View {
-        #if os(macOS)
-        let size: CGFloat = 16
-        let spacing: CGFloat = 10
-        let scale: CGFloat = 1.15
-        let ringOpacity = 0.4
-        let lineWidth: CGFloat = 2
-        let ringScale: CGFloat = 1.0
-        #else
-        let size: CGFloat = 14
-        let spacing: CGFloat = 8
-        let scale: CGFloat = 1.2
-        let ringOpacity = 0.3
-        let lineWidth: CGFloat = 1.5
-        let ringScale: CGFloat = 1.4
-        #endif
-        
+        let spacing: CGFloat = 15
         HStack(spacing: spacing) {
-            ForEach(0..<7) { index in
-                Circle()
-                    .fill(colors[index])
-                    .frame(width: size, height: size)
-                    .scaleEffect(selectedNoteIndex == index ? scale : 1.0)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.primary.opacity(selectedNoteIndex == index ? ringOpacity : 0), lineWidth: lineWidth)
-                            .scaleEffect(selectedNoteIndex == index ? ringScale : 1.0)
-                    )
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                            selectedNoteIndex = index
-                        }
-                    }
+            ForEach(0..<7, id: \.self) { index in
+                colorCircle(index: index)
             }
         }
+    }
+
+    @ViewBuilder
+    private func colorCircle(index: Int) -> some View {
+        let size: CGFloat = 16
+        let scale: CGFloat = 1.2
+        let ringOpacity = 0.7
+        let lineWidth: CGFloat = 2
+        let ringScale: CGFloat = 1.2
+        
+        Circle()
+            .fill(colors[index])
+            .frame(width: size, height: size)
+            .scaleEffect(selectedNoteIndex == index ? scale : 1.0)
+            .overlay(
+                Circle()
+                    .stroke(Color.primary.opacity(selectedNoteIndex == index ? ringOpacity : 0), lineWidth: lineWidth)
+                    .scaleEffect(selectedNoteIndex == index ? ringScale : 1.0)
+            )
+            .onTapGesture {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    selectedNoteIndex = index
+                }
+            }
     }
 
     private func initializeIfNeeded() {

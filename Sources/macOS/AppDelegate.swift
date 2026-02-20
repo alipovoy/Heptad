@@ -10,7 +10,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         
         if let button = self.statusBarItem.button {
-            button.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "7Notes")
+            button.image = NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: "7Notes")
             button.action = #selector(toggleWindow(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
@@ -30,7 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         
         if event.type == .rightMouseUp {
             let menu = NSMenu()
-            menu.addItem(NSMenuItem(title: "Quit 7Notes", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+            menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
             statusBarItem.menu = menu
             statusBarItem.button?.performClick(nil)
             statusBarItem.menu = nil
@@ -53,7 +53,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 styleMask: [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel, .utilityWindow],
                 backing: .buffered, defer: false)
             
-            panel.titlebarAppearsTransparent = true
+            panel.titlebarAppearsTransparent = false
             panel.titleVisibility = .hidden
             panel.standardWindowButton(.closeButton)?.isHidden = true
             panel.standardWindowButton(.miniaturizeButton)?.isHidden = true

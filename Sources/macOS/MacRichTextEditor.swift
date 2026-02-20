@@ -18,7 +18,7 @@ struct MacRichTextEditor: NSViewRepresentable {
         textView.isRichText = true
         textView.importsGraphics = false
         textView.allowsImageEditing = false
-        textView.font = .systemFont(ofSize: 18) // Good readable default
+        textView.font = .systemFont(ofSize: 16) // Good readable default
         
         textView.usesInspectorBar = false
         textView.allowsDocumentBackgroundColorChange = false
