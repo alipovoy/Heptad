@@ -1,0 +1,30 @@
+name: SevenNotes
+options:
+  bundleIdPrefix: com.sevennotes
+  createIntermediateGroups: true
+targets:
+  SevenNotes-macOS:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Sources/Shared
+      - path: Sources/macOS
+    info:
+      path: Sources/macOS/Info.plist
+      properties:
+        LSUIElement: true
+  
+  SevenNotes-iOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources/Shared
+      - path: Sources/iOS
+    info:
+      path: Sources/iOS/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
