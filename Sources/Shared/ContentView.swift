@@ -46,7 +46,7 @@ struct ContentView: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button(action: {
-                    NSApp.windows.first(where: { $0.isVisible && $0 is NSPanel })?.orderOut(nil)
+                    NSApp.keyWindow?.orderOut(nil)
                 }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18))

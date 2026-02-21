@@ -18,7 +18,7 @@ struct MacRichTextEditor: NSViewRepresentable {
         textView.isRichText = true
         textView.importsGraphics = false
         textView.allowsImageEditing = false
-        textView.font = .systemFont(ofSize: 16) // Good readable default
+        textView.font = .systemFont(ofSize: 16)
 
         textView.usesInspectorBar = false
         textView.allowsDocumentBackgroundColorChange = false
@@ -30,7 +30,13 @@ struct MacRichTextEditor: NSViewRepresentable {
 
         if !note.rtfData.isEmpty,
            let attrString = NSAttributedString(rtf: note.rtfData, documentAttributes: nil) {
+            // Disable undo registration during initial content load.
+            // setAttributedString opens undo groups that cause
+            // "too many nested undo groups" crash if not properly closed.
+            textView.undoManager?.disableUndoRegistration()
             textView.textStorage?.setAttributedString(attrString)
+            textView.undoManager?.enableUndoRegistration()
+            textView.undoManager?.removeAllActions()
         }
 
         return scrollView
