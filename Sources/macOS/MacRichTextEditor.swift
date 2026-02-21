@@ -18,7 +18,7 @@ struct MacRichTextEditor: NSViewRepresentable {
         textView.isRichText = true
         textView.importsGraphics = false
         textView.allowsImageEditing = false
-        textView.font = .systemFont(ofSize: 16)
+        textView.font = .systemFont(ofSize: AppConstants.UI.defaultFontSize)
 
         textView.usesInspectorBar = false
         textView.allowsDocumentBackgroundColorChange = false
@@ -70,7 +70,7 @@ struct MacRichTextEditor: NSViewRepresentable {
 
             saveTask = Task {
                 // Debounce window (300ms)
-                try? await Task.sleep(nanoseconds: 300_000_000)
+                try? await Task.sleep(nanoseconds: AppConstants.Timing.debounceSaveNanoseconds)
                 guard !Task.isCancelled else { return }
 
                 // Serialize off the main thread

@@ -26,7 +26,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var anchorOrigin: NSPoint = .zero
 
     /// Threshold (in points) for detecting that the user dragged the panel away.
-    private let unpinThreshold: CGFloat = 20
+    private let unpinThreshold: CGFloat = AppConstants.Window.unpinThreshold
 
     /// Global event monitor for click-outside-to-dismiss when pinned.
     private var globalClickMonitor: Any?
@@ -351,7 +351,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             textView.didChangeText()
         } else {
             var attrs = textView.typingAttributes
-            let currentFont = attrs[.font] as? NSFont ?? NSFont.systemFont(ofSize: 16)
+            let currentFont = attrs[.font] as? NSFont ?? NSFont.systemFont(ofSize: AppConstants.UI.defaultFontSize)
             let traits = fm.traits(of: currentFont)
             let newFont: NSFont
             if traits.contains(trait) {
@@ -380,7 +380,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             textView.didChangeText()
         } else {
             var attrs = textView.typingAttributes
-            let currentFont = attrs[.font] as? NSFont ?? NSFont.systemFont(ofSize: 16)
+            let currentFont = attrs[.font] as? NSFont ?? NSFont.systemFont(ofSize: AppConstants.UI.defaultFontSize)
             let newSize = increase ? currentFont.pointSize + 2 : max(8, currentFont.pointSize - 2)
             let newFont = NSFontManager.shared.convert(currentFont, toSize: newSize)
             attrs[.font] = newFont

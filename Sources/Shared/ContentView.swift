@@ -67,7 +67,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var colorPickerRow: some View {
-        let spacing: CGFloat = 15
+        let spacing: CGFloat = AppConstants.UI.defaultSpacing
         HStack(spacing: spacing) {
             ForEach(0..<7, id: \.self) { index in
                 colorCircle(index: index)
@@ -77,7 +77,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func colorCircle(index: Int) -> some View {
-        let size: CGFloat = 16
+        let size: CGFloat = AppConstants.UI.defaultFontSize
         let scale: CGFloat = 1.2
         let ringOpacity = 0.7
         let lineWidth: CGFloat = 2

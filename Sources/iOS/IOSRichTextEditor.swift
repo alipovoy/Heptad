@@ -52,7 +52,7 @@ struct IOSRichTextEditor: UIViewRepresentable {
 
             saveTask = Task {
                 // Debounce window (300ms)
-                try? await Task.sleep(nanoseconds: 300_000_000)
+                try? await Task.sleep(nanoseconds: AppConstants.Timing.debounceSaveNanoseconds)
                 guard !Task.isCancelled else { return }
 
                 // Serialize off the main thread
