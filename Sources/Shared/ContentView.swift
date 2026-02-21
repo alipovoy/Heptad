@@ -41,8 +41,8 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(minWidth: 500, minHeight: 400)
         #if os(macOS)
+        .frame(minWidth: 320, minHeight: 200)
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button(action: {
