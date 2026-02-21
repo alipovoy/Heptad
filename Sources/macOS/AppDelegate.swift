@@ -219,13 +219,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         // Create regular window if needed
         if regularWindow == nil {
-            let window = NSWindow(
+            let window = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
-                styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
+                styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView, .utilityWindow],
                 backing: .buffered, defer: false)
 
             window.titlebarAppearsTransparent = false
             window.titleVisibility = .hidden
+            window.standardWindowButton(.closeButton)?.isHidden = true
+            window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+            window.standardWindowButton(.zoomButton)?.isHidden = true
             window.isMovableByWindowBackground = true
             window.isReleasedWhenClosed = false
             window.delegate = self
