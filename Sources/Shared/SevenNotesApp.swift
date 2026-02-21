@@ -18,6 +18,10 @@ struct SevenNotesApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     #endif
 
+    init() {
+        AppInitializer.shared.initialize(modelContainer: Self.sharedModelContainer)
+    }
+
     var body: some Scene {
         #if os(macOS)
         // macOS windowing is handled entirely by AppDelegate (menubar popup).

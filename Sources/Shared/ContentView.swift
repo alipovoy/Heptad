@@ -60,9 +60,6 @@ struct ContentView: View {
             }
         }
         #endif
-        .onAppear {
-            initializeIfNeeded()
-        }
     }
 
     @ViewBuilder
@@ -75,24 +72,4 @@ struct ContentView: View {
         }
     }
 
-
-
-    private func initializeIfNeeded() {
-        if notes.count >= 7 {
-            return
-        }
-
-        // Find existing IDs
-        let existingIds = Set(notes.map { $0.id })
-
-        // Create missing
-        for i in 0..<7 {
-            if !existingIds.contains(i) {
-                let newItem = NoteItem(id: i)
-                modelContext.insert(newItem)
-            }
-        }
-
-        try? modelContext.save()
-    }
 }
