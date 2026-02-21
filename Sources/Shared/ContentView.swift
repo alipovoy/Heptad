@@ -70,34 +70,12 @@ struct ContentView: View {
         let spacing: CGFloat = AppConstants.UI.defaultSpacing
         HStack(spacing: spacing) {
             ForEach(0..<7, id: \.self) { index in
-                colorCircle(index: index)
+                ColorCircle(index: index, color: Self.colors[index], selectedNoteIndex: $selectedNoteIndex)
             }
         }
     }
 
-    @ViewBuilder
-    private func colorCircle(index: Int) -> some View {
-        let size: CGFloat = AppConstants.UI.defaultFontSize
-        let scale: CGFloat = 1.2
-        let ringOpacity = 0.7
-        let lineWidth: CGFloat = 2
-        let ringScale: CGFloat = 1.2
 
-        Circle()
-            .fill(Self.colors[index])
-            .frame(width: size, height: size)
-            .scaleEffect(selectedNoteIndex == index ? scale : 1.0)
-            .overlay(
-                Circle()
-                    .stroke(Color.primary.opacity(selectedNoteIndex == index ? ringOpacity : 0), lineWidth: lineWidth)
-                    .scaleEffect(selectedNoteIndex == index ? ringScale : 1.0)
-            )
-            .onTapGesture {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                    selectedNoteIndex = index
-                }
-            }
-    }
 
     private func initializeIfNeeded() {
         if notes.count >= 7 {
