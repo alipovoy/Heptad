@@ -14,7 +14,8 @@ targets:
       path: Sources/macOS/Info.plist
       properties:
         LSUIElement: true
-  
+    entitlements:
+      path: Sources/macOS/SevenNotes-macOS.entitlements
   SevenNotes-iOS:
     type: application
     platform: iOS
