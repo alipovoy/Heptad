@@ -6,12 +6,12 @@ struct ContentView: View {
     @Query(sort: \NoteItem.id) private var notes: [NoteItem]
     @AppStorage("selectedNoteIndex") private var selectedNoteIndex = 0
 
-    let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]
+    static let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]
 
     var body: some View {
         ZStack {
             if notes.count == 7 {
-                colors[selectedNoteIndex].opacity(0.15)
+                Self.colors[selectedNoteIndex].opacity(0.15)
                     .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
             }
 
@@ -84,7 +84,7 @@ struct ContentView: View {
         let ringScale: CGFloat = 1.2
 
         Circle()
-            .fill(colors[index])
+            .fill(Self.colors[index])
             .frame(width: size, height: size)
             .scaleEffect(selectedNoteIndex == index ? scale : 1.0)
             .overlay(

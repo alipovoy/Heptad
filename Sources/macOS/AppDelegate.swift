@@ -5,23 +5,13 @@ import SwiftData
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var statusBarItem: NSStatusItem!
 
-    // MARK: - Two-Window Architecture
+    // MARK: - Single-Window Architecture
     //
-    // Pinned mode:  NSPanel with .nonactivatingPanel (popover-like)
-    //   - No NSApp.mainMenu (so ⌘Z/C/V/X reach NSTextView's keyDown natively)
-    //   - Global event monitor dismisses on click outside
-    //
-    // Unpinned mode: NSWindow (regular window with menu bar)
-    //   - NSApp.mainMenu installed (Edit + Format menus, fully functional)
-    //   - Separate NSHostingView (avoids ViewBridge errors from moving views)
+    // Pinned mode: NSPanel with .nonactivatingPanel (popover-like)
+    // Unpinned mode: Same NSPanel, but styleMask mutated to behave like a regular window.
 
-    private var panelWindow: NSPanel?
-    private var regularWindow: NSWindow?
-
-    /// Each window gets its own NSHostingView to avoid ViewBridge crashes
-    /// when moving views between windows. Both share the same SwiftData store.
-    private var panelHostingView: NSView?
-    private var regularHostingView: NSView?
+    private var window: NSPanel?
+    private var hostingView: NSView?
 
     /// The pre-built main menu, only assigned to NSApp.mainMenu in unpinned mode.
     private var appMainMenu: NSMenu?
@@ -71,19 +61,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        if sender === regularWindow {
-            forceSaveCurrentText(from: sender)
-            // Invalidate panel's hosting view so it reloads from SwiftData
-            panelWindow?.undoManager?.removeAllActions()
-            panelHostingView?.removeFromSuperview()
-            panelHostingView = nil
-        }
-
         sender.orderOut(nil)
 
-        if sender === regularWindow {
+        // Reset to panel mode behind the scenes so the next menubar click is ready
+        if !isPinnedToMenubar {
             NSApp.mainMenu = nil
             NSApp.setActivationPolicy(.accessory)
+
+            // Re-apply panel styling
+            window?.styleMask.insert(.nonactivatingPanel)
+            window?.styleMask.remove(.miniaturizable)
+            window?.isFloatingPanel = true
+
             isPinnedToMenubar = true
         } else {
             removeGlobalClickMonitor()
@@ -103,53 +92,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             statusBarItem.button?.performClick(nil)
             statusBarItem.menu = nil
         } else {
-            // If the regular window is visible, hide it and go back to panel mode
-            if let rw = regularWindow, rw.isVisible {
-                forceSaveCurrentText(from: rw)
-                rw.orderOut(nil)
-                // Invalidate panel's hosting view so it reloads from SwiftData
-                panelWindow?.undoManager?.removeAllActions()
-                panelHostingView?.removeFromSuperview()
-                panelHostingView = nil
-                NSApp.mainMenu = nil
-                NSApp.setActivationPolicy(.accessory)
-                isPinnedToMenubar = true
+            // If the window is currently unpinned (regular mode), hide it and reset
+            if !isPinnedToMenubar, let w = window, w.isVisible {
+                w.performClose(nil) // delegates to windowShouldClose
                 return
             }
 
-            if panelWindow == nil || !panelWindow!.isVisible {
+            if window == nil || !window!.isVisible {
                 showPanel(sender: sender)
             } else {
-                panelWindow?.orderOut(nil)
+                window?.orderOut(nil)
                 removeGlobalClickMonitor()
             }
         }
     }
 
-    // MARK: - Hosting View Factories
+    // MARK: - Hosting View Factory
 
-    private func makePanelHostingView() -> NSView {
-        if let existing = panelHostingView { return existing }
+    private func makeHostingView() -> NSView {
+        if let existing = hostingView { return existing }
         let view = ContentView()
             .modelContainer(SevenNotesApp.sharedModelContainer)
         let hv = NSHostingView(rootView: view)
-        panelHostingView = hv
-        return hv
-    }
-
-    private func makeRegularHostingView() -> NSView {
-        if let existing = regularHostingView { return existing }
-        let view = ContentView()
-            .modelContainer(SevenNotesApp.sharedModelContainer)
-        let hv = NSHostingView(rootView: view)
-        regularHostingView = hv
+        hostingView = hv
         return hv
     }
 
     // MARK: - Panel (Pinned Mode)
 
     private func showPanel(sender: NSStatusBarButton) {
-        if panelWindow == nil {
+        if window == nil {
             let savedSizeStr = UserDefaults.standard.string(forKey: "LastWindowSize")
             let size = savedSizeStr != nil ? NSSizeFromString(savedSizeStr!) : NSSize(width: 300, height: 400)
 
@@ -169,28 +141,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             panel.hidesOnDeactivate = false
             panel.becomesKeyOnlyIfNeeded = true
             panel.delegate = self
-            panel.contentView = makePanelHostingView()
+            panel.contentView = makeHostingView()
 
-            self.panelWindow = panel
+            self.window = panel
         }
 
-        guard let panel = panelWindow else { return }
-
-        // Refresh content view (may have been invalidated after a mode switch)
-        panel.contentView = makePanelHostingView()
+        guard let w = window else { return }
 
         // Position below the status bar icon.
-        // IMPORTANT: Set anchorOrigin BEFORE setFrameOrigin because
-        // setFrameOrigin triggers windowDidMove synchronously.
         if sender.window?.screen != nil {
             let buttonRect = sender.window?.convertToScreen(sender.frame) ?? .zero
-            let xPos = buttonRect.midX - (panel.frame.width / 2)
-            let yPos = buttonRect.minY - panel.frame.height - 5
+            let xPos = buttonRect.midX - (w.frame.width / 2)
+            let yPos = buttonRect.minY - w.frame.height - 5
 
             let origin = NSPoint(x: xPos, y: yPos)
             anchorOrigin = origin
             isPositioningPanel = true
-            panel.setFrameOrigin(origin)
+            w.setFrameOrigin(origin)
             isPositioningPanel = false
         }
 
@@ -198,66 +165,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.mainMenu = nil  // Ensure menu doesn't steal key equivalents
         installGlobalClickMonitor()
 
-        panel.makeKeyAndOrderFront(nil)
+        w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     // MARK: - Regular Window (Unpinned Mode)
 
     private func transitionToRegularWindow() {
-        guard let panel = panelWindow else { return }
+        guard let w = window else { return }
 
-        // Save any pending text changes so the regular window sees current content
-        forceSaveCurrentText(from: panel)
+        // Simply mutate the window styles
+        w.styleMask.remove(.nonactivatingPanel)
+        w.styleMask.insert(.miniaturizable)
+        w.isFloatingPanel = false
 
-        // Invalidate regular window's hosting view so it reloads from SwiftData
-        regularWindow?.undoManager?.removeAllActions()
-        regularHostingView?.removeFromSuperview()
-        regularHostingView = nil
-
-        let currentFrame = panel.frame
-
-        // Create regular window if needed
-        if regularWindow == nil {
-            let window = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
-                styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView, .utilityWindow],
-                backing: .buffered, defer: false)
-
-            window.titlebarAppearsTransparent = false
-            window.titleVisibility = .hidden
-            window.standardWindowButton(.closeButton)?.isHidden = true
-            window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-            window.standardWindowButton(.zoomButton)?.isHidden = true
-            window.isMovableByWindowBackground = true
-            window.isReleasedWhenClosed = false
-            window.delegate = self
-            window.title = "7Notes"
-            window.contentView = makeRegularHostingView()
-
-            self.regularWindow = window
-        }
-
-        guard let window = regularWindow else { return }
-
-        // Refresh content view (may have been invalidated after a mode switch)
-        window.contentView = makeRegularHostingView()
-
-        // Position at same location as the panel
-        window.setFrame(currentFrame, display: false)
-
-        // Hide panel, show window
-        panel.orderOut(nil)
         removeGlobalClickMonitor()
-
         isPinnedToMenubar = false
 
         // Install menu and activate app — menu bar and Dock icon appear.
-        // Activation must be deferred to the next run loop so macOS
-        // refreshes the menu bar after the policy change.
         NSApp.mainMenu = appMainMenu
         NSApp.setActivationPolicy(.regular)
-        window.makeKeyAndOrderFront(nil)
+        w.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -266,37 +194,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: - Window Move & Resize Detection
 
     func windowDidResize(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-
-        UserDefaults.standard.set(NSStringFromSize(window.frame.size), forKey: "LastWindowSize")
-
-        if window === regularWindow, let panel = panelWindow {
-            if panel.frame.size != window.frame.size {
-                var panelFrame = panel.frame
-                panelFrame.size = window.frame.size
-                panel.setFrame(panelFrame, display: false)
-            }
-        } else if window === panelWindow, let regular = regularWindow {
-            if regular.frame.size != window.frame.size {
-                var regularFrame = regular.frame
-                regularFrame.size = window.frame.size
-                regular.setFrame(regularFrame, display: false)
-            }
-        }
+        guard let w = notification.object as? NSWindow else { return }
+        UserDefaults.standard.set(NSStringFromSize(w.frame.size), forKey: "LastWindowSize")
     }
 
     func windowDidMove(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
+        guard let w = notification.object as? NSWindow else { return }
 
         // Only track moves on the panel (for unpinning detection)
-        guard window === panelWindow, isPinnedToMenubar, !isPositioningPanel else { return }
+        guard w === window, isPinnedToMenubar, !isPositioningPanel else { return }
 
-        let dx = abs(window.frame.origin.x - anchorOrigin.x)
-        let dy = abs(window.frame.origin.y - anchorOrigin.y)
+        let dx = abs(w.frame.origin.x - anchorOrigin.x)
+        let dy = abs(w.frame.origin.y - anchorOrigin.y)
         let distance = hypot(dx, dy)
 
         // When threshold is exceeded, wait for mouse-up before transitioning.
-        // Transitioning mid-drag causes ViewBridge errors and interrupts the drag.
         if distance > unpinThreshold && pendingUnpinMonitor == nil {
             pendingUnpinMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
                 guard let self = self else { return event }
@@ -306,9 +218,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     self.pendingUnpinMonitor = nil
                 }
                 // Verify we're still in the drag-away state
-                if self.isPinnedToMenubar, let panel = self.panelWindow {
-                    let dx = abs(panel.frame.origin.x - self.anchorOrigin.x)
-                    let dy = abs(panel.frame.origin.y - self.anchorOrigin.y)
+                if self.isPinnedToMenubar, let w = self.window {
+                    let dx = abs(w.frame.origin.x - self.anchorOrigin.x)
+                    let dy = abs(w.frame.origin.y - self.anchorOrigin.y)
                     if hypot(dx, dy) > self.unpinThreshold {
                         self.transitionToRegularWindow()
                     }
@@ -325,8 +237,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self = self,
                   self.isPinnedToMenubar,
-                  let panel = self.panelWindow,
-                  panel.isVisible else { return }
+                  let w = self.window,
+                  w.isVisible else { return }
 
             // Don't dismiss if the click is on the status bar button
             if let buttonWindow = self.statusBarItem.button?.window,
@@ -334,38 +246,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 return
             }
 
-            panel.orderOut(nil)
+            w.orderOut(nil)
             self.removeGlobalClickMonitor()
-        }
-    }
-
-    // MARK: - Force Save (sync text before window transition)
-
-    /// Synchronously saves the current NSTextView content to SwiftData.
-    /// Called before transitioning between panel and regular window so the
-    /// new window's ContentView picks up the latest text.
-    private func forceSaveCurrentText(from window: NSWindow) {
-        guard let textView = window.firstResponder as? NSTextView,
-              let textStorage = textView.textStorage else { return }
-
-        let selectedIndex = UserDefaults.standard.integer(forKey: "selectedNoteIndex")
-        let attrString = NSAttributedString(attributedString: textStorage)
-        let range = NSRange(location: 0, length: attrString.length)
-
-        guard let rtfData = try? attrString.data(
-            from: range,
-            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
-        ) else { return }
-
-        MainActor.assumeIsolated {
-            let context = SevenNotesApp.sharedModelContainer.mainContext
-            let descriptor = FetchDescriptor<NoteItem>()
-            guard let notes = try? context.fetch(descriptor) else { return }
-
-            let sortedNotes = notes.sorted { $0.id < $1.id }
-            guard selectedIndex < sortedNotes.count else { return }
-            sortedNotes[selectedIndex].rtfData = rtfData
-            try? context.save()
         }
     }
 
