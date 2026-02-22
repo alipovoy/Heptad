@@ -2,6 +2,7 @@ name: SevenNotes
 options:
   bundleIdPrefix: com.sevennotes
   createIntermediateGroups: true
+  derivedDataPath: .build
 targets:
   SevenNotes-macOS:
     type: application
@@ -14,8 +15,12 @@ targets:
       path: Sources/macOS/Info.plist
       properties:
         LSUIElement: true
-    entitlements:
-      path: Sources/macOS/SevenNotes-macOS.entitlements
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: Sources/macOS/SevenNotes-macOS.entitlements
+        CODE_SIGN_INJECT_BASE_ENTITLEMENTS: YES
+        ENABLE_HARDENED_RUNTIME:
   SevenNotes-iOS:
     type: application
     platform: iOS
