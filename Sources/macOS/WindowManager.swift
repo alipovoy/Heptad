@@ -22,10 +22,10 @@ class WindowManager: NSObject, NSWindowDelegate {
     private let unpinThreshold: CGFloat = AppConstants.Window.unpinThreshold
 
     /// Global event monitor for click-outside-to-dismiss when pinned.
-    private var globalClickMonitor: Any?
+    private var globalClickMonitor: EventMonitor?
 
     /// One-shot monitor waiting for mouse-up to complete the unpin transition.
-    private var pendingUnpinMonitor: Any?
+    private var pendingUnpinMonitor: EventMonitor?
 
     /// Weak reference to the status bar button to prevent dismissal when the user clicks the button itself
     weak var statusBarButton: NSStatusBarButton?
@@ -45,7 +45,7 @@ class WindowManager: NSObject, NSWindowDelegate {
             showPanel(sender: sender)
         } else {
             window?.orderOut(nil)
-            removeGlobalClickMonitor()
+            globalClickMonitor?.stop()
         }
     }
 
@@ -66,7 +66,7 @@ class WindowManager: NSObject, NSWindowDelegate {
 
             isPinnedToMenubar = true
         } else {
-            removeGlobalClickMonitor()
+            globalClickMonitor?.stop()
         }
         return false
     }
@@ -88,13 +88,12 @@ class WindowManager: NSObject, NSWindowDelegate {
 
         // When threshold is exceeded, wait for mouse-up before transitioning.
         if distance > unpinThreshold && pendingUnpinMonitor == nil {
-            pendingUnpinMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
+            pendingUnpinMonitor = EventMonitor(local: true, mask: .leftMouseUp) { [weak self] event in
                 guard let self = self else { return event }
                 // Remove the one-shot monitor
-                if let monitor = self.pendingUnpinMonitor {
-                    NSEvent.removeMonitor(monitor)
-                    self.pendingUnpinMonitor = nil
-                }
+                self.pendingUnpinMonitor?.stop()
+                self.pendingUnpinMonitor = nil
+
                 // Verify we're still in the drag-away state
                 if self.isPinnedToMenubar, let w = self.window {
                     let dx = abs(w.frame.origin.x - self.anchorOrigin.x)
@@ -105,6 +104,7 @@ class WindowManager: NSObject, NSWindowDelegate {
                 }
                 return event
             }
+            pendingUnpinMonitor?.start()
         }
     }
 
@@ -180,7 +180,7 @@ class WindowManager: NSObject, NSWindowDelegate {
         w.styleMask.insert(.miniaturizable)
         w.isFloatingPanel = false
 
-        removeGlobalClickMonitor()
+        globalClickMonitor?.stop()
         isPinnedToMenubar = false
 
         // Install menu and activate app — menu bar and Dock icon appear.
@@ -195,28 +195,23 @@ class WindowManager: NSObject, NSWindowDelegate {
     // MARK: - Global Click Monitor (click-outside to dismiss when pinned)
 
     private func installGlobalClickMonitor() {
-        removeGlobalClickMonitor()
-        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+        globalClickMonitor?.stop()
+        globalClickMonitor = EventMonitor(local: false, mask: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self = self,
                   self.isPinnedToMenubar,
                   let w = self.window,
-                  w.isVisible else { return }
+                  w.isVisible else { return event }
 
             // Don't dismiss if the click is on the status bar button
             if let buttonWindow = self.statusBarButton?.window,
                buttonWindow == event.window {
-                return
+                return event
             }
 
             w.orderOut(nil)
-            self.removeGlobalClickMonitor()
+            self.globalClickMonitor?.stop()
+            return event
         }
-    }
-
-    private func removeGlobalClickMonitor() {
-        if let monitor = globalClickMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalClickMonitor = nil
-        }
+        globalClickMonitor?.start()
     }
 }
