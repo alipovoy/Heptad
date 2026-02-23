@@ -8,7 +8,25 @@ struct SevenNotesApp: App {
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+
+            // Seed database
+            let context = container.mainContext
+            let fetchDescriptor = FetchDescriptor<NoteItem>()
+            let existingNotes = try context.fetch(fetchDescriptor)
+
+            if existingNotes.count < 7 {
+                let existingIds = Set(existingNotes.map { $0.id })
+                for i in 0..<7 {
+                    if !existingIds.contains(i) {
+                        let newItem = NoteItem(id: i)
+                        context.insert(newItem)
+                    }
+                }
+                try context.save()
+            }
+
+            return container
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
@@ -19,7 +37,7 @@ struct SevenNotesApp: App {
     #endif
 
     init() {
-        AppInitializer.shared.initialize(modelContainer: Self.sharedModelContainer)
+        // AppInitializer logic is now handled in sharedModelContainer initialization
     }
 
     var body: some Scene {

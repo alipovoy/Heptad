@@ -9,24 +9,19 @@ struct MacContentView: View {
 
     var body: some View {
         ZStack {
-            if notes.count == 7 {
-                colors[selectedNoteIndex].opacity(0.15)
-                    .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
+            colors[selectedNoteIndex].opacity(0.15)
+                .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
 
-                let note = notes[selectedNoteIndex]
-                MacRichTextEditor(note: note)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .id(note.id)
-            } else {
-                ProgressView("Initializing notes...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            let note = notes[selectedNoteIndex]
+            MacRichTextEditor(note: note)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .id(note.id)
         }
         .frame(minWidth: 320, minHeight: 200)
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button(action: {
-                    NSApp.keyWindow?.orderOut(nil)
+                    NSApp.keyWindow?.performClose(nil)
                 }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18))

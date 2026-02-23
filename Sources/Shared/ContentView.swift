@@ -11,18 +11,25 @@ struct ContentView: View {
     static let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]
 
     var body: some View {
-        #if os(macOS)
-        MacContentView(
-            notes: notes,
-            selectedNoteIndex: $selectedNoteIndex,
-            colors: Self.colors
-        )
-        #else
-        IOSContentView(
-            notes: notes,
-            selectedNoteIndex: $selectedNoteIndex,
-            colors: Self.colors
-        )
-        #endif
+        Group {
+            if notes.count == 7 {
+                #if os(macOS)
+                MacContentView(
+                    notes: notes,
+                    selectedNoteIndex: $selectedNoteIndex,
+                    colors: Self.colors
+                )
+                #else
+                IOSContentView(
+                    notes: notes,
+                    selectedNoteIndex: $selectedNoteIndex,
+                    colors: Self.colors
+                )
+                #endif
+            } else {
+                ProgressView("Initializing notes...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
     }
 }

@@ -108,16 +108,13 @@ class WindowManager: NSObject, NSWindowDelegate {
         }
     }
 
-    // MARK: - Hosting View Factory
+    // MARK: - Hosting View
 
-    private func makeHostingView() -> NSView {
-        if let existing = hostingView { return existing }
+    private lazy var mainHostingView: NSView = {
         let view = ContentView()
             .modelContainer(SevenNotesApp.sharedModelContainer)
-        let hv = NSHostingView(rootView: view)
-        hostingView = hv
-        return hv
-    }
+        return NSHostingView(rootView: view)
+    }()
 
     // MARK: - Panel (Pinned Mode)
 
@@ -142,7 +139,7 @@ class WindowManager: NSObject, NSWindowDelegate {
             panel.hidesOnDeactivate = false
             panel.becomesKeyOnlyIfNeeded = true
             panel.delegate = self
-            panel.contentView = makeHostingView()
+            panel.contentView = mainHostingView
 
             self.window = panel
         }

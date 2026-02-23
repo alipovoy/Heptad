@@ -9,7 +9,7 @@ struct IOSRichTextEditor: UIViewRepresentable {
 
         textView.delegate = context.coordinator
         textView.allowsEditingTextAttributes = true
-        textView.font = .systemFont(ofSize: 18)
+        textView.font = .systemFont(ofSize: AppConstants.UI.defaultFontSize)
         textView.backgroundColor = .clear
 
         // Apply text padding

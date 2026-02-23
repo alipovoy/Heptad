@@ -1,14 +1,5 @@
 import Foundation
 
-/// Defines a common requirement for the note object that will be updated by the saver.
-protocol MutableNoteItem: AnyObject {
-    var rtfData: Data { get set }
-}
-
-// Since NoteItem is a SwiftData model, it already is a reference type (class).
-// We update `NoteItem` in `Schema.swift` or where it's defined to conform to this or just use it directly.
-// Given we know it's `NoteItem`, we can just use `NoteItem` directly to avoid protocol boxing issues with SwiftData.
-
 /// A shared utility class to handle debouncing and RTF serialization for rich text editors.
 class NoteContentSaver {
     private var saveTask: Task<Void, Never>?
