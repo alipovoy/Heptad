@@ -37,40 +37,18 @@ struct IOSRichTextEditor: UIViewRepresentable {
 
     class Coordinator: NSObject, UITextViewDelegate {
         var parent: IOSRichTextEditor
-        private var saveTask: Task<Void, Never>?
+        private let saver: NoteContentSaver
 
         init(_ parent: IOSRichTextEditor) {
             self.parent = parent
+            self.saver = NoteContentSaver(note: parent.note)
         }
 
         func textViewDidChange(_ textView: UITextView) {
-            // Cancel previous debounce task
-            saveTask?.cancel()
-
             // Snapshot the attributed string on the main thread
             let attrString = NSAttributedString(attributedString: textView.attributedText)
 
-            saveTask = Task {
-                // Debounce window (300ms)
-                try? await Task.sleep(nanoseconds: AppConstants.Timing.debounceSaveNanoseconds)
-                guard !Task.isCancelled else { return }
-
-                // Serialize off the main thread
-                let rtfData = await Task.detached(priority: .userInitiated) {
-                    let range = NSRange(location: 0, length: attrString.length)
-                    return try? attrString.data(
-                        from: range,
-                        documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
-                    )
-                }.value
-
-                guard !Task.isCancelled, let data = rtfData else { return }
-
-                // Update SwiftData model on MainActor
-                await MainActor.run {
-                    self.parent.note.rtfData = data
-                }
-            }
+            saver.save(attributedString: attrString)
         }
     }
 }
