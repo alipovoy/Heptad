@@ -8,32 +8,49 @@ struct MacContentView: View {
     let colors: [Color]
 
     var body: some View {
-        ZStack {
-            colors[selectedNoteIndex].opacity(0.15)
-                .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
-
-            let note = notes[selectedNoteIndex]
-            MacRichTextEditor(note: note)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .id(note.id)
-        }
-        .frame(minWidth: 320, minHeight: 200)
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
+        VStack(spacing: 0) {
+            // Custom Title Bar
+            HStack {
                 Button(action: {
                     NSApp.keyWindow?.performClose(nil)
                 }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18))
+                        .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .accessibilityLabel("Close window")
-            }
+                .padding(.leading, 14)
 
-            ToolbarItem(placement: .principal) {
+                Spacer()
+
                 ColorPickerRow(selectedNoteIndex: $selectedNoteIndex, colors: colors)
+
+                Spacer()
+
+                // Invisible placeholder to keep the ColorPickerRow centered
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .opacity(0)
+                    .padding(.trailing, 14)
+            }
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .background(Color.clear) // allow window drag through the stack
+
+            ZStack {
+                colors[selectedNoteIndex].opacity(0.15)
+                    .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
+
+                let note = notes[selectedNoteIndex]
+                MacRichTextEditor(note: note)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .id(note.id)
             }
         }
+        .frame(minWidth: 320, minHeight: 200)
+        .ignoresSafeArea(.all, edges: .top)
     }
 }
 #endif

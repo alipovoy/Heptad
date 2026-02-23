@@ -125,10 +125,10 @@ class WindowManager: NSObject, NSWindowDelegate {
 
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: size.width, height: size.height),
-                styleMask: [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel, .utilityWindow],
+                styleMask: [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel],
                 backing: .buffered, defer: false)
 
-            panel.titlebarAppearsTransparent = false
+            panel.titlebarAppearsTransparent = true
             panel.titleVisibility = .hidden
             panel.standardWindowButton(.closeButton)?.isHidden = true
             panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
@@ -173,7 +173,6 @@ class WindowManager: NSObject, NSWindowDelegate {
         guard let w = window else { return }
 
         // Simply mutate the window styles
-        w.styleMask.remove(.nonactivatingPanel)
         w.styleMask.insert(.miniaturizable)
         w.isFloatingPanel = false
 
