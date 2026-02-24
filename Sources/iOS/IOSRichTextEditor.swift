@@ -24,6 +24,11 @@ struct IOSRichTextEditor: UIViewRepresentable {
             textView.attributedText = attrString
         }
 
+        // Focus the text view when it appears (e.g. after tapping a note circle) so user can type immediately.
+        DispatchQueue.main.async {
+            textView.becomeFirstResponder()
+        }
+
         return textView
     }
 

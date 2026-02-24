@@ -39,6 +39,11 @@ struct MacRichTextEditor: NSViewRepresentable {
             textView.undoManager?.removeAllActions()
         }
 
+        // Focus the text view when it appears (e.g. after tapping a note circle) so user can type immediately.
+        DispatchQueue.main.async {
+            scrollView.window?.makeFirstResponder(textView)
+        }
+
         return scrollView
     }
 
