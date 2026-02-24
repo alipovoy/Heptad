@@ -19,8 +19,13 @@ class NoteContentSaver {
             try? await Task.sleep(nanoseconds: debounceNanoseconds)
             guard !Task.isCancelled else { return }
 
-            // Serialize off the main thread
-            let rtfData = await Task.detached(priority: .userInitiated) {
+            let isEmpty = attributedString.length == 0
+                || attributedString.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+            let rtfData: Data? = await Task.detached(priority: .userInitiated) {
+                if isEmpty {
+                    return Data()
+                }
                 let range = NSRange(location: 0, length: attributedString.length)
                 return try? attributedString.data(
                     from: range,
@@ -30,7 +35,6 @@ class NoteContentSaver {
 
             guard !Task.isCancelled, let data = rtfData else { return }
 
-            // Update SwiftData model
             await MainActor.run {
                 self.note.rtfData = data
             }

@@ -13,7 +13,7 @@ struct IOSContentView: View {
                 .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
 
             VStack(spacing: 0) {
-                ColorPickerRow(selectedNoteIndex: $selectedNoteIndex, colors: colors)
+                ColorPickerRow(selectedNoteIndex: $selectedNoteIndex, colors: colors, notes: notes)
                     .padding(.vertical, 8)
                     .padding(.horizontal, 12)
 

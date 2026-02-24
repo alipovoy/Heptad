@@ -25,7 +25,7 @@ struct MacContentView: View {
 
                 Spacer()
 
-                ColorPickerRow(selectedNoteIndex: $selectedNoteIndex, colors: colors)
+                ColorPickerRow(selectedNoteIndex: $selectedNoteIndex, colors: colors, notes: notes)
 
                 Spacer()
 
