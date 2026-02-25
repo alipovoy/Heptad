@@ -12,63 +12,31 @@ struct ContentView: View {
     var body: some View {
         Group {
             if notes.count == 7 {
-                ZStack {
-                    Self.colors[selectedNoteIndex].opacity(0.15)
-                        .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
+                VStack(spacing: 0) {
+                    #if os(macOS)
+                        macOSTitleBar
 
-                    VStack(spacing: 0) {
-                        #if os(macOS)
-                            HStack {
-                                Button(action: {
-                                    NSApp.keyWindow?.performClose(nil)
-                                }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 18))
-                                        .foregroundColor(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                                .focusable(false)
-                                .accessibilityLabel("Close window")
-                                .padding(.leading, 14)
+                        MacRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(backgroundFill)
+                    #else
+                        ColorPickerRow(
+                            selectedNoteIndex: $selectedNoteIndex, colors: Self.colors,
+                            notes: notes
+                        )
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
 
-                                Spacer()
-
-                                ColorPickerRow(
-                                    selectedNoteIndex: $selectedNoteIndex, colors: Self.colors,
-                                    notes: notes)
-
-                                Spacer()
-
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 18))
-                                    .opacity(0)
-                                    .padding(.trailing, 14)
-                            }
-                            .padding(.top, 10)
-                            .padding(.bottom, 8)
-                            .background(Color.clear)
-                        #else
-                            ColorPickerRow(
-                                selectedNoteIndex: $selectedNoteIndex, colors: Self.colors,
-                                notes: notes
-                            )
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 12)
-                        #endif
-
-                        #if os(macOS)
-                            MacRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        #else
-                            IOSRichTextEditor(note: notes[selectedNoteIndex])
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .id(notes[selectedNoteIndex].id)
-                        #endif
-                    }
+                        IOSRichTextEditor(note: notes[selectedNoteIndex])
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .id(notes[selectedNoteIndex].id)
+                    #endif
                 }
                 #if os(macOS)
                     .frame(minWidth: 320, minHeight: 200)
                     .ignoresSafeArea(.all, edges: .top)
+                #else
+                    .background(backgroundFill)
                 #endif
             } else {
                 ProgressView("Initializing notes...")
@@ -76,4 +44,43 @@ struct ContentView: View {
             }
         }
     }
+
+    private var backgroundFill: some View {
+        Self.colors[selectedNoteIndex].opacity(0.15)
+            .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
+    }
+
+    #if os(macOS)
+        private var macOSTitleBar: some View {
+            HStack {
+                Button(action: {
+                    NSApp.keyWindow?.performClose(nil)
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .accessibilityLabel("Close window")
+                .padding(.leading, 14)
+
+                Spacer()
+
+                ColorPickerRow(
+                    selectedNoteIndex: $selectedNoteIndex, colors: Self.colors,
+                    notes: notes)
+
+                Spacer()
+
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .opacity(0)
+                    .padding(.trailing, 14)
+            }
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .background(Color.clear)
+        }
+    #endif
 }
