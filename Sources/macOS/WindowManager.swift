@@ -6,9 +6,6 @@ class WindowManager: NSObject, NSWindowDelegate {
     private(set) var window: NSPanel?
     private var hostingView: NSView?
 
-    /// The pre-built main menu, only assigned to NSApp.mainMenu in unpinned mode.
-    var appMainMenu: NSMenu?
-
     /// True when using the panel (pinned to menubar). False when using the regular window.
     private(set) var isPinnedToMenubar = true
 
@@ -56,8 +53,6 @@ class WindowManager: NSObject, NSWindowDelegate {
 
         // Reset to panel mode behind the scenes so the next menubar click is ready
         if !isPinnedToMenubar {
-            NSApp.mainMenu = nil
-            NSApp.setActivationPolicy(.accessory)
 
             // Re-apply panel styling
             window?.styleMask.insert(.nonactivatingPanel)
@@ -165,7 +160,6 @@ class WindowManager: NSObject, NSWindowDelegate {
         }
 
         isPinnedToMenubar = true
-        NSApp.mainMenu = nil  // Ensure menu doesn't steal key equivalents
         installGlobalClickMonitor()
 
         w.makeKeyAndOrderFront(nil)
@@ -183,14 +177,6 @@ class WindowManager: NSObject, NSWindowDelegate {
 
         globalClickMonitor?.stop()
         isPinnedToMenubar = false
-
-        // Install menu and activate app — menu bar and Dock icon appear.
-        NSApp.mainMenu = appMainMenu
-        NSApp.setActivationPolicy(.regular)
-        w.makeKeyAndOrderFront(nil)
-        DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
-        }
     }
 
     // MARK: - Global Click Monitor (click-outside to dismiss when pinned)

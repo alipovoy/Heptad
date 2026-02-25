@@ -78,6 +78,9 @@ class EditorShortcutManager {
             case "a" where !hasShift:
                 textView.selectAll(nil)
                 return nil
+            case "w" where !hasShift:
+                NSApp.keyWindow?.performClose(nil)
+                return nil
             default:
                 return event  // pass through
             }
