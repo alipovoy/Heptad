@@ -11,5 +11,5 @@
 
 ## Architecture
 - 100% native SwiftUI without third-party dependencies.
-- Shared logic with platform-specific rich text editor implementations (`UITextView` and `NSTextView`).
-- Modular architecture with specific managers (`WindowManager`, `AppMenuBuilder`, `AppInitializer`) and shared utilities (`NoteContentSaver`).
+- Shared `ContentView` handling UI layout and OS-specific routing to rich text editor implementations (`UITextView` and `NSTextView`).
+- Modular architecture with specific managers (`WindowManager`, `EditorShortcutManager`) and shared utilities (`NoteContentSaver`).

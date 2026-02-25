@@ -3,6 +3,8 @@ options:
   bundleIdPrefix: com.sevennotes
   createIntermediateGroups: true
   derivedDataPath: .build
+  generateEmptyDirectories: true
+  defaultConfig: Debug
 targets:
   SevenNotes-macOS:
     type: application
@@ -21,6 +23,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Sources/macOS/SevenNotes-macOS.entitlements
         CODE_SIGN_INJECT_BASE_ENTITLEMENTS: YES
         ENABLE_HARDENED_RUNTIME:
+    scheme: {}
   SevenNotes-iOS:
     type: application
     platform: iOS
@@ -34,3 +37,4 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+    scheme: {}

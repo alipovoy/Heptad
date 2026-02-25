@@ -21,8 +21,8 @@
 - **Data Model**: Exactly 7 notes are maintained at all times.
 - **Properties**: Each note has a unique identifier (0–6), a fixed color, and rich-text content.
 - **Persistence**: Notes are persisted continuously using SwiftData and a centralized `NoteContentSaver`.
-- **Editor**: Platform-specific rich-text editor (`NSTextView` on macOS, `UITextView` on iOS). Re-renders instantly when switching notes, and focuses automatically for immediate typing. Undo history is isolated per note.
-- **Colors**: Fixed order: Red, Orange, Yellow, Green, Cyan, Blue, Purple. The selected note's color (at 15% opacity) is used as the editor's background. Color circles include gradients and empty states.
+- **UI & Editor**: A unified `ContentView` handles the shared tab bar UI and routes to the platform-specific rich-text editor (`NSTextView` on macOS, `UITextView` on iOS). The editor re-renders instantly when switching notes, and focuses automatically for immediate typing. Undo history is isolated per note.
+- **Colors**: Fixed order: Red, Orange, Yellow, Green, Cyan, Blue, Purple. The selected note's color (at 15% opacity) is used as the editor's background. Color circles include gradients and empty states, powered by a consolidated and simplified `ColorCircle` widget.
 - **Toolbar**:
   - Center: Row of 7 colored circles. The selected circle scales up slightly with a ring overlay.
   - Leading (macOS only): A custom close button to dismiss the window.
