@@ -27,8 +27,9 @@ class EditorShortcutManager {
 
             // Only handle ⌘ without option/control
             guard event.modifierFlags.contains(.command),
-                  !event.modifierFlags.contains(.option),
-                  !event.modifierFlags.contains(.control) else {
+                !event.modifierFlags.contains(.option),
+                !event.modifierFlags.contains(.control)
+            else {
                 return event
             }
 
@@ -48,7 +49,7 @@ class EditorShortcutManager {
             switch chars {
             case "b" where !hasShift:
                 self.toggleFontTrait(.boldFontMask, on: textView)
-                return nil // consumed
+                return nil  // consumed
             case "i" where !hasShift:
                 self.toggleFontTrait(.italicFontMask, on: textView)
                 return nil
@@ -78,14 +79,14 @@ class EditorShortcutManager {
                 textView.selectAll(nil)
                 return nil
             default:
-                return event // pass through
+                return event  // pass through
             }
         }
     }
 
     // MARK: - Font Formatting Helpers
 
-    private func toggleFontTrait(_ trait: NSFontTraitMask, on textView: NSTextView) {
+    func toggleFontTrait(_ trait: NSFontTraitMask, on textView: NSTextView) {
         let fm = NSFontManager.shared
         let range = textView.selectedRange()
 
@@ -107,7 +108,9 @@ class EditorShortcutManager {
             textView.didChangeText()
         } else {
             var attrs = textView.typingAttributes
-            let currentFont = attrs[.font] as? NSFont ?? NSFont.systemFont(ofSize: AppConstants.UI.defaultFontSize)
+            let currentFont =
+                attrs[.font] as? NSFont
+                ?? NSFont.systemFont(ofSize: AppConstants.UI.defaultFontSize)
             let traits = fm.traits(of: currentFont)
             let newFont: NSFont
             if traits.contains(trait) {
@@ -120,7 +123,7 @@ class EditorShortcutManager {
         }
     }
 
-    private func changeFontSize(increase: Bool, on textView: NSTextView) {
+    func changeFontSize(increase: Bool, on textView: NSTextView) {
         let range = textView.selectedRange()
 
         if range.length > 0 {
@@ -136,7 +139,9 @@ class EditorShortcutManager {
             textView.didChangeText()
         } else {
             var attrs = textView.typingAttributes
-            let currentFont = attrs[.font] as? NSFont ?? NSFont.systemFont(ofSize: AppConstants.UI.defaultFontSize)
+            let currentFont =
+                attrs[.font] as? NSFont
+                ?? NSFont.systemFont(ofSize: AppConstants.UI.defaultFontSize)
             let newSize = increase ? currentFont.pointSize + 2 : max(8, currentFont.pointSize - 2)
             let newFont = NSFontManager.shared.convert(currentFont, toSize: newSize)
             attrs[.font] = newFont

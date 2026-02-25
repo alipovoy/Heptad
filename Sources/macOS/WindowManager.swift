@@ -1,22 +1,22 @@
 import Cocoa
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 class WindowManager: NSObject, NSWindowDelegate {
-    private var window: NSPanel?
+    private(set) var window: NSPanel?
     private var hostingView: NSView?
 
     /// The pre-built main menu, only assigned to NSApp.mainMenu in unpinned mode.
     var appMainMenu: NSMenu?
 
     /// True when using the panel (pinned to menubar). False when using the regular window.
-    private var isPinnedToMenubar = true
+    private(set) var isPinnedToMenubar = true
 
     /// Guard flag to prevent windowDidMove from triggering during initial positioning.
     private var isPositioningPanel = false
 
     /// The anchor point where the panel is placed beneath the status-bar icon.
-    private var anchorOrigin: NSPoint = .zero
+    private(set) var anchorOrigin: NSPoint = .zero
 
     /// Threshold (in points) for detecting that the user dragged the panel away.
     private let unpinThreshold: CGFloat = AppConstants.Window.unpinThreshold
@@ -37,7 +37,7 @@ class WindowManager: NSObject, NSWindowDelegate {
 
         // If the window is currently unpinned (regular mode), hide it and reset
         if !isPinnedToMenubar, let w = window, w.isVisible {
-            w.performClose(nil) // delegates to windowShouldClose
+            w.performClose(nil)  // delegates to windowShouldClose
             return
         }
 
@@ -88,7 +88,8 @@ class WindowManager: NSObject, NSWindowDelegate {
 
         // When threshold is exceeded, wait for mouse-up before transitioning.
         if distance > unpinThreshold && pendingUnpinMonitor == nil {
-            pendingUnpinMonitor = EventMonitor(local: true, mask: .leftMouseUp) { [weak self] event in
+            pendingUnpinMonitor = EventMonitor(local: true, mask: .leftMouseUp) {
+                [weak self] event in
                 guard let self = self else { return event }
                 // Remove the one-shot monitor
                 self.pendingUnpinMonitor?.stop()
@@ -121,11 +122,15 @@ class WindowManager: NSObject, NSWindowDelegate {
     private func showPanel(sender: NSStatusBarButton) {
         if window == nil {
             let savedSizeStr = UserDefaults.standard.string(forKey: "LastWindowSize")
-            let size = savedSizeStr != nil ? NSSizeFromString(savedSizeStr!) : NSSize(width: 300, height: 400)
+            let size =
+                savedSizeStr != nil
+                ? NSSizeFromString(savedSizeStr!) : NSSize(width: 300, height: 400)
 
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: size.width, height: size.height),
-                styleMask: [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel],
+                styleMask: [
+                    .titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel,
+                ],
                 backing: .buffered, defer: false)
 
             panel.titlebarAppearsTransparent = true
@@ -169,7 +174,7 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     // MARK: - Regular Window (Unpinned Mode)
 
-    private func transitionToRegularWindow() {
+    func transitionToRegularWindow() {
         guard let w = window else { return }
 
         // Simply mutate the window styles
@@ -192,15 +197,18 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     private func installGlobalClickMonitor() {
         globalClickMonitor?.stop()
-        globalClickMonitor = EventMonitor(local: false, mask: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+        globalClickMonitor = EventMonitor(local: false, mask: [.leftMouseDown, .rightMouseDown]) {
+            [weak self] event in
             guard let self = self,
-                  self.isPinnedToMenubar,
-                  let w = self.window,
-                  w.isVisible else { return event }
+                self.isPinnedToMenubar,
+                let w = self.window,
+                w.isVisible
+            else { return event }
 
             // Don't dismiss if the click is on the status bar button
             if let buttonWindow = self.statusBarButton?.window,
-               buttonWindow == event.window {
+                buttonWindow == event.window
+            {
                 return event
             }
 
