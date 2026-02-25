@@ -95,6 +95,9 @@ class EditorShortcutManager {
 
         if range.length > 0 {
             guard let textStorage = textView.textStorage else { return }
+            let oldText = NSAttributedString(
+                attributedString: textStorage.attributedSubstring(from: range))
+
             textStorage.beginEditing()
             textStorage.enumerateAttribute(.font, in: range, options: []) { value, attrRange, _ in
                 guard let oldFont = value as? NSFont else { return }
@@ -109,6 +112,15 @@ class EditorShortcutManager {
             }
             textStorage.endEditing()
             textView.didChangeText()
+
+            let newText = NSAttributedString(
+                attributedString: textStorage.attributedSubstring(from: range))
+            registerUndo(
+                for: textView, range: range, oldText: oldText, newText: newText,
+                actionName: "Formatting")
+            if textView.undoManager?.isUndoing == false {
+                textView.undoManager?.setActionName("Formatting")
+            }
         } else {
             var attrs = textView.typingAttributes
             let currentFont =
@@ -131,6 +143,9 @@ class EditorShortcutManager {
 
         if range.length > 0 {
             guard let textStorage = textView.textStorage else { return }
+            let oldText = NSAttributedString(
+                attributedString: textStorage.attributedSubstring(from: range))
+
             textStorage.beginEditing()
             textStorage.enumerateAttribute(.font, in: range, options: []) { value, attrRange, _ in
                 guard let oldFont = value as? NSFont else { return }
@@ -140,6 +155,15 @@ class EditorShortcutManager {
             }
             textStorage.endEditing()
             textView.didChangeText()
+
+            let newText = NSAttributedString(
+                attributedString: textStorage.attributedSubstring(from: range))
+            registerUndo(
+                for: textView, range: range, oldText: oldText, newText: newText,
+                actionName: "Font Size")
+            if textView.undoManager?.isUndoing == false {
+                textView.undoManager?.setActionName("Font Size")
+            }
         } else {
             var attrs = textView.typingAttributes
             let currentFont =
@@ -149,6 +173,23 @@ class EditorShortcutManager {
             let newFont = NSFontManager.shared.convert(currentFont, toSize: newSize)
             attrs[.font] = newFont
             textView.typingAttributes = attrs
+        }
+    }
+
+    private func registerUndo(
+        for textView: NSTextView, range: NSRange, oldText: NSAttributedString,
+        newText: NSAttributedString, actionName: String
+    ) {
+        textView.undoManager?.registerUndo(withTarget: textView) { [weak self] target in
+            target.undoManager?.setActionName(actionName)
+            self?.registerUndo(
+                for: target, range: range, oldText: newText, newText: oldText,
+                actionName: actionName)
+
+            target.textStorage?.beginEditing()
+            target.textStorage?.replaceCharacters(in: range, with: oldText)
+            target.textStorage?.endEditing()
+            target.didChangeText()
         }
     }
 }

@@ -67,4 +67,37 @@ final class EditorShortcutManagerTests: XCTestCase {
 
         XCTAssertEqual(newSize, initialSize + 2)
     }
+
+    func testUndoFormatting() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 200), styleMask: .borderless,
+            backing: .buffered, defer: false)
+        window.contentView?.addSubview(textView)
+        textView.allowsUndo = true
+
+        textView.setSelectedRange(NSRange(location: 0, length: 4))  // "Test"
+
+        manager.toggleFontTrait(.boldFontMask, on: textView)
+
+        guard
+            let boldFont = textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil)
+                as? NSFont
+        else {
+            XCTFail("Missing font attribute")
+            return
+        }
+        XCTAssertTrue(NSFontManager.shared.traits(of: boldFont).contains(.boldFontMask))
+
+        // Trigger Undo
+        textView.undoManager?.undo()
+
+        guard
+            let restoredFont = textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil)
+                as? NSFont
+        else {
+            XCTFail("Missing font attribute after undo")
+            return
+        }
+        XCTAssertFalse(NSFontManager.shared.traits(of: restoredFont).contains(.boldFontMask))
+    }
 }
