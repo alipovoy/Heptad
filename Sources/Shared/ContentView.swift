@@ -27,9 +27,8 @@ struct ContentView: View {
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
 
-                        IOSRichTextEditor(note: notes[selectedNoteIndex])
+                        IOSRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .id(notes[selectedNoteIndex].id)
                     #endif
                 }
                 #if os(macOS)
