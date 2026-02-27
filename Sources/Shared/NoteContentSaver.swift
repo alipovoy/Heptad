@@ -19,24 +19,26 @@ class NoteContentSaver {
             try? await Task.sleep(nanoseconds: debounceNanoseconds)
             guard !Task.isCancelled else { return }
 
-            let isEmpty = attributedString.length == 0
-                || attributedString.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
-            let rtfData: Data? = await Task.detached(priority: .userInitiated) {
-                if isEmpty {
-                    return Data()
-                }
-                let range = NSRange(location: 0, length: attributedString.length)
-                return try? attributedString.data(
-                    from: range,
-                    documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
-                )
-            }.value
-
-            guard !Task.isCancelled, let data = rtfData else { return }
-
             await MainActor.run {
-                self.note.rtfData = data
+                guard !Task.isCancelled else { return }
+
+                let isEmpty = attributedString.length == 0
+                    || attributedString.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+                let rtfData: Data?
+                if isEmpty {
+                    rtfData = Data()
+                } else {
+                    let range = NSRange(location: 0, length: attributedString.length)
+                    rtfData = try? attributedString.data(
+                        from: range,
+                        documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
+                    )
+                }
+
+                if let data = rtfData {
+                    self.note.rtfData = data
+                }
             }
         }
     }
