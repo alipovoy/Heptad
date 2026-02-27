@@ -68,8 +68,30 @@ final class NoteContentSaverTests: XCTestCase {
 
         // Provide spaces
         saver.save(attributedString: NSAttributedString(string: "   \n  "))
-        try await Task.sleep(nanoseconds: 100_000_000)
-
         XCTAssertTrue(note.rtfData.isEmpty)
+    }
+
+    func testFlushImmediatelySavesPending() throws {
+        let note = NoteItem(id: 0)
+        let saver = NoteContentSaver(note: note, debounceNanoseconds: 5_000_000_000) // 5s debounce
+
+        let str = NSAttributedString(string: "Flushed Text")
+        saver.save(attributedString: str)
+
+        // The save is debounced so the note should not have it yet
+        XCTAssertTrue(note.rtfData.isEmpty)
+
+        // Simulate notification
+        NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
+
+        // The save should happen synchronously on the main thread now
+        let data = note.rtfData
+        XCTAssertFalse(data.isEmpty)
+        let restored = try NSAttributedString(
+            data: data,
+            options: [.documentType: NSAttributedString.DocumentType.rtf],
+            documentAttributes: nil
+        )
+        XCTAssertEqual(restored.string, "Flushed Text")
     }
 }

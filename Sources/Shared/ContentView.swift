@@ -4,6 +4,7 @@ import SwiftUI
 /// Main root view for the application.
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \NoteItem.id) private var notes: [NoteItem]
     @AppStorage("selectedNoteIndex") private var selectedNoteIndex = 0
 
@@ -42,6 +43,20 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .background || newPhase == .inactive {
+                NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
+            }
+        }
+        #if os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
+        }
+        #else
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
+            NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
+        }
+        #endif
     }
 
     private var backgroundFill: some View {
