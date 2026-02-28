@@ -13,3 +13,24 @@
 - 100% native SwiftUI without third-party dependencies.
 - Shared `ContentView` handling UI layout and OS-specific routing to rich text editor implementations (`UITextView` and `NSTextView`).
 - Modular architecture with specific managers (`WindowManager`, `EditorShortcutManager`) and shared utilities (`NoteContentSaver`).
+
+## Building & Compilation
+To compile the project from the command line, follow these steps:
+1. Ensure [Homebrew](https://brew.sh/) is installed.
+2. Install XcodeGen via Homebrew (if not already installed):
+   ```bash
+   brew install xcodegen
+   ```
+3. Generate the `SevenNotes.xcodeproj` file from `project.yml`:
+   ```bash
+   xcodegen generate
+   ```
+4. Build the macOS app via `xcodebuild`:
+   ```bash
+   xcodebuild -scheme SevenNotes-macOS build
+   ```
+5. Build the iOS app via `xcodebuild`:
+   ```bash
+   xcodebuild -scheme SevenNotes-iOS -destination 'generic/platform=iOS Simulator' build
+   ```
+   Or open `SevenNotes.xcodeproj` and build via Xcode.
