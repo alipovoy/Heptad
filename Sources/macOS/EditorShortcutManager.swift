@@ -180,9 +180,11 @@ class EditorShortcutManager {
         for textView: NSTextView, range: NSRange, oldText: NSAttributedString,
         newText: NSAttributedString, actionName: String
     ) {
-        textView.undoManager?.registerUndo(withTarget: textView) { [weak self] target in
+        textView.undoManager?.registerUndo(withTarget: textView) { [weak self, weak target = textView] _ in
+            guard let self = self, let target = target else { return }
+
             target.undoManager?.setActionName(actionName)
-            self?.registerUndo(
+            self.registerUndo(
                 for: target, range: range, oldText: newText, newText: oldText,
                 actionName: actionName)
 

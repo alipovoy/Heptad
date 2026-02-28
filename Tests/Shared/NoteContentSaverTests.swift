@@ -11,7 +11,8 @@ final class NoteContentSaverTests: XCTestCase {
     func testSerializationAndDebouncing() async throws {
         // Arrange
         let note = NoteItem(id: 0)
-        let saver = NoteContentSaver(note: note, debounceNanoseconds: 100_000_000)  // 0.1s
+        let center = NotificationCenter()
+        let saver = NoteContentSaver(note: note, debounceNanoseconds: 100_000_000, notificationCenter: center)  // 0.1s
 
         let attrString = NSAttributedString(string: "Hello Test")
 
@@ -34,7 +35,8 @@ final class NoteContentSaverTests: XCTestCase {
 
     func testDebounceCancelsPrevious() async throws {
         let note = NoteItem(id: 0)
-        let saver = NoteContentSaver(note: note, debounceNanoseconds: 150_000_000)
+        let center = NotificationCenter()
+        let saver = NoteContentSaver(note: note, debounceNanoseconds: 150_000_000, notificationCenter: center)
 
         let str1 = NSAttributedString(string: "A")
         let str2 = NSAttributedString(string: "AB")
@@ -58,7 +60,8 @@ final class NoteContentSaverTests: XCTestCase {
 
     func testEmptyStringOutputsEmptyData() async throws {
         let note = NoteItem(id: 0)
-        let saver = NoteContentSaver(note: note, debounceNanoseconds: 50_000_000)
+        let center = NotificationCenter()
+        let saver = NoteContentSaver(note: note, debounceNanoseconds: 50_000_000, notificationCenter: center)
 
         // Provide empty string
         saver.save(attributedString: NSAttributedString(string: ""))
@@ -73,7 +76,8 @@ final class NoteContentSaverTests: XCTestCase {
 
     func testFlushImmediatelySavesPending() throws {
         let note = NoteItem(id: 0)
-        let saver = NoteContentSaver(note: note, debounceNanoseconds: 5_000_000_000) // 5s debounce
+        let center = NotificationCenter()
+        let saver = NoteContentSaver(note: note, debounceNanoseconds: 5_000_000_000, notificationCenter: center) // 5s debounce
 
         let str = NSAttributedString(string: "Flushed Text")
         saver.save(attributedString: str)
@@ -82,7 +86,7 @@ final class NoteContentSaverTests: XCTestCase {
         XCTAssertTrue(note.rtfData.isEmpty)
 
         // Simulate notification
-        NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
+        center.post(name: .flushPendingSaves, object: nil)
 
         // The save should happen synchronously on the main thread now
         let data = note.rtfData

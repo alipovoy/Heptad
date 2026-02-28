@@ -10,12 +10,18 @@ class NoteContentSaver {
     private let note: NoteItem
     private let debounceNanoseconds: UInt64
     private var pendingAttributedString: NSAttributedString?
+    private let notificationCenter: NotificationCenter
 
-    init(note: NoteItem, debounceNanoseconds: UInt64 = AppConstants.Timing.debounceSaveNanoseconds) {
+    init(
+        note: NoteItem,
+        debounceNanoseconds: UInt64 = AppConstants.Timing.debounceSaveNanoseconds,
+        notificationCenter: NotificationCenter = .default
+    ) {
         self.note = note
         self.debounceNanoseconds = debounceNanoseconds
+        self.notificationCenter = notificationCenter
 
-        NotificationCenter.default.addObserver(
+        notificationCenter.addObserver(
             self,
             selector: #selector(flush),
             name: .flushPendingSaves,
@@ -24,7 +30,7 @@ class NoteContentSaver {
     }
 
     deinit {
-        NotificationCenter.default.removeObserver(self)
+        notificationCenter.removeObserver(self)
     }
 
     /// Snapshots the attributed string and debounces serialization and saving.
