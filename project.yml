@@ -2,11 +2,11 @@ name: SevenNotes
 options:
   bundleIdPrefix: com.sevennotes
   createIntermediateGroups: true
-  derivedDataPath: .build
   generateEmptyDirectories: true
   defaultConfig: Debug
 settings:
-  base:
+    # Build Locations (Simpler way to override derived data)
+    XCODE_DERIVED_DATA_DIR: $(PROJECT_DIR)/.build
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     STRING_CATALOG_GENERATE_SYMBOLS: YES
     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
@@ -25,6 +25,7 @@ targets:
         LSUIElement: true
     settings:
       base:
+        CONFIGURATION_BUILD_DIR: $(PROJECT_DIR)/.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: Sources/macOS/SevenNotes-macOS.entitlements
         CODE_SIGN_INJECT_BASE_ENTITLEMENTS: YES
@@ -43,6 +44,9 @@ targets:
       path: Sources/iOS/Info.plist
       properties:
         UILaunchScreen: {}
+    settings:
+      base:
+        CONFIGURATION_BUILD_DIR: $(PROJECT_DIR)/.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)
     scheme:
       testTargets:
         - SevenNotes-iOSTests
