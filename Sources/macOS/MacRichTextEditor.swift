@@ -4,6 +4,7 @@ import SwiftUI
 struct MacRichTextEditor: NSViewRepresentable {
     var notes: [NoteItem]
     @Binding var selectedNoteIndex: Int
+    @Binding var textStats: TextStats
 
     func makeNSView(context: Context) -> NSView {
         let container = NSView()
@@ -115,6 +116,10 @@ struct MacRichTextEditor: NSViewRepresentable {
                 DispatchQueue.main.async {
                     scrollView.window?.makeFirstResponder(textView)
                 }
+
+                TextStatisticsCalculator.calculate(for: textView.string) { [weak self] stats in
+                    self?.parent.textStats = stats
+                }
             }
 
             currentNoteId = note.id
@@ -132,6 +137,10 @@ struct MacRichTextEditor: NSViewRepresentable {
             let attrString = NSAttributedString(attributedString: textStorage)
 
             saver.save(attributedString: attrString)
+
+            TextStatisticsCalculator.calculate(for: textView.string) { [weak self] stats in
+                self?.parent.textStats = stats
+            }
         }
     }
 }

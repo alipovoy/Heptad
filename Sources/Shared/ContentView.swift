@@ -7,6 +7,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \NoteItem.id) private var notes: [NoteItem]
     @AppStorage("selectedNoteIndex") private var selectedNoteIndex = 0
+    @State private var textStats: TextStats = .zero
 
     static let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]
 
@@ -17,7 +18,7 @@ struct ContentView: View {
                     #if os(macOS)
                         macOSTitleBar
 
-                        MacRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex)
+                        MacRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex, textStats: $textStats)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(backgroundFill)
                     #else
@@ -28,9 +29,12 @@ struct ContentView: View {
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
 
-                        IOSRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex)
+                        IOSRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex, textStats: $textStats)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     #endif
+
+                    TextStatisticsBar(stats: textStats, color: Self.colors[selectedNoteIndex])
+                        .background(backgroundFill)
                 }
                 #if os(macOS)
                     .frame(minWidth: 320, minHeight: 200)
@@ -60,7 +64,7 @@ struct ContentView: View {
     }
 
     private var backgroundFill: some View {
-        Self.colors[selectedNoteIndex].opacity(0.15)
+        Self.colors[selectedNoteIndex].opacity(0.1)
             .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
     }
 
@@ -92,9 +96,27 @@ struct ContentView: View {
                     .opacity(0)
                     .padding(.trailing, 14)
             }
-            .padding(.top, 10)
-            .padding(.bottom, 8)
+            .padding(.top, 5)
+            .padding(.bottom, 5)
             .background(Color.clear)
         }
     #endif
+}
+
+struct TextStatisticsBar: View {
+    let stats: TextStats
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text("\(stats.lines) Lines ⋅ \(stats.words) Words ⋅ \(stats.characters) Characters")
+            Spacer()
+        }
+        .font(.system(size: 11, weight: .medium, design: .rounded))
+        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.2))
+        .foregroundColor(.secondary) // Vivid text color relying on the background
+    }
 }

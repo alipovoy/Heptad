@@ -4,6 +4,7 @@ import UIKit
 struct IOSRichTextEditor: UIViewRepresentable {
     var notes: [NoteItem]
     @Binding var selectedNoteIndex: Int
+    @Binding var textStats: TextStats
 
     func makeUIView(context: Context) -> UIView {
         let container = UIView()
@@ -98,6 +99,10 @@ struct IOSRichTextEditor: UIViewRepresentable {
                 DispatchQueue.main.async {
                     textView.becomeFirstResponder()
                 }
+
+                TextStatisticsCalculator.calculate(for: textView.text ?? "") { [weak self] stats in
+                    self?.parent.textStats = stats
+                }
             }
 
             currentNoteId = note.id
@@ -112,6 +117,10 @@ struct IOSRichTextEditor: UIViewRepresentable {
             let attrString = NSAttributedString(attributedString: textView.attributedText)
 
             saver.save(attributedString: attrString)
+
+            TextStatisticsCalculator.calculate(for: textView.text ?? "") { [weak self] stats in
+                self?.parent.textStats = stats
+            }
         }
     }
 }
