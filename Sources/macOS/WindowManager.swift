@@ -38,7 +38,7 @@ class WindowManager: NSObject, NSWindowDelegate {
             return
         }
 
-        if window == nil || !window!.isVisible {
+        if !(window?.isVisible ?? false) {
             showPanel(sender: sender)
         } else {
             window?.orderOut(nil)
@@ -66,23 +66,14 @@ class WindowManager: NSObject, NSWindowDelegate {
         return false
     }
 
-    func windowDidResize(_ notification: Notification) {
-        guard let w = notification.object as? NSWindow else { return }
-        UserDefaults.standard.set(NSStringFromSize(w.frame.size), forKey: "LastWindowSize")
-    }
-
     func windowDidMove(_ notification: Notification) {
         guard let w = notification.object as? NSWindow else { return }
 
         // Only track moves on the panel (for unpinning detection)
         guard w === window, isPinnedToMenubar, !isPositioningPanel else { return }
 
-        let dx = abs(w.frame.origin.x - anchorOrigin.x)
-        let dy = abs(w.frame.origin.y - anchorOrigin.y)
-        let distance = hypot(dx, dy)
-
         // When threshold is exceeded, wait for mouse-up before transitioning.
-        if distance > unpinThreshold && pendingUnpinMonitor == nil {
+        if panelDragDistance(of: w) > unpinThreshold && pendingUnpinMonitor == nil {
             pendingUnpinMonitor = EventMonitor(local: true, mask: .leftMouseUp) {
                 [weak self] event in
                 guard let self = self else { return event }
@@ -91,17 +82,19 @@ class WindowManager: NSObject, NSWindowDelegate {
                 self.pendingUnpinMonitor = nil
 
                 // Verify we're still in the drag-away state
-                if self.isPinnedToMenubar, let w = self.window {
-                    let dx = abs(w.frame.origin.x - self.anchorOrigin.x)
-                    let dy = abs(w.frame.origin.y - self.anchorOrigin.y)
-                    if hypot(dx, dy) > self.unpinThreshold {
-                        self.transitionToRegularWindow()
-                    }
+                if self.isPinnedToMenubar, let w = self.window,
+                    self.panelDragDistance(of: w) > self.unpinThreshold
+                {
+                    self.transitionToRegularWindow()
                 }
                 return event
             }
             pendingUnpinMonitor?.start()
         }
+    }
+
+    private func panelDragDistance(of w: NSWindow) -> CGFloat {
+        hypot(w.frame.origin.x - anchorOrigin.x, w.frame.origin.y - anchorOrigin.y)
     }
 
     // MARK: - Hosting View
@@ -116,17 +109,15 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     private func showPanel(sender: NSStatusBarButton) {
         if window == nil {
-            let savedSizeStr = UserDefaults.standard.string(forKey: "LastWindowSize")
-            let size =
-                savedSizeStr != nil
-                ? NSSizeFromString(savedSizeStr!) : NSSize(width: 300, height: 400)
-
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: size.width, height: size.height),
+                contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
                 styleMask: [
                     .titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel,
                 ],
                 backing: .buffered, defer: false)
+
+            // AppKit persists and restores the frame; pinned mode re-anchors the origin on every show.
+            panel.setFrameAutosaveName("SevenNotesPanel")
 
             panel.titlebarAppearsTransparent = true
             panel.titleVisibility = .hidden

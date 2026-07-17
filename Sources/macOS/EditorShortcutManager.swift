@@ -91,107 +91,47 @@ class EditorShortcutManager {
 
     func toggleFontTrait(_ trait: NSFontTraitMask, on textView: NSTextView) {
         let fm = NSFontManager.shared
-        let range = textView.selectedRange()
-
-        if range.length > 0 {
-            guard let textStorage = textView.textStorage else { return }
-            let oldText = NSAttributedString(
-                attributedString: textStorage.attributedSubstring(from: range))
-
-            textStorage.beginEditing()
-            textStorage.enumerateAttribute(.font, in: range, options: []) { value, attrRange, _ in
-                guard let oldFont = value as? NSFont else { return }
-                let traits = fm.traits(of: oldFont)
-                let newFont: NSFont
-                if traits.contains(trait) {
-                    newFont = fm.convert(oldFont, toNotHaveTrait: trait)
-                } else {
-                    newFont = fm.convert(oldFont, toHaveTrait: trait)
-                }
-                textStorage.addAttribute(.font, value: newFont, range: attrRange)
-            }
-            textStorage.endEditing()
-            textView.didChangeText()
-
-            let newText = NSAttributedString(
-                attributedString: textStorage.attributedSubstring(from: range))
-            registerUndo(
-                for: textView, range: range, oldText: oldText, newText: newText,
-                actionName: "Formatting")
-            if textView.undoManager?.isUndoing == false {
-                textView.undoManager?.setActionName("Formatting")
-            }
-        } else {
-            var attrs = textView.typingAttributes
-            let currentFont =
-                attrs[.font] as? NSFont
-                ?? NSFont.systemFont(ofSize: AppConstants.UI.defaultFontSize)
-            let traits = fm.traits(of: currentFont)
-            let newFont: NSFont
-            if traits.contains(trait) {
-                newFont = fm.convert(currentFont, toNotHaveTrait: trait)
-            } else {
-                newFont = fm.convert(currentFont, toHaveTrait: trait)
-            }
-            attrs[.font] = newFont
-            textView.typingAttributes = attrs
+        applyFontChange(to: textView, actionName: "Formatting") { font in
+            fm.traits(of: font).contains(trait)
+                ? fm.convert(font, toNotHaveTrait: trait)
+                : fm.convert(font, toHaveTrait: trait)
         }
     }
 
     func changeFontSize(increase: Bool, on textView: NSTextView) {
+        applyFontChange(to: textView, actionName: "Font Size") { font in
+            let newSize = increase ? font.pointSize + 2 : max(8, font.pointSize - 2)
+            return NSFontManager.shared.convert(font, toSize: newSize)
+        }
+    }
+
+    /// Applies a font transform to the selection (undoably, via the text view's
+    /// standard should/didChangeText hooks) or to the typing attributes when empty.
+    private func applyFontChange(
+        to textView: NSTextView, actionName: String, transform: (NSFont) -> NSFont
+    ) {
         let range = textView.selectedRange()
 
         if range.length > 0 {
-            guard let textStorage = textView.textStorage else { return }
-            let oldText = NSAttributedString(
-                attributedString: textStorage.attributedSubstring(from: range))
+            guard let textStorage = textView.textStorage,
+                textView.shouldChangeText(in: range, replacementString: nil)
+            else { return }
 
             textStorage.beginEditing()
             textStorage.enumerateAttribute(.font, in: range, options: []) { value, attrRange, _ in
                 guard let oldFont = value as? NSFont else { return }
-                let newSize = increase ? oldFont.pointSize + 2 : max(8, oldFont.pointSize - 2)
-                let newFont = NSFontManager.shared.convert(oldFont, toSize: newSize)
-                textStorage.addAttribute(.font, value: newFont, range: attrRange)
+                textStorage.addAttribute(.font, value: transform(oldFont), range: attrRange)
             }
             textStorage.endEditing()
             textView.didChangeText()
-
-            let newText = NSAttributedString(
-                attributedString: textStorage.attributedSubstring(from: range))
-            registerUndo(
-                for: textView, range: range, oldText: oldText, newText: newText,
-                actionName: "Font Size")
-            if textView.undoManager?.isUndoing == false {
-                textView.undoManager?.setActionName("Font Size")
-            }
+            textView.undoManager?.setActionName(actionName)
         } else {
             var attrs = textView.typingAttributes
             let currentFont =
                 attrs[.font] as? NSFont
                 ?? NSFont.systemFont(ofSize: AppConstants.UI.defaultFontSize)
-            let newSize = increase ? currentFont.pointSize + 2 : max(8, currentFont.pointSize - 2)
-            let newFont = NSFontManager.shared.convert(currentFont, toSize: newSize)
-            attrs[.font] = newFont
+            attrs[.font] = transform(currentFont)
             textView.typingAttributes = attrs
-        }
-    }
-
-    private func registerUndo(
-        for textView: NSTextView, range: NSRange, oldText: NSAttributedString,
-        newText: NSAttributedString, actionName: String
-    ) {
-        textView.undoManager?.registerUndo(withTarget: textView) { [weak self, weak target = textView] _ in
-            guard let self = self, let target = target else { return }
-
-            target.undoManager?.setActionName(actionName)
-            self.registerUndo(
-                for: target, range: range, oldText: newText, newText: oldText,
-                actionName: actionName)
-
-            target.textStorage?.beginEditing()
-            target.textStorage?.replaceCharacters(in: range, with: oldText)
-            target.textStorage?.endEditing()
-            target.didChangeText()
         }
     }
 }

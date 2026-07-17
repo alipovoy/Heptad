@@ -11,9 +11,15 @@ struct ContentView: View {
 
     static let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]
 
+    #if os(macOS)
+        private static let willTerminateNotification = NSApplication.willTerminateNotification
+    #else
+        private static let willTerminateNotification = UIApplication.willTerminateNotification
+    #endif
+
     var body: some View {
         Group {
-            if notes.count == 7 {
+            if notes.count == AppConstants.noteCount {
                 VStack(spacing: 0) {
                     #if os(macOS)
                         macOSTitleBar
@@ -49,18 +55,16 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background || newPhase == .inactive {
-                NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
+                flushPendingSaves()
             }
         }
-        #if os(macOS)
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-            NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
+        .onReceive(NotificationCenter.default.publisher(for: Self.willTerminateNotification)) { _ in
+            flushPendingSaves()
         }
-        #else
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
-            NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
-        }
-        #endif
+    }
+
+    private func flushPendingSaves() {
+        NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
     }
 
     private var backgroundFill: some View {
@@ -76,7 +80,7 @@ struct ContentView: View {
                 }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .focusable(false)
@@ -98,7 +102,6 @@ struct ContentView: View {
             }
             .padding(.top, 5)
             .padding(.bottom, 5)
-            .background(Color.clear)
         }
     #endif
 }
@@ -108,15 +111,12 @@ struct TextStatisticsBar: View {
     let color: Color
 
     var body: some View {
-        HStack(spacing: 0) {
-            Text("\(stats.lines) Lines ⋅ \(stats.words) Words ⋅ \(stats.characters) Characters")
-            Spacer()
-        }
-        .font(.system(size: 11, weight: .medium, design: .rounded))
-        .padding(.vertical, 8)
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(color.opacity(0.2))
-        .foregroundColor(.secondary) // Vivid text color relying on the background
+        Text("\(stats.lines) Lines ⋅ \(stats.words) Words ⋅ \(stats.characters) Characters")
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(color.opacity(0.2))
+            .foregroundStyle(.secondary)  // Vivid text color relying on the background
     }
 }

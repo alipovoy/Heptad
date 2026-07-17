@@ -22,8 +22,6 @@ struct ColorCircle: View {
                 Circle().fill(assignedColor)
             } else if isEmpty {
                 Circle().fill(Color.gray)
-            } else {
-                Circle().fill(Color.clear)
             }
 
             // Stroke and gradient for unselected, non-empty circle
@@ -52,7 +50,7 @@ struct ColorCircle: View {
                             size: size * AppConstants.UI.ColorCircle.selectedNumberFontScale,
                             weight: .bold)
                     )
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
             }
 
             // Overlay gradient for selected or empty circle

@@ -23,6 +23,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // reach NSTextView's keyDown key bindings instead of being
         // intercepted by menu performKeyEquivalent.
         shortcutManager.start()
+
+        // Open the SwiftData store during launch so the first panel open doesn't pay for it.
+        _ = SevenNotesApp.sharedModelContainer
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

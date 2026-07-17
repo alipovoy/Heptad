@@ -61,6 +61,7 @@ targets:
       - target: SevenNotes-macOS
     settings:
       base:
+        CONFIGURATION_BUILD_DIR: $(PROJECT_DIR)/.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)
         GENERATE_INFOPLIST_FILE: YES
   SevenNotes-iOSTests:
     type: bundle.unit-test
@@ -72,5 +73,6 @@ targets:
       - target: SevenNotes-iOS
     settings:
       base:
+        CONFIGURATION_BUILD_DIR: $(PROJECT_DIR)/.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)
         GENERATE_INFOPLIST_FILE: YES
 

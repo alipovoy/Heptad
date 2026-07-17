@@ -6,13 +6,14 @@ import XCTest
     @testable import SevenNotes_iOS
 #endif
 
+@MainActor
 final class NoteContentSaverTests: XCTestCase {
 
     func testSerializationAndDebouncing() async throws {
         // Arrange
         let note = NoteItem(id: 0)
         let center = NotificationCenter()
-        let saver = NoteContentSaver(note: note, debounceNanoseconds: 100_000_000, notificationCenter: center)  // 0.1s
+        let saver = NoteContentSaver(note: note, debounce: .milliseconds(100), notificationCenter: center)
 
         let attrString = NSAttributedString(string: "Hello Test")
 
@@ -20,7 +21,7 @@ final class NoteContentSaverTests: XCTestCase {
         saver.save(attributedString: attrString)
 
         // Wait for debounce + some buffer
-        try await Task.sleep(nanoseconds: 200_000_000)
+        try await Task.sleep(for: .milliseconds(200))
 
         // Assert
         let data = note.rtfData
@@ -36,7 +37,7 @@ final class NoteContentSaverTests: XCTestCase {
     func testDebounceCancelsPrevious() async throws {
         let note = NoteItem(id: 0)
         let center = NotificationCenter()
-        let saver = NoteContentSaver(note: note, debounceNanoseconds: 150_000_000, notificationCenter: center)
+        let saver = NoteContentSaver(note: note, debounce: .milliseconds(150), notificationCenter: center)
 
         let str1 = NSAttributedString(string: "A")
         let str2 = NSAttributedString(string: "AB")
@@ -46,7 +47,7 @@ final class NoteContentSaverTests: XCTestCase {
         saver.save(attributedString: str2)
         saver.save(attributedString: str3)
 
-        try await Task.sleep(nanoseconds: 250_000_000)
+        try await Task.sleep(for: .milliseconds(250))
 
         let data = note.rtfData
         XCTAssertFalse(data.isEmpty)
@@ -61,11 +62,11 @@ final class NoteContentSaverTests: XCTestCase {
     func testEmptyStringOutputsEmptyData() async throws {
         let note = NoteItem(id: 0)
         let center = NotificationCenter()
-        let saver = NoteContentSaver(note: note, debounceNanoseconds: 50_000_000, notificationCenter: center)
+        let saver = NoteContentSaver(note: note, debounce: .milliseconds(50), notificationCenter: center)
 
         // Provide empty string
         saver.save(attributedString: NSAttributedString(string: ""))
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await Task.sleep(for: .milliseconds(100))
 
         XCTAssertTrue(note.rtfData.isEmpty)
 
@@ -77,7 +78,7 @@ final class NoteContentSaverTests: XCTestCase {
     func testFlushImmediatelySavesPending() throws {
         let note = NoteItem(id: 0)
         let center = NotificationCenter()
-        let saver = NoteContentSaver(note: note, debounceNanoseconds: 5_000_000_000, notificationCenter: center) // 5s debounce
+        let saver = NoteContentSaver(note: note, debounce: .seconds(5), notificationCenter: center)
 
         let str = NSAttributedString(string: "Flushed Text")
         saver.save(attributedString: str)

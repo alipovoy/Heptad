@@ -7,13 +7,12 @@ struct ColorPickerRow: View {
     let notes: [NoteItem]
 
     var body: some View {
-        let spacing: CGFloat = AppConstants.UI.defaultSpacing
-        HStack(spacing: spacing) {
-            ForEach(0..<7, id: \.self) { index in
+        HStack(spacing: AppConstants.UI.defaultSpacing) {
+            ForEach(notes.indices, id: \.self) { index in
                 ColorCircle(
                     index: index,
                     assignedColor: colors[index],
-                    isEmpty: notes[index].rtfData.isEmpty,
+                    isEmpty: notes[index].isEmpty,
                     selectedNoteIndex: $selectedNoteIndex
                 )
             }

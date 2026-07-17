@@ -5,22 +5,22 @@ extension Notification.Name {
 }
 
 /// A shared utility class to handle debouncing and RTF serialization for rich text editors.
+@MainActor
 class NoteContentSaver {
     private var saveTask: Task<Void, Never>?
     private let note: NoteItem
-    private let debounceNanoseconds: UInt64
+    private let debounce: Duration
     private var pendingAttributedString: NSAttributedString?
-    private let notificationCenter: NotificationCenter
 
     init(
         note: NoteItem,
-        debounceNanoseconds: UInt64 = AppConstants.Timing.debounceSaveNanoseconds,
+        debounce: Duration = AppConstants.Timing.debounceSave,
         notificationCenter: NotificationCenter = .default
     ) {
         self.note = note
-        self.debounceNanoseconds = debounceNanoseconds
-        self.notificationCenter = notificationCenter
+        self.debounce = debounce
 
+        // No removeObserver needed: selector-based observers auto-unregister on deinit.
         notificationCenter.addObserver(
             self,
             selector: #selector(flush),
@@ -29,63 +29,43 @@ class NoteContentSaver {
         )
     }
 
-    deinit {
-        notificationCenter.removeObserver(self)
-    }
-
     /// Snapshots the attributed string and debounces serialization and saving.
     func save(attributedString: NSAttributedString) {
         saveTask?.cancel()
         pendingAttributedString = attributedString
 
         saveTask = Task {
-            try? await Task.sleep(nanoseconds: debounceNanoseconds)
+            try? await Task.sleep(for: debounce)
             guard !Task.isCancelled else { return }
-
-            await MainActor.run {
-                guard !Task.isCancelled else { return }
-
-                if let pending = self.pendingAttributedString {
-                    self.performSave(attributedString: pending)
-                    self.pendingAttributedString = nil
-                }
-            }
+            flushPending()
         }
     }
 
     /// Immediately saves any pending text and cancels the debounced task.
-    @objc func flush() {
-        guard let pending = pendingAttributedString else { return }
-        saveTask?.cancel()
-        saveTask = nil
-
-        if Thread.isMainThread {
-            self.performSave(attributedString: pending)
-        } else {
-            DispatchQueue.main.sync {
-                self.performSave(attributedString: pending)
-            }
+    ///
+    /// `@objc` selector dispatch (used by `NotificationCenter`) crosses the Swift/ObjC
+    /// boundary without hopping actors, so this can't be `@MainActor`-isolated directly.
+    /// `assumeIsolated` documents the requirement and traps immediately if a future caller
+    /// ever posts `.flushPendingSaves` from a background thread, instead of racing silently.
+    @objc nonisolated func flush() {
+        MainActor.assumeIsolated {
+            saveTask?.cancel()
+            saveTask = nil
+            flushPending()
         }
+    }
+
+    private func flushPending() {
+        guard let pending = pendingAttributedString else { return }
+        performSave(attributedString: pending)
         pendingAttributedString = nil
     }
 
     private func performSave(attributedString: NSAttributedString) {
-        let isEmpty = attributedString.length == 0
-            || attributedString.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
-        let rtfData: Data?
-        if isEmpty {
-            rtfData = Data()
-        } else {
-            let range = NSRange(location: 0, length: attributedString.length)
-            rtfData = try? attributedString.data(
-                from: range,
-                documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
-            )
+        // Keep the previous data when encoding fails; skip the SwiftData write when unchanged.
+        guard let data = NoteItem.rtfData(from: attributedString), data != note.rtfData else {
+            return
         }
-
-        if let data = rtfData {
-            self.note.rtfData = data
-        }
+        note.rtfData = data
     }
 }

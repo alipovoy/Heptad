@@ -1,7 +1,10 @@
-import Foundation
 import CoreGraphics
+import Foundation
 
 enum AppConstants {
+    /// The app always has exactly this many notes (one per color).
+    static let noteCount = 7
+
     enum UI {
         /// Padding and spacing within the UI
         static let defaultSpacing: CGFloat = 12
@@ -25,6 +28,6 @@ enum AppConstants {
 
     enum Timing {
         /// Debounce interval used when saving text
-        static let debounceSaveNanoseconds: UInt64 = 300_000_000
+        static let debounceSave: Duration = .milliseconds(300)
     }
 }

@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 @main
 struct SevenNotesApp: App {
@@ -13,15 +13,10 @@ struct SevenNotesApp: App {
             // Seed database
             let context = container.mainContext
             let fetchDescriptor = FetchDescriptor<NoteItem>()
-            let existingNotes = try context.fetch(fetchDescriptor)
-
-            if existingNotes.count < 7 {
-                let existingIds = Set(existingNotes.map { $0.id })
-                for i in 0..<7 {
-                    if !existingIds.contains(i) {
-                        let newItem = NoteItem(id: i)
-                        context.insert(newItem)
-                    }
+            if try context.fetchCount(fetchDescriptor) < AppConstants.noteCount {
+                let existingIds = Set(try context.fetch(fetchDescriptor).map(\.id))
+                for i in 0..<AppConstants.noteCount where !existingIds.contains(i) {
+                    context.insert(NoteItem(id: i))
                 }
                 try context.save()
             }
@@ -35,10 +30,6 @@ struct SevenNotesApp: App {
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     #endif
-
-    init() {
-        // AppInitializer logic is now handled in sharedModelContainer initialization
-    }
 
     var body: some Scene {
         #if os(macOS)
