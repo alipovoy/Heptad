@@ -13,8 +13,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = self.statusBarItem.button {
-            button.image = NSImage(
-                systemSymbolName: "square.and.pencil", accessibilityDescription: "7Notes")
+            button.image = NSImage(resource: .menuBarIcon)
+            button.image?.accessibilityDescription = "7Notes"
             button.action = #selector(toggleWindow(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }

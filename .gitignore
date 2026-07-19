@@ -36,3 +36,5 @@ Package.resolved
 
 # Logs
 *.log
+
+**/Info.plist
