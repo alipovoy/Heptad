@@ -6,7 +6,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \NoteItem.id) private var notes: [NoteItem]
-    @AppStorage("selectedNoteIndex") private var selectedNoteIndex = 0
+    @AppStorage(AppConstants.selectedNoteIndexKey) private var selectedNoteIndex = 0
     @State private var textStats: TextStats = .zero
 
     static let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]

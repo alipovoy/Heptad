@@ -68,6 +68,57 @@ final class EditorShortcutManagerTests: XCTestCase {
         XCTAssertEqual(newSize, initialSize + 2)
     }
 
+    func testStrikethroughShortcutTogglesStrikethroughStyle() {
+        textView.setSelectedRange(NSRange(location: 0, length: 4))  // "Test"
+
+        manager.toggleStrikethrough(on: textView)
+
+        let value =
+            textView.textStorage?.attribute(.strikethroughStyle, at: 0, effectiveRange: nil)
+            as? Int
+        XCTAssertEqual(value, NSUnderlineStyle.single.rawValue)
+
+        manager.toggleStrikethrough(on: textView)
+
+        let toggledOff =
+            (textView.textStorage?.attribute(.strikethroughStyle, at: 0, effectiveRange: nil)
+                as? Int) ?? 0
+        XCTAssertEqual(toggledOff, 0)
+    }
+
+    func testStrikethroughWithoutSelectionUpdatesTypingAttributes() {
+        textView.setSelectedRange(NSRange(location: 0, length: 0))
+
+        manager.toggleStrikethrough(on: textView)
+        let on = (textView.typingAttributes[.strikethroughStyle] as? Int) ?? 0
+        XCTAssertEqual(on, NSUnderlineStyle.single.rawValue)
+
+        manager.toggleStrikethrough(on: textView)
+        let off = (textView.typingAttributes[.strikethroughStyle] as? Int) ?? 0
+        XCTAssertEqual(off, 0)
+    }
+
+    func testSelectNoteWritesSelectedIndexForValidNote() {
+        let key = AppConstants.selectedNoteIndexKey
+        let original = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let original {
+                UserDefaults.standard.set(original, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+
+        // ⌘3 selects the third note (zero-based index 2).
+        XCTAssertTrue(manager.selectNote(noteIndex: 3))
+        XCTAssertEqual(UserDefaults.standard.integer(forKey: key), 2)
+    }
+
+    func testSelectNoteIgnoresOutOfRangeDigits() {
+        // Digits past the note count aren't handled, so the key event passes through.
+        XCTAssertFalse(manager.selectNote(noteIndex: 9))
+    }
+
     func testUndoFormatting() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 200, height: 200), styleMask: .borderless,

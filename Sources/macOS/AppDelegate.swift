@@ -35,9 +35,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Status Bar Toggle
 
     @objc func toggleWindow(_ sender: NSStatusBarButton) {
-        let event = NSApp.currentEvent!
-
-        if event.type == .rightMouseUp {
+        // Accessibility-driven activation (VoiceOver, UI automation) delivers this action
+        // with no backing NSEvent; treat that the same as a plain left click.
+        if NSApp.currentEvent?.type == .rightMouseUp {
             let menu = NSMenu()
             menu.addItem(
                 NSMenuItem(

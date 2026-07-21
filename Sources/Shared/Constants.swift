@@ -5,6 +5,11 @@ enum AppConstants {
     /// The app always has exactly this many notes (one per color).
     static let noteCount = 7
 
+    /// UserDefaults key backing the currently selected note. Shared between the
+    /// @AppStorage binding in ContentView and the note-switching shortcuts, so the
+    /// two never drift apart.
+    static let selectedNoteIndexKey = "selectedNoteIndex"
+
     enum UI {
         /// Padding and spacing within the UI
         static let defaultSpacing: CGFloat = 12
