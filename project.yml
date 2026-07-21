@@ -1,6 +1,6 @@
-name: SevenNotes
+name: Heptad
 options:
-  bundleIdPrefix: com.sevennotes
+  bundleIdPrefix: dev.lipovoy
   createIntermediateGroups: true
   generateEmptyDirectories: true
   defaultConfig: Debug
@@ -13,7 +13,7 @@ settings:
     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
     DEAD_CODE_STRIPPING: YES
 targets:
-  SevenNotes-macOS:
+  Heptad-macOS:
     type: application
     platform: macOS
     deploymentTarget: "14.0"
@@ -27,14 +27,16 @@ targets:
         LSApplicationCategoryType: public.app-category.productivity
     settings:
       base:
+        PRODUCT_NAME: Heptad
+        PRODUCT_BUNDLE_IDENTIFIER: dev.lipovoy.heptad.mac
         CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_ENTITLEMENTS: Sources/macOS/SevenNotes-macOS.entitlements
+        CODE_SIGN_ENTITLEMENTS: Sources/macOS/Heptad-macOS.entitlements
         CODE_SIGN_INJECT_BASE_ENTITLEMENTS: YES
         ENABLE_HARDENED_RUNTIME: YES
     scheme:
       testTargets:
-        - SevenNotes-macOSTests
-  SevenNotes-iOS:
+        - Heptad-macOSTests
+  Heptad-iOS:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
@@ -46,10 +48,14 @@ targets:
       properties:
         UILaunchScreen: {}
         LSApplicationCategoryType: public.app-category.productivity
+    settings:
+      base:
+        PRODUCT_NAME: Heptad
+        PRODUCT_BUNDLE_IDENTIFIER: dev.lipovoy.heptad.ios
     scheme:
       testTargets:
-        - SevenNotes-iOSTests
-  SevenNotes-macOSTests:
+        - Heptad-iOSTests
+  Heptad-macOSTests:
     type: bundle.unit-test
     platform: macOS
     deploymentTarget: "14.0"
@@ -57,18 +63,22 @@ targets:
       - path: Tests/Shared
       - path: Tests/macOS
     dependencies:
-      - target: SevenNotes-macOS
+      - target: Heptad-macOS
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-  SevenNotes-iOSTests:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.lipovoy.heptad.mac.tests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Heptad.app/Contents/MacOS/Heptad"
+  Heptad-iOSTests:
     type: bundle.unit-test
     platform: iOS
     deploymentTarget: "17.0"
     sources:
       - path: Tests/Shared
     dependencies:
-      - target: SevenNotes-iOS
+      - target: Heptad-iOS
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: dev.lipovoy.heptad.ios.tests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Heptad.app/Heptad"

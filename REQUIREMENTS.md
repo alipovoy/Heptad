@@ -1,7 +1,7 @@
-# 7Notes — Requirements
+# Heptad — Requirements
 
 ## Overview
-7Notes is a minimal, always-available rich-text note-taking app with exactly **7 color-coded notes**. It targets **macOS** (menubar popup) and **iOS** (standalone app) from a shared SwiftUI/SwiftData codebase.
+Heptad is a minimal, always-available rich-text note-taking app with exactly **7 color-coded notes**. It targets **macOS** (menubar popup) and **iOS** (standalone app) from a shared SwiftUI/SwiftData codebase.
 
 ## Product Requirements
 

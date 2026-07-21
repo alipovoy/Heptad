@@ -14,7 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let button = self.statusBarItem.button {
             button.image = NSImage(resource: .menuBarIcon)
-            button.image?.accessibilityDescription = "7Notes"
+            button.image?.accessibilityDescription = "Heptad"
             button.action = #selector(toggleWindow(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
@@ -25,7 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         shortcutManager.start()
 
         // Open the SwiftData store during launch so the first panel open doesn't pay for it.
-        _ = SevenNotesApp.sharedModelContainer
+        _ = HeptadApp.sharedModelContainer
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

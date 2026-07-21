@@ -1,6 +1,6 @@
-# 7Notes
+# Heptad
 
-7Notes is a minimal, always-available rich-text note-taking app with exactly **7 color-coded notes**. It targets **macOS** (menubar popup) and **iOS** (standalone app) from a shared SwiftUI/SwiftData codebase.
+Heptad is a minimal, always-available rich-text note-taking app with exactly **7 color-coded notes**. It targets **macOS** (menubar popup) and **iOS** (standalone app) from a shared SwiftUI/SwiftData codebase.
 
 ## Features
 - **macOS Menu Bar App**: Lives in the status bar for quick access. Can be dragged away into a detached floating window.
@@ -21,16 +21,16 @@ To compile the project from the command line, follow these steps:
    ```bash
    brew install xcodegen
    ```
-3. Generate the `SevenNotes.xcodeproj` file from `project.yml`:
+3. Generate the `Heptad.xcodeproj` file from `project.yml`:
    ```bash
    xcodegen generate
    ```
 4. Build the macOS app via `xcodebuild`:
    ```bash
-   xcodebuild -scheme SevenNotes-macOS build
+   xcodebuild -scheme Heptad-macOS build
    ```
 5. Build the iOS app via `xcodebuild`:
    ```bash
-   xcodebuild -scheme SevenNotes-iOS -destination 'generic/platform=iOS Simulator' build
+   xcodebuild -scheme Heptad-iOS -destination 'generic/platform=iOS Simulator' build
    ```
-   Or open `SevenNotes.xcodeproj` and build via Xcode.
+   Or open `Heptad.xcodeproj` and build via Xcode.

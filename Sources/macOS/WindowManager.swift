@@ -101,7 +101,7 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     private lazy var mainHostingView: NSView = {
         let view = ContentView()
-            .modelContainer(SevenNotesApp.sharedModelContainer)
+            .modelContainer(HeptadApp.sharedModelContainer)
         return NSHostingView(rootView: view)
     }()
 
@@ -117,7 +117,7 @@ class WindowManager: NSObject, NSWindowDelegate {
                 backing: .buffered, defer: false)
 
             // AppKit persists and restores the frame; pinned mode re-anchors the origin on every show.
-            panel.setFrameAutosaveName("SevenNotesPanel")
+            panel.setFrameAutosaveName("HeptadPanel")
 
             panel.titlebarAppearsTransparent = true
             panel.titleVisibility = .hidden

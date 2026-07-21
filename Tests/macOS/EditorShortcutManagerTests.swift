@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import SevenNotes_macOS
+@testable import Heptad
 
 final class EditorShortcutManagerTests: XCTestCase {
     var textView: NSTextView!

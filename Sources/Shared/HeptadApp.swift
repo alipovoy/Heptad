@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 @main
-struct SevenNotesApp: App {
+struct HeptadApp: App {
     static let sharedModelContainer: ModelContainer = {
         let schema = Schema([NoteItem.self])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
@@ -43,7 +43,7 @@ struct SevenNotesApp: App {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(SevenNotesApp.sharedModelContainer)
+        .modelContainer(HeptadApp.sharedModelContainer)
         #endif
     }
 }

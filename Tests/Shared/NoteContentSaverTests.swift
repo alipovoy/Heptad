@@ -1,10 +1,6 @@
 import XCTest
 
-#if os(macOS)
-    @testable import SevenNotes_macOS
-#else
-    @testable import SevenNotes_iOS
-#endif
+@testable import Heptad
 
 @MainActor
 final class NoteContentSaverTests: XCTestCase {

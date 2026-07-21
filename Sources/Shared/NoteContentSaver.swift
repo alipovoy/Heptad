@@ -1,7 +1,7 @@
 import Foundation
 
 extension Notification.Name {
-    static let flushPendingSaves = Notification.Name("SevenNotes.flushPendingSaves")
+    static let flushPendingSaves = Notification.Name("Heptad.flushPendingSaves")
 }
 
 /// A shared utility class to handle debouncing and RTF serialization for rich text editors.
