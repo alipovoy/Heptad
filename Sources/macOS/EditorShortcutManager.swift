@@ -72,6 +72,9 @@ class EditorShortcutManager {
             case "v" where !hasShift:
                 textView.paste(nil)
                 return nil
+            case "v" where hasShift, "V":
+                textView.pasteAsPlainText(nil)
+                return nil
             case "x" where !hasShift:
                 textView.cut(nil)
                 return nil
