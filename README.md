@@ -45,14 +45,6 @@ xcodebuild -project Heptad.xcodeproj -scheme Heptad-iOS \
 
 Tests and contribution details are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## Design notes
-
-* **One window, reconfigured.** Attaching and detaching mutate a single `NSPanel` rather than swapping between two windows, so the text, cursor, selection, and undo stack survive the transition intact.
-* **One `ContentView`, two native editors.** Shared SwiftUI routes to `NSTextView` on macOS and `UITextView` on iOS. The editors are the system text views, unmodified — no rich-text engine was written for this app.
-* **Undo is isolated per note.** Each note keeps its own editor view and undo manager, so undo never crosses note boundaries.
-* **Shortcuts are handled explicitly on macOS.** The app is an accessory app with no main menu at any point, so a key monitor is the single source of truth for shortcuts.
-* **Persistence is continuous.** Edits are debounced and written to SwiftData as RTF, with explicit flushes on backgrounding and termination so nothing is lost on quit.
-
 ## Keyboard shortcuts (macOS)
 
 | Shortcut | Action |
@@ -68,12 +60,6 @@ Tests and contribution details are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 | `⌘W` / `⌘Q` | Close window / quit |
 
 Formatting and clipboard shortcuts require a focused editor; note switching, `⌘W`, and `⌘Q` do not.
-
-## AI Assistance
-
-This project was developed with AI assistance.
-
-Different coding assistants and model providers were used over time, including tools such as GitHub Copilot, Anthropic Claude models, Google Gemini models, OpenAI ChatGPT models and locally run models through Ollama. The exact mix changed during development.
 
 ## License
 
