@@ -27,7 +27,6 @@ brew install xcodegen swiftlint
 * `Tests/Shared/` — tests compiled into both test targets
 * `Tests/macOS/` — macOS-only tests
 * `project.yml` — XcodeGen project definition
-* `REQUIREMENTS.md` — behavior blueprint for the app as it exists today
 
 There is no `Tests/iOS/`; the `Heptad-iOSTests` target compiles `Tests/Shared` only.
 
