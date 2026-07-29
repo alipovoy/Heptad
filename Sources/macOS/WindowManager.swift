@@ -33,8 +33,8 @@ class WindowManager: NSObject, NSWindowDelegate {
         self.statusBarButton = sender
 
         // If the window is currently unpinned (regular mode), hide it and reset
-        if !isPinnedToMenubar, let w = window, w.isVisible {
-            w.performClose(nil)  // delegates to windowShouldClose
+        if !isPinnedToMenubar, let window, window.isVisible {
+            window.performClose(nil)  // delegates to windowShouldClose
             return
         }
 
@@ -67,24 +67,22 @@ class WindowManager: NSObject, NSWindowDelegate {
     }
 
     func windowDidMove(_ notification: Notification) {
-        guard let w = notification.object as? NSWindow else { return }
+        guard let movedWindow = notification.object as? NSWindow else { return }
 
         // Only track moves on the panel (for unpinning detection)
-        guard w === window, isPinnedToMenubar, !isPositioningPanel else { return }
+        guard movedWindow === window, isPinnedToMenubar, !isPositioningPanel else { return }
 
         // When threshold is exceeded, wait for mouse-up before transitioning.
-        if panelDragDistance(of: w) > unpinThreshold && pendingUnpinMonitor == nil {
-            pendingUnpinMonitor = EventMonitor(local: true, mask: .leftMouseUp) {
-                [weak self] event in
+        if panelDragDistance(of: movedWindow) > unpinThreshold && pendingUnpinMonitor == nil {
+            pendingUnpinMonitor = EventMonitor(local: true, mask: .leftMouseUp) { [weak self] event in
                 guard let self = self else { return event }
                 // Remove the one-shot monitor
                 self.pendingUnpinMonitor?.stop()
                 self.pendingUnpinMonitor = nil
 
                 // Verify we're still in the drag-away state
-                if self.isPinnedToMenubar, let w = self.window,
-                    self.panelDragDistance(of: w) > self.unpinThreshold
-                {
+                if self.isPinnedToMenubar, let window = self.window,
+                    self.panelDragDistance(of: window) > self.unpinThreshold {
                     self.transitionToRegularWindow()
                 }
                 return event
@@ -93,8 +91,8 @@ class WindowManager: NSObject, NSWindowDelegate {
         }
     }
 
-    private func panelDragDistance(of w: NSWindow) -> CGFloat {
-        hypot(w.frame.origin.x - anchorOrigin.x, w.frame.origin.y - anchorOrigin.y)
+    private func panelDragDistance(of window: NSWindow) -> CGFloat {
+        hypot(window.frame.origin.x - anchorOrigin.x, window.frame.origin.y - anchorOrigin.y)
     }
 
     // MARK: - Hosting View
@@ -112,7 +110,7 @@ class WindowManager: NSObject, NSWindowDelegate {
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
                 styleMask: [
-                    .titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel,
+                    .titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel
                 ],
                 backing: .buffered, defer: false)
 
@@ -135,36 +133,36 @@ class WindowManager: NSObject, NSWindowDelegate {
             self.window = panel
         }
 
-        guard let w = window else { return }
+        guard let window else { return }
 
         // Position below the status bar icon.
         if sender.window?.screen != nil {
             let buttonRect = sender.window?.convertToScreen(sender.frame) ?? .zero
-            let xPos = buttonRect.midX - (w.frame.width / 2)
-            let yPos = buttonRect.minY - w.frame.height - 5
+            let xPos = buttonRect.midX - (window.frame.width / 2)
+            let yPos = buttonRect.minY - window.frame.height - 5
 
             let origin = NSPoint(x: xPos, y: yPos)
             anchorOrigin = origin
             isPositioningPanel = true
-            w.setFrameOrigin(origin)
+            window.setFrameOrigin(origin)
             isPositioningPanel = false
         }
 
         isPinnedToMenubar = true
         installGlobalClickMonitor()
 
-        w.makeKeyAndOrderFront(nil)
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     // MARK: - Regular Window (Unpinned Mode)
 
     func transitionToRegularWindow() {
-        guard let w = window else { return }
+        guard let window else { return }
 
         // Simply mutate the window styles
-        w.styleMask.insert(.miniaturizable)
-        w.isFloatingPanel = false
+        window.styleMask.insert(.miniaturizable)
+        window.isFloatingPanel = false
 
         globalClickMonitor?.stop()
         isPinnedToMenubar = false
@@ -174,22 +172,19 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     private func installGlobalClickMonitor() {
         globalClickMonitor?.stop()
-        globalClickMonitor = EventMonitor(local: false, mask: [.leftMouseDown, .rightMouseDown]) {
-            [weak self] event in
+        globalClickMonitor = EventMonitor(local: false, mask: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self = self,
                 self.isPinnedToMenubar,
-                let w = self.window,
-                w.isVisible
+                let window = self.window,
+                window.isVisible
             else { return event }
 
             // Don't dismiss if the click is on the status bar button
-            if let buttonWindow = self.statusBarButton?.window,
-                buttonWindow == event.window
-            {
+            if let buttonWindow = self.statusBarButton?.window, buttonWindow == event.window {
                 return event
             }
 
-            w.orderOut(nil)
+            window.orderOut(nil)
             self.globalClickMonitor?.stop()
             return event
         }

@@ -63,47 +63,56 @@ class EditorShortcutManager {
                 return event
             }
 
-            switch chars {
-            case "b" where !hasShift:
-                self.toggleFontTrait(.boldFontMask, on: textView)
-                return nil  // consumed
-            case "i" where !hasShift:
-                self.toggleFontTrait(.italicFontMask, on: textView)
-                return nil
-            case "+", "=":
-                // ⌘+ on US keyboard is ⌘⇧=, so we accept shift here
-                self.changeFontSize(increase: true, on: textView)
-                return nil
-            case "-":
-                self.changeFontSize(increase: false, on: textView)
-                return nil
-            case "z" where !hasShift:
-                textView.undoManager?.undo()
-                return nil
-            case "z" where hasShift, "Z":
-                textView.undoManager?.redo()
-                return nil
-            case "c" where !hasShift:
-                textView.copy(nil)
-                return nil
-            case "v" where !hasShift:
-                textView.paste(nil)
-                return nil
-            case "v" where hasShift, "V":
-                textView.pasteAsPlainText(nil)
-                return nil
-            case "x" where !hasShift:
-                textView.cut(nil)
-                return nil
-            case "x" where hasShift, "X":
-                self.toggleStrikethrough(on: textView)
-                return nil
-            case "a" where !hasShift:
-                textView.selectAll(nil)
-                return nil
-            default:
-                return event  // pass through
-            }
+            return self.handleTextViewShortcut(
+                chars: chars, hasShift: hasShift, on: textView, event: event)
+        }
+    }
+
+    /// Applies the text-view-scoped ⌘ shortcuts. Returns nil when the shortcut was
+    /// handled and the event should be consumed, or the event itself to pass it through.
+    private func handleTextViewShortcut(
+        chars: String, hasShift: Bool, on textView: NSTextView, event: NSEvent
+    ) -> NSEvent? {
+        switch chars {
+        case "b" where !hasShift:
+            toggleFontTrait(.boldFontMask, on: textView)
+            return nil  // consumed
+        case "i" where !hasShift:
+            toggleFontTrait(.italicFontMask, on: textView)
+            return nil
+        case "+", "=":
+            // ⌘+ on US keyboard is ⌘⇧=, so we accept shift here
+            changeFontSize(increase: true, on: textView)
+            return nil
+        case "-":
+            changeFontSize(increase: false, on: textView)
+            return nil
+        case "z" where !hasShift:
+            textView.undoManager?.undo()
+            return nil
+        case "z" where hasShift, "Z":
+            textView.undoManager?.redo()
+            return nil
+        case "c" where !hasShift:
+            textView.copy(nil)
+            return nil
+        case "v" where !hasShift:
+            textView.paste(nil)
+            return nil
+        case "v" where hasShift, "V":
+            textView.pasteAsPlainText(nil)
+            return nil
+        case "x" where !hasShift:
+            textView.cut(nil)
+            return nil
+        case "x" where hasShift, "X":
+            toggleStrikethrough(on: textView)
+            return nil
+        case "a" where !hasShift:
+            textView.selectAll(nil)
+            return nil
+        default:
+            return event  // pass through
         }
     }
 
@@ -134,11 +143,11 @@ class EditorShortcutManager {
     // MARK: - Font Formatting
 
     func toggleFontTrait(_ trait: NSFontTraitMask, on textView: NSTextView) {
-        let fm = NSFontManager.shared
+        let fontManager = NSFontManager.shared
         applyFontChange(to: textView, actionName: "Formatting") { font in
-            fm.traits(of: font).contains(trait)
-                ? fm.convert(font, toNotHaveTrait: trait)
-                : fm.convert(font, toHaveTrait: trait)
+            fontManager.traits(of: font).contains(trait)
+                ? fontManager.convert(font, toNotHaveTrait: trait)
+                : fontManager.convert(font, toHaveTrait: trait)
         }
     }
 
@@ -173,7 +182,7 @@ class EditorShortcutManager {
             var attrs = textView.typingAttributes
             let currentFont =
                 attrs[.font] as? NSFont
-                ?? NSFont.systemFont(ofSize: AppConstants.UI.defaultFontSize)
+                ?? NSFont.systemFont(ofSize: AppConstants.Layout.defaultFontSize)
             attrs[.font] = transform(currentFont)
             textView.typingAttributes = attrs
         }

@@ -5,7 +5,7 @@ struct TextStats: Equatable {
     var words = 0
     var lines = 0
 
-    static let zero = TextStats()
+    static let zero = Self()
 
     init() {}
 

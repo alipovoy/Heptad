@@ -15,8 +15,8 @@ struct HeptadApp: App {
             let fetchDescriptor = FetchDescriptor<NoteItem>()
             if try context.fetchCount(fetchDescriptor) < AppConstants.noteCount {
                 let existingIds = Set(try context.fetch(fetchDescriptor).map(\.id))
-                for i in 0..<AppConstants.noteCount where !existingIds.contains(i) {
-                    context.insert(NoteItem(id: i))
+                for noteId in 0..<AppConstants.noteCount where !existingIds.contains(noteId) {
+                    context.insert(NoteItem(id: noteId))
                 }
                 try context.save()
             }
@@ -43,7 +43,7 @@ struct HeptadApp: App {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(HeptadApp.sharedModelContainer)
+        .modelContainer(Self.sharedModelContainer)
         #endif
     }
 }

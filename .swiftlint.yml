@@ -1,0 +1,42 @@
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .claude
+  - build
+  - DerivedData
+  - Heptad.xcodeproj
+
+opt_in_rules:
+  - array_init
+  - closure_spacing
+  - contains_over_first_not_nil
+  - empty_count
+  - explicit_init
+  - fatal_error_message
+  - first_where
+  - force_unwrapping
+  - identical_operands
+  - joined_default_parameter
+  - last_where
+  - modifier_order
+  - operator_usage_whitespace
+  - overridden_super_call
+  - prefer_self_in_static_references
+  - redundant_nil_coalescing
+  - sorted_imports
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+  - unowned_variable_capture
+  - yoda_condition
+
+# EditorShortcutManager's ⌘-shortcut interceptor is a flat dispatch `switch` over key
+# characters: a high case count with no nesting, which is exactly what this option is for.
+cyclomatic_complexity:
+  ignores_case_statements: true
+
+# AppConstants namespaces its values with nested enums (AppConstants.Layout.ColorCircle),
+# so two levels are expected. Anything deeper than that is still flagged.
+nesting:
+  type_level: 2

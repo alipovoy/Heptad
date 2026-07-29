@@ -7,7 +7,7 @@ struct ColorPickerRow: View {
     let notes: [NoteItem]
 
     var body: some View {
-        HStack(spacing: AppConstants.UI.defaultSpacing) {
+        HStack(spacing: AppConstants.Layout.defaultSpacing) {
             ForEach(notes.indices, id: \.self) { index in
                 ColorCircle(
                     index: index,
