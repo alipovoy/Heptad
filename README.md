@@ -10,16 +10,6 @@ On macOS the app lives in the status bar. Left-clicking the icon opens a floatin
 
 Personal project. No signed or notarized builds, no releases — build it from source.
 
-## Screenshots
-
-Not captured yet.
-
-<!--
-TODO: add two screenshots —
-  1. macOS: the attached menu bar popup anchored under the status item.
-  2. iOS: the seven-circle note switcher.
--->
-
 ## Requirements
 
 * macOS 14.0 or later, iOS 17.0 or later
