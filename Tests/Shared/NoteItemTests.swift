@@ -13,4 +13,14 @@ final class NoteItemTests: XCTestCase {
         XCTAssertEqual(note2.id, 1)
         XCTAssertEqual(note2.rtfData, customData)
     }
+
+    func testModifiedAt() {
+        let before = Date.now
+        let note = NoteItem(id: 0)
+        XCTAssertGreaterThanOrEqual(note.modifiedAt, before)
+        XCTAssertLessThanOrEqual(note.modifiedAt, .now)
+
+        let stamped = NoteItem(id: 1, modifiedAt: .distantPast)
+        XCTAssertEqual(stamped.modifiedAt, .distantPast)
+    }
 }

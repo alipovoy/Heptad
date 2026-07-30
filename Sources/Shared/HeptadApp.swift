@@ -16,7 +16,7 @@ struct HeptadApp: App {
             if try context.fetchCount(fetchDescriptor) < AppConstants.noteCount {
                 let existingIds = Set(try context.fetch(fetchDescriptor).map(\.id))
                 for noteId in 0..<AppConstants.noteCount where !existingIds.contains(noteId) {
-                    context.insert(NoteItem(id: noteId))
+                    context.insert(NoteItem(id: noteId, modifiedAt: .now))
                 }
                 try context.save()
             }

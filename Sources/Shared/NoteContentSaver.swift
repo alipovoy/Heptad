@@ -67,5 +67,8 @@ class NoteContentSaver {
             return
         }
         note.rtfData = data
+        // Only reached when the content actually changed, so the guard above keeps
+        // `modifiedAt` from drifting on no-op saves (flushes, reopening a note).
+        note.modifiedAt = .now
     }
 }
