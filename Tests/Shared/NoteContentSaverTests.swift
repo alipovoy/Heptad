@@ -72,6 +72,36 @@ final class NoteContentSaverTests: XCTestCase {
         XCTAssertTrue(note.rtfData.isEmpty)
     }
 
+    func testSaveUpdatesModifiedAt() async throws {
+        let note = NoteItem(id: 0, modifiedAt: .distantPast)
+        let center = NotificationCenter()
+        let saver = NoteContentSaver(note: note, debounce: .milliseconds(50), notificationCenter: center)
+
+        let before = Date.now
+        saver.save(attributedString: NSAttributedString(string: "Edited"))
+        try await waitUntil("the debounced save to write RTF") { !note.rtfData.isEmpty }
+
+        XCTAssertGreaterThanOrEqual(note.modifiedAt, before)
+        XCTAssertLessThanOrEqual(note.modifiedAt, .now)
+    }
+
+    func testUnchangedContentLeavesModifiedAtAlone() async throws {
+        let note = NoteItem(id: 0)
+        let center = NotificationCenter()
+        let saver = NoteContentSaver(note: note, debounce: .milliseconds(50), notificationCenter: center)
+
+        saver.save(attributedString: NSAttributedString(string: "Same"))
+        try await waitUntil("the debounced save to write RTF") { !note.rtfData.isEmpty }
+        let firstEdit = note.modifiedAt
+
+        // Re-saving identical content — what reopening or switching back to a note does —
+        // short-circuits on the unchanged-data guard, so the timestamp must not move.
+        saver.save(attributedString: NSAttributedString(string: "Same"))
+        try await Task.sleep(for: .milliseconds(150))
+
+        XCTAssertEqual(note.modifiedAt, firstEdit)
+    }
+
     func testFlushImmediatelySavesPending() throws {
         let note = NoteItem(id: 0)
         let center = NotificationCenter()

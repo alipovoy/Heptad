@@ -12,9 +12,18 @@ final class NoteItem {
     @Attribute(.unique) var id: Int
     var rtfData: Data
 
-    init(id: Int, rtfData: Data = Data()) {
+    /// When `rtfData` last changed.
+    ///
+    /// The default is load-bearing rather than decorative: SwiftData needs one to
+    /// lightweight-migrate stores written before this property existed. `.distantPast`
+    /// is the honest backfill for those rows — their real edit time was never recorded,
+    /// and it keeps them behind every genuinely timestamped note in a recency ordering.
+    var modifiedAt: Date = Date.distantPast
+
+    init(id: Int, rtfData: Data = Data(), modifiedAt: Date = .now) {
         self.id = id
         self.rtfData = rtfData
+        self.modifiedAt = modifiedAt
     }
 }
 
