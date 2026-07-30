@@ -12,8 +12,10 @@ import SwiftUI
 /// of truth for shortcuts until the app can show a Dock icon and a real, SwiftUI-owned menu.
 class EditorShortcutManager {
     private var localKeyMonitor: EventMonitor?
+    private let notificationCenter: NotificationCenter
 
-    init() {
+    init(notificationCenter: NotificationCenter = .default) {
+        self.notificationCenter = notificationCenter
         setupMonitor()
     }
 
@@ -42,19 +44,7 @@ class EditorShortcutManager {
             let chars = event.charactersIgnoringModifiers ?? ""
             let hasShift = event.modifierFlags.contains(.shift)
 
-            if chars == "q" && !hasShift {
-                NSApp.terminate(nil)
-                return nil
-            }
-
-            if chars == "w" && !hasShift {
-                NSApp.keyWindow?.performClose(nil)
-                return nil
-            }
-
-            // Consume the event only when the digit maps to a real note (⌘0–⌘7);
-            // out-of-range digits fall through so they aren't silently swallowed.
-            if !hasShift, let noteIndex = Int(chars), self.selectNote(noteIndex: noteIndex) {
+            if self.handleAppShortcut(chars: chars, hasShift: hasShift) {
                 return nil
             }
 
@@ -66,6 +56,36 @@ class EditorShortcutManager {
             return self.handleTextViewShortcut(
                 chars: chars, hasShift: hasShift, on: textView, event: event)
         }
+    }
+
+    /// Applies the ⌘ shortcuts that aren't scoped to the text view, so they work no matter what
+    /// holds first responder. Returns true when the shortcut was handled and the key event
+    /// should be consumed.
+    func handleAppShortcut(chars: String, hasShift: Bool) -> Bool {
+        if chars == "q" && !hasShift {
+            NSApp.terminate(nil)
+            return true
+        }
+
+        if chars == "w" && !hasShift {
+            NSApp.keyWindow?.performClose(nil)
+            return true
+        }
+
+        // ⌘P pins/unpins the window. WindowManager owns the state and observes this;
+        // the shortcut manager stays free of any window dependency.
+        if chars == "p" && !hasShift {
+            notificationCenter.post(name: .toggleWindowPin, object: nil)
+            return true
+        }
+
+        // Consume the event only when the digit maps to a real note (⌘0–⌘7);
+        // out-of-range digits fall through so they aren't silently swallowed.
+        if !hasShift, let noteIndex = Int(chars), selectNote(noteIndex: noteIndex) {
+            return true
+        }
+
+        return false
     }
 
     /// Applies the text-view-scoped ⌘ shortcuts. Returns nil when the shortcut was

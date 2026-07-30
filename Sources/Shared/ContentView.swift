@@ -9,6 +9,12 @@ struct ContentView: View {
     @AppStorage(AppConstants.selectedNoteIndexKey) private var selectedNoteIndex = 0
     @State private var textStats: TextStats = .zero
 
+    #if os(macOS)
+        /// Read-only mirror of the window state WindowManager persists, so the pin button always
+        /// shows the truth — including when the state changes by ⌘P or by dragging the panel away.
+        @AppStorage(AppConstants.windowPinnedKey) private var isWindowPinned = false
+    #endif
+
     static let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]
 
     #if os(macOS)
@@ -95,10 +101,19 @@ struct ContentView: View {
 
                 Spacer()
 
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 18))
-                    .opacity(0)
-                    .padding(.trailing, 14)
+                Button {
+                    // WindowManager owns and persists the state; this only asks it to flip.
+                    NotificationCenter.default.post(name: .toggleWindowPin, object: nil)
+                } label: {
+                    Image(systemName: isWindowPinned ? "pin.fill" : "pin.slash")
+                        .font(.system(size: 18))
+                        .foregroundStyle(isWindowPinned ? Color.accentColor : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .accessibilityLabel(isWindowPinned ? "Unpin window" : "Pin window")
+                .help(isWindowPinned ? "Unpin window (⌘P)" : "Keep window open (⌘P)")
+                .padding(.trailing, 14)
             }
             .padding(.top, 5)
             .padding(.bottom, 5)

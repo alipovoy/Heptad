@@ -119,6 +119,27 @@ final class EditorShortcutManagerTests: XCTestCase {
         XCTAssertFalse(manager.selectNote(noteIndex: 9))
     }
 
+    func testPinShortcutPostsTheTogglePinNotification() {
+        let center = NotificationCenter()
+        let shortcutManager = EditorShortcutManager(notificationCenter: center)
+        let posted = expectation(
+            forNotification: .toggleWindowPin, object: nil, notificationCenter: center)
+
+        XCTAssertTrue(
+            shortcutManager.handleAppShortcut(chars: "p", hasShift: false),
+            "⌘P is handled here, so the key event must be consumed")
+
+        wait(for: [posted], timeout: 1)
+    }
+
+    func testShiftPinShortcutIsNotHandled() {
+        let center = NotificationCenter()
+        let shortcutManager = EditorShortcutManager(notificationCenter: center)
+
+        // ⌘⇧P isn't ours; it has to fall through to the text-view shortcuts.
+        XCTAssertFalse(shortcutManager.handleAppShortcut(chars: "p", hasShift: true))
+    }
+
     func testUndoFormatting() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 200, height: 200), styleMask: .borderless,

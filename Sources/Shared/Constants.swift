@@ -16,6 +16,12 @@ enum AppConstants {
     static let globalHotKeyKeyCodeKey = "globalHotKeyKeyCode"
     static let globalHotKeyModifierFlagsKey = "globalHotKeyModifierFlags"
 
+    /// UserDefaults key backing the pinned window state (macOS only). True means the regular,
+    /// stays-put window the pin toggle and ⌘P produce; false means the menubar panel that
+    /// dismisses itself on a click outside. WindowManager is the only writer; the title-bar
+    /// toggle reads it through @AppStorage to render the current state.
+    static let windowPinnedKey = "windowPinned"
+
     enum Layout {
         /// Padding and spacing within the UI
         static let defaultSpacing: CGFloat = 12
@@ -33,8 +39,8 @@ enum AppConstants {
     }
 
     enum Window {
-        /// Threshold for detecting window unpin
-        static let unpinThreshold: CGFloat = 20
+        /// Distance the panel must be dragged away from its menubar anchor to become pinned
+        static let dragToPinThreshold: CGFloat = 20
     }
 
     enum Timing {
