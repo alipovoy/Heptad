@@ -10,12 +10,34 @@ enum AppConstants {
     /// two never drift apart.
     static let selectedNoteIndexKey = "selectedNoteIndex"
 
+    /// UserDefaults keys backing the global summon hotkey (macOS only). The keycode is a
+    /// virtual `kVK_*` value and the modifiers are a Cocoa `NSEvent.ModifierFlags` raw value;
+    /// the ⌃⌥Space defaults live in GlobalHotKeyManager, which can name those constants.
+    static let globalHotKeyKeyCodeKey = "globalHotKeyKeyCode"
+    static let globalHotKeyModifierFlagsKey = "globalHotKeyModifierFlags"
+
+    /// UserDefaults key backing the pinned window state (macOS only). True means the regular,
+    /// stays-put window the pin toggle and ⌘P produce; false means the menubar panel that
+    /// dismisses itself on a click outside. WindowManager is the only writer; the title-bar
+    /// toggle reads it through @AppStorage to render the current state.
+    static let windowPinnedKey = "windowPinned"
+
     enum Layout {
         /// Padding and spacing within the UI
         static let defaultSpacing: CGFloat = 12
 
         /// Standard default font size
         static let defaultFontSize: CGFloat = 16
+
+        /// Font size of the statistics line beneath the editor.
+        static let statisticsFontSize: CGFloat = 11
+
+        /// Icon sizes in the macOS window chrome: the title-bar close button, and the pin
+        /// toggle, which is sized against the statistics text it sits beside rather than
+        /// against the title bar. Deliberately fixed rather than Dynamic Type — the panel is
+        /// a fixed-size menubar popover and accessibility sizes would break its layout.
+        static let titleBarIconSize: CGFloat = 18
+        static let pinToggleIconSize: CGFloat = 13
 
         enum ColorCircle {
             /// Circle diameter = defaultFontSize * sizeMultiplier
@@ -27,8 +49,8 @@ enum AppConstants {
     }
 
     enum Window {
-        /// Threshold for detecting window unpin
-        static let unpinThreshold: CGFloat = 20
+        /// Distance the panel must be dragged away from its menubar anchor to become pinned
+        static let dragToPinThreshold: CGFloat = 20
     }
 
     enum Timing {

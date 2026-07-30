@@ -2,46 +2,148 @@ import Cocoa
 import SwiftData
 import SwiftUI
 
+extension Notification.Name {
+    /// Posted by the title-bar pin toggle and by ⌘P to ask the window manager to flip the
+    /// pinned state. Routing it through NotificationCenter keeps ContentView (which is shared
+    /// with iOS) and EditorShortcutManager free of any WindowManager reference, and leaves
+    /// WindowManager the only writer of the state.
+    static let toggleWindowPin = Notification.Name("Heptad.toggleWindowPin")
+}
+
+/// Owns the single app window and the two modes it can be in.
+///
+/// Terminology — the code used to overload the word "pinned", so it is spelled out here:
+///
+/// - **Panel mode**: the window is the menubar-attached floating `NSPanel`. It is re-anchored
+///   under the status item on every show, floats above other apps, and a click anywhere outside
+///   it dismisses it. This is what the old `isPinnedToMenubar == true` meant.
+/// - **Pinned**: the user-facing state behind the title-bar pin toggle and ⌘P. An ordinary
+///   movable window that stays put when the user clicks into another app — what
+///   `isPinnedToMenubar == false` used to produce.
+///
+/// The two are exact opposites (`isPanelMode == !isPinned`). Inside this file "pinned" only
+/// ever means the user-facing sense; the ambiguous `isPinnedToMenubar` is gone.
+///
+/// Pinning does not touch `NSApp.setActivationPolicy`: the app ships with `LSUIElement: true`
+/// and stays an accessory app in both modes, so a pinned window has no Dock icon or app menu.
 class WindowManager: NSObject, NSWindowDelegate {
     private(set) var window: NSPanel?
     private var hostingView: NSView?
 
-    /// True when using the panel (pinned to menubar). False when using the regular window.
-    private(set) var isPinnedToMenubar = true
-
     /// Guard flag to prevent windowDidMove from triggering during initial positioning.
     private var isPositioningPanel = false
 
-    /// The anchor point where the panel is placed beneath the status-bar icon.
+    /// The anchor point the drag-away gesture is measured from — where the panel was placed
+    /// beneath the status-bar icon, or where it sat when it was unpinned in place.
     private(set) var anchorOrigin: NSPoint = .zero
 
-    /// Threshold (in points) for detecting that the user dragged the panel away.
-    private let unpinThreshold: CGFloat = AppConstants.Window.unpinThreshold
+    /// Distance (in points) the panel must travel from its anchor to become a pinned window.
+    private let dragToPinThreshold: CGFloat = AppConstants.Window.dragToPinThreshold
 
-    /// Global event monitor for click-outside-to-dismiss when pinned.
+    /// Global event monitor for click-outside-to-dismiss, live only in panel mode.
     private var globalClickMonitor: EventMonitor?
 
-    /// One-shot monitor waiting for mouse-up to complete the unpin transition.
-    private var pendingUnpinMonitor: EventMonitor?
+    /// One-shot monitor waiting for mouse-up to complete the drag-away-to-pin transition.
+    private var pendingPinMonitor: EventMonitor?
+
+    /// Backing store for the persisted pinned state.
+    private let defaults: UserDefaults
 
     /// Weak reference to the status bar button to prevent dismissal when the user clicks the button itself
     weak var statusBarButton: NSStatusBarButton?
+
+    init(defaults: UserDefaults = .standard, notificationCenter: NotificationCenter = .default) {
+        self.defaults = defaults
+        super.init()
+
+        // No removeObserver needed: selector-based observers auto-unregister on deinit.
+        notificationCenter.addObserver(
+            self,
+            selector: #selector(handleTogglePinRequest),
+            name: .toggleWindowPin,
+            object: nil
+        )
+    }
 
     // MARK: - API
 
     func toggleWindow(sender: NSStatusBarButton) {
         self.statusBarButton = sender
 
-        // If the window is currently unpinned (regular mode), hide it and reset
-        if !isPinnedToMenubar, let window, window.isVisible {
-            window.performClose(nil)  // delegates to windowShouldClose
+        // A pinned window keeps its place, so the menubar icon (and the global hotkey, which
+        // lands here too) acts as show/hide for it: bring it forward when another app covers
+        // it, hide it only when it is already the window in front.
+        if isPinned, let window, window.isVisible {
+            if window.isKeyWindow {
+                window.performClose(nil)  // delegates to windowShouldClose
+            } else {
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
             return
         }
 
         if !(window?.isVisible ?? false) {
-            showPanel(sender: sender)
+            showWindow(sender: sender)
         } else {
             window?.orderOut(nil)
+            globalClickMonitor?.stop()
+        }
+    }
+
+    // MARK: - Pinning
+
+    /// The user-facing pinned state, persisted so it survives closing the window and relaunching.
+    var isPinned: Bool { defaults.bool(forKey: AppConstants.windowPinnedKey) }
+
+    /// True while the window behaves as the menubar panel — the inverse of `isPinned`.
+    var isPanelMode: Bool { !isPinned }
+
+    /// Persists the pinned state and applies it to the live window, if there is one.
+    func setPinned(_ pinned: Bool) {
+        defaults.set(pinned, forKey: AppConstants.windowPinnedKey)
+        guard let window else { return }
+        applyPinnedState(to: window)
+    }
+
+    func togglePin() {
+        setPinned(!isPinned)
+    }
+
+    @objc private func handleTogglePinRequest() {
+        togglePin()
+    }
+
+    private func applyPinnedState(to window: NSPanel) {
+        if isPinned {
+            applyPinnedStyling(to: window)
+        } else {
+            applyPanelStyling(to: window)
+        }
+    }
+
+    /// Pinned styling: an ordinary movable window that other apps may cover and that never
+    /// dismisses itself. `.nonactivatingPanel` deliberately stays in the mask — it only governs
+    /// activation on click, and the panel has always kept it in this mode.
+    private func applyPinnedStyling(to window: NSPanel) {
+        window.styleMask.insert(.miniaturizable)
+        window.isFloatingPanel = false
+        globalClickMonitor?.stop()
+    }
+
+    /// Panel styling: floats above other apps, no miniaturize button, click-outside dismisses.
+    private func applyPanelStyling(to window: NSPanel) {
+        window.styleMask.insert(.nonactivatingPanel)
+        window.styleMask.remove(.miniaturizable)
+        window.isFloatingPanel = true
+
+        // Unpinning in place can leave the window far from the status item, so the drag-away
+        // gesture is measured from where the window actually is rather than a stale anchor.
+        anchorOrigin = window.frame.origin
+
+        if window.isVisible {
+            installGlobalClickMonitor()
+        } else {
             globalClickMonitor?.stop()
         }
     }
@@ -51,43 +153,34 @@ class WindowManager: NSObject, NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.orderOut(nil)
 
-        // Reset to panel mode behind the scenes so the next menubar click is ready
-        if !isPinnedToMenubar {
-
-            // Re-apply panel styling
-            window?.styleMask.insert(.nonactivatingPanel)
-            window?.styleMask.remove(.miniaturizable)
-            window?.isFloatingPanel = true
-
-            isPinnedToMenubar = true
-        } else {
-            globalClickMonitor?.stop()
-        }
+        // The pinned state is deliberately left untouched: it is persisted, and the next show
+        // restores it. Only the click monitor has to go — there is nothing left to dismiss.
+        globalClickMonitor?.stop()
         return false
     }
 
     func windowDidMove(_ notification: Notification) {
         guard let movedWindow = notification.object as? NSWindow else { return }
 
-        // Only track moves on the panel (for unpinning detection)
-        guard movedWindow === window, isPinnedToMenubar, !isPositioningPanel else { return }
+        // Only track moves on the panel (dragging it away is the gesture that pins it)
+        guard movedWindow === window, isPanelMode, !isPositioningPanel else { return }
 
         // When threshold is exceeded, wait for mouse-up before transitioning.
-        if panelDragDistance(of: movedWindow) > unpinThreshold && pendingUnpinMonitor == nil {
-            pendingUnpinMonitor = EventMonitor(local: true, mask: .leftMouseUp) { [weak self] event in
+        if panelDragDistance(of: movedWindow) > dragToPinThreshold && pendingPinMonitor == nil {
+            pendingPinMonitor = EventMonitor(local: true, mask: .leftMouseUp) { [weak self] event in
                 guard let self = self else { return event }
                 // Remove the one-shot monitor
-                self.pendingUnpinMonitor?.stop()
-                self.pendingUnpinMonitor = nil
+                self.pendingPinMonitor?.stop()
+                self.pendingPinMonitor = nil
 
                 // Verify we're still in the drag-away state
-                if self.isPinnedToMenubar, let window = self.window,
-                    self.panelDragDistance(of: window) > self.unpinThreshold {
-                    self.transitionToRegularWindow()
+                if self.isPanelMode, let window = self.window,
+                    self.panelDragDistance(of: window) > self.dragToPinThreshold {
+                    self.setPinned(true)
                 }
                 return event
             }
-            pendingUnpinMonitor?.start()
+            pendingPinMonitor?.start()
         }
     }
 
@@ -103,9 +196,9 @@ class WindowManager: NSObject, NSWindowDelegate {
         return NSHostingView(rootView: view)
     }()
 
-    // MARK: - Panel (Pinned Mode)
+    // MARK: - Showing the Window
 
-    private func showPanel(sender: NSStatusBarButton) {
+    private func showWindow(sender: NSStatusBarButton) {
         if window == nil {
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
@@ -114,7 +207,7 @@ class WindowManager: NSObject, NSWindowDelegate {
                 ],
                 backing: .buffered, defer: false)
 
-            // AppKit persists and restores the frame; pinned mode re-anchors the origin on every show.
+            // AppKit persists and restores the frame; panel mode re-anchors the origin on every show.
             panel.setFrameAutosaveName("HeptadPanel")
 
             panel.titlebarAppearsTransparent = true
@@ -135,46 +228,39 @@ class WindowManager: NSObject, NSWindowDelegate {
 
         guard let window else { return }
 
-        // Position below the status bar icon.
-        if sender.window?.screen != nil {
-            let buttonRect = sender.window?.convertToScreen(sender.frame) ?? .zero
-            let xPos = buttonRect.midX - (window.frame.width / 2)
-            let yPos = buttonRect.minY - window.frame.height - 5
-
-            let origin = NSPoint(x: xPos, y: yPos)
-            anchorOrigin = origin
-            isPositioningPanel = true
-            window.setFrameOrigin(origin)
-            isPositioningPanel = false
+        // Only the panel is anchored under the status item. A pinned window is restored to
+        // wherever the user parked it (AppKit reloads that frame from the autosave), because
+        // yanking a deliberately placed window back under the menubar is the opposite of pinning.
+        if isPanelMode {
+            anchorBelowStatusItem(sender: sender, window: window)
         }
 
-        isPinnedToMenubar = true
-        installGlobalClickMonitor()
-
         window.makeKeyAndOrderFront(nil)
+        applyPinnedState(to: window)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    // MARK: - Regular Window (Unpinned Mode)
+    private func anchorBelowStatusItem(sender: NSStatusBarButton, window: NSPanel) {
+        guard sender.window?.screen != nil else { return }
 
-    func transitionToRegularWindow() {
-        guard let window else { return }
+        let buttonRect = sender.window?.convertToScreen(sender.frame) ?? .zero
+        let xPos = buttonRect.midX - (window.frame.width / 2)
+        let yPos = buttonRect.minY - window.frame.height - 5
 
-        // Simply mutate the window styles
-        window.styleMask.insert(.miniaturizable)
-        window.isFloatingPanel = false
-
-        globalClickMonitor?.stop()
-        isPinnedToMenubar = false
+        let origin = NSPoint(x: xPos, y: yPos)
+        anchorOrigin = origin
+        isPositioningPanel = true
+        window.setFrameOrigin(origin)
+        isPositioningPanel = false
     }
 
-    // MARK: - Global Click Monitor (click-outside to dismiss when pinned)
+    // MARK: - Global Click Monitor (click-outside to dismiss in panel mode)
 
     private func installGlobalClickMonitor() {
         globalClickMonitor?.stop()
         globalClickMonitor = EventMonitor(local: false, mask: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self = self,
-                self.isPinnedToMenubar,
+                self.isPanelMode,
                 let window = self.window,
                 window.isVisible
             else { return event }
