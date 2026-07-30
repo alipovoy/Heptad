@@ -4,6 +4,7 @@
 # `xcodegen generate` and are never committed; a fresh clone has neither.
 *.xcodeproj
 **/Info.plist
+*.xcworkspace
 
 # Build products
 build/
@@ -12,12 +13,29 @@ DerivedData/
 *.ipa
 *.dSYM/
 *.dSYM.zip
+*.xcresult
+*.profraw
 
 # Xcode user state
 xcuserdata/
 *.xcuserstate
 *.xcscmblueprint
 *.xccheckout
+
+# Signing material — nothing here is ever committed, and a leak is
+# unrecoverable, so these are ignored even though the project is unsigned.
+*.p12
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+.netrc
+
+# Editor state
+.vscode/
+.idea/
+*.swp
+compile_commands.json
 
 # Swift Package Manager
 .build/
