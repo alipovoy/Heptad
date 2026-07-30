@@ -1,0 +1,33 @@
+name: Select Xcode
+description: >-
+  Selects the Xcode version Heptad is built and tested with, so the toolchain
+  version is pinned in exactly one place.
+
+inputs:
+  version:
+    description: >-
+      Xcode version to select. Must match an /Applications/Xcode_<version>.app
+      on the runner image.
+    required: false
+    default: "26.5"
+
+runs:
+  using: composite
+  steps:
+    - name: Select Xcode ${{ inputs.version }}
+      shell: bash
+      env:
+        XCODE_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        developer_dir="/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+        if [ ! -d "$developer_dir" ]; then
+          echo "::error::Xcode ${XCODE_VERSION} is not installed on this runner (looked for $developer_dir)."
+          echo "Xcode versions present on the image:"
+          ls -d /Applications/Xcode*.app
+          exit 1
+        fi
+        sudo xcode-select --switch "$developer_dir"
+        echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+        xcodebuild -version
+        swift --version

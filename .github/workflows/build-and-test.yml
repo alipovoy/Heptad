@@ -1,0 +1,129 @@
+name: Build and Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Nothing is published, so the job only needs to read the source it checks out.
+permissions:
+  contents: read
+
+# One run per ref: a new push supersedes and cancels the run already in flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test (macOS + iOS)
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      # Shallow checkout on purpose: this is a source-only project with no
+      # releases, so no version is derived from git history.
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Select Xcode
+        uses: ./.github/actions/select-xcode
+
+      - name: Install build tools
+        run: brew install xcodegen swiftlint
+
+      - name: Lint
+        run: swiftlint lint --strict --reporter github-actions-logging
+
+      # Mandatory: Heptad.xcodeproj is generated from project.yml and is not
+      # committed, so a fresh checkout has no project to build.
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      # CODE_SIGNING_ALLOWED=NO on every leg: there is no paid Apple Developer
+      # account, so nothing can be signed. macOS logs "Disabling hardened
+      # runtime with ad-hoc codesigning" as a result; that is expected.
+      - name: Build macOS
+        run: |
+          xcodebuild build \
+            -project Heptad.xcodeproj \
+            -scheme Heptad-macOS \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Test macOS
+        run: |
+          xcodebuild test \
+            -project Heptad.xcodeproj \
+            -scheme Heptad-macOS \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO
+
+      # Simulator only, for the same signing reason: a device destination needs
+      # provisioning that does not exist. A generic destination keeps the build
+      # leg independent of which simulators the runner image happens to ship.
+      - name: Build iOS
+        run: |
+          xcodebuild build \
+            -project Heptad.xcodeproj \
+            -scheme Heptad-iOS \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
+      # Testing needs a concrete device, and simulator names are never
+      # hardcoded: the available set follows the runner's Xcode. Pick the
+      # newest available iOS runtime, preferring an iPhone.
+      - name: Resolve an iOS simulator
+        id: simulator
+        run: |
+          set -euo pipefail
+          python3 <<'PY' | tee -a "$GITHUB_OUTPUT"
+          import json
+          import re
+          import subprocess
+          import sys
+
+          listing = subprocess.run(
+              ["xcrun", "simctl", "list", "devices", "available", "--json"],
+              capture_output=True,
+              check=True,
+              text=True,
+          ).stdout
+
+
+          def ios_version(runtime):
+              match = re.search(r"\.iOS-([0-9]+(?:-[0-9]+)*)$", runtime)
+              if match is None:
+                  return None
+              return tuple(int(part) for part in match.group(1).split("-"))
+
+
+          candidates = []
+          for runtime, devices in json.loads(listing)["devices"].items():
+              version = ios_version(runtime)
+              if version is None:
+                  continue
+              for device in devices:
+                  if device.get("isAvailable", True):
+                      candidates.append(
+                          (version, device["name"].startswith("iPhone"), device["name"], device["udid"])
+                      )
+
+          if not candidates:
+              sys.exit("::error::No available iOS simulator on this runner.")
+
+          version, _, name, udid = max(candidates)
+          print(f"udid={udid}")
+          print(f"description={name} (iOS {'.'.join(str(part) for part in version)})")
+          PY
+
+      - name: Test iOS on ${{ steps.simulator.outputs.description }}
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          xcodebuild test \
+            -project Heptad.xcodeproj \
+            -scheme Heptad-iOS \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
+            CODE_SIGNING_ALLOWED=NO
