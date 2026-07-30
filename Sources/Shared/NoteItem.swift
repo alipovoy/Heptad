@@ -22,14 +22,19 @@ final class NoteItem {
 extension NoteItem {
     var isEmpty: Bool { rtfData.isEmpty }
 
-    /// The note's content decoded from RTF, or nil when empty or undecodable.
+    /// The note's content decoded from RTF, ready to display, or nil when empty or undecodable.
+    ///
+    /// Colorless runs get the adaptive text color here, at the one point where stored data
+    /// becomes displayable content, so every editor shows them in the system appearance
+    /// instead of the black that text layout would otherwise default to.
     var attributedContent: NSAttributedString? {
         guard !rtfData.isEmpty else { return nil }
-        return try? NSAttributedString(
+        let decoded = try? NSAttributedString(
             data: rtfData,
             options: [.documentType: NSAttributedString.DocumentType.rtf],
             documentAttributes: nil
         )
+        return decoded?.fillingInAdaptiveTextColor()
     }
 
     /// Encodes the attributed string as RTF. Whitespace-only content encodes as
