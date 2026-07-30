@@ -10,6 +10,12 @@ enum AppConstants {
     /// two never drift apart.
     static let selectedNoteIndexKey = "selectedNoteIndex"
 
+    /// UserDefaults keys backing the global summon hotkey (macOS only). The keycode is a
+    /// virtual `kVK_*` value and the modifiers are a Cocoa `NSEvent.ModifierFlags` raw value;
+    /// the ⌃⌥Space defaults live in GlobalHotKeyManager, which can name those constants.
+    static let globalHotKeyKeyCodeKey = "globalHotKeyKeyCode"
+    static let globalHotKeyModifierFlagsKey = "globalHotKeyModifierFlags"
+
     enum Layout {
         /// Padding and spacing within the UI
         static let defaultSpacing: CGFloat = 12

@@ -6,6 +6,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusBarItem: NSStatusItem!
     let windowManager = WindowManager()
     let shortcutManager = EditorShortcutManager()
+    let hotKeyManager = GlobalHotKeyManager()
 
     // MARK: - App Lifecycle
 
@@ -24,8 +25,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // intercepted by menu performKeyEquivalent.
         shortcutManager.start()
 
+        // ⌃⌥Space toggles the panel exactly like clicking the status item does — same entry
+        // point, so the panel anchors to the icon and click-outside dismissal behaves the same.
+        hotKeyManager.onHotKey = { [weak self] in
+            guard let self, let button = self.statusBarItem.button else { return }
+            self.windowManager.toggleWindow(sender: button)
+        }
+        hotKeyManager.register()
+
         // Open the SwiftData store during launch so the first panel open doesn't pay for it.
         _ = HeptadApp.sharedModelContainer
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        hotKeyManager.unregister()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
