@@ -7,10 +7,10 @@ struct ColorCircle: View {
     @Binding var selectedNoteIndex: Int
 
     private var size: CGFloat {
-        AppConstants.UI.defaultFontSize * AppConstants.UI.ColorCircle.sizeMultiplier
+        AppConstants.Layout.defaultFontSize * AppConstants.Layout.ColorCircle.sizeMultiplier
     }
     private var lineWidth: CGFloat {
-        AppConstants.UI.ColorCircle.strokeLineWidth
+        AppConstants.Layout.ColorCircle.strokeLineWidth
     }
 
     var body: some View {
@@ -47,7 +47,7 @@ struct ColorCircle: View {
                 Text("\(index + 1)")
                     .font(
                         .system(
-                            size: size * AppConstants.UI.ColorCircle.selectedNumberFontScale,
+                            size: size * AppConstants.Layout.ColorCircle.selectedNumberFontScale,
                             weight: .bold)
                     )
                     .foregroundStyle(.white)

@@ -10,7 +10,7 @@ enum AppConstants {
     /// two never drift apart.
     static let selectedNoteIndexKey = "selectedNoteIndex"
 
-    enum UI {
+    enum Layout {
         /// Padding and spacing within the UI
         static let defaultSpacing: CGFloat = 12
 

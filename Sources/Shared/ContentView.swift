@@ -75,9 +75,9 @@ struct ContentView: View {
     #if os(macOS)
         private var macOSTitleBar: some View {
             HStack {
-                Button(action: {
+                Button {
                     NSApp.keyWindow?.performClose(nil)
-                }) {
+                } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18))
                         .foregroundStyle(.secondary)

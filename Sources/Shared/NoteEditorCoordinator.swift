@@ -55,7 +55,7 @@ class NoteEditorCoordinator: NSObject {
                 editorView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
                 editorView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
                 editorView.topAnchor.constraint(equalTo: container.topAnchor),
-                editorView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+                editorView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
             ])
 
             // Focus the text view when it appears (e.g. after tapping a note circle) so user can type immediately.

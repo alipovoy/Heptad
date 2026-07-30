@@ -38,7 +38,7 @@ struct MacRichTextEditor: NSViewRepresentable {
                 textView.isRichText = true
                 textView.importsGraphics = false
                 textView.allowsImageEditing = false
-                textView.font = .systemFont(ofSize: AppConstants.UI.defaultFontSize)
+                textView.font = .systemFont(ofSize: AppConstants.Layout.defaultFontSize)
 
                 textView.usesInspectorBar = false
                 textView.allowsDocumentBackgroundColorChange = false
@@ -59,12 +59,12 @@ struct MacRichTextEditor: NSViewRepresentable {
         }
 
         override func resignFocus(from editorView: NSView) {
-            if let textView = textView(in: editorView),
+            guard let textView = textView(in: editorView),
                 let window = editorView.window,
                 window.firstResponder == textView
-            {
-                window.makeFirstResponder(container)
-            }
+            else { return }
+
+            window.makeFirstResponder(container)
         }
 
         override func focus(_ editorView: NSView) {

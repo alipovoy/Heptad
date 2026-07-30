@@ -90,12 +90,12 @@ final class EditorShortcutManagerTests: XCTestCase {
         textView.setSelectedRange(NSRange(location: 0, length: 0))
 
         manager.toggleStrikethrough(on: textView)
-        let on = (textView.typingAttributes[.strikethroughStyle] as? Int) ?? 0
-        XCTAssertEqual(on, NSUnderlineStyle.single.rawValue)
+        let styleOn = (textView.typingAttributes[.strikethroughStyle] as? Int) ?? 0
+        XCTAssertEqual(styleOn, NSUnderlineStyle.single.rawValue)
 
         manager.toggleStrikethrough(on: textView)
-        let off = (textView.typingAttributes[.strikethroughStyle] as? Int) ?? 0
-        XCTAssertEqual(off, 0)
+        let styleOff = (textView.typingAttributes[.strikethroughStyle] as? Int) ?? 0
+        XCTAssertEqual(styleOff, 0)
     }
 
     func testSelectNoteWritesSelectedIndexForValidNote() {
