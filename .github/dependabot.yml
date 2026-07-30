@@ -1,0 +1,29 @@
+version: 2
+
+# GitHub Actions is the only ecosystem here with anything to track. Heptad has
+# no package manifest of any kind — no Swift Package Manager, no CocoaPods, no
+# Carthage — and adding one is explicitly not planned, so pinned action versions
+# are the only dependencies in the repository that can go stale.
+updates:
+  - package-ecosystem: github-actions
+    # "/" is the only accepted value for this ecosystem. It covers
+    # .github/workflows/* and an action.yml in the repository root — it does
+    # *not* descend into composite actions under .github/actions/. That costs
+    # nothing today: .github/actions/select-xcode/action.yml is pure shell and
+    # has no `uses:` for Dependabot to bump. If it ever gains one, add a second
+    # entry with directory: "/.github/actions/select-xcode".
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    # One pull request for all of them. Action bumps are near-always trivial and
+    # a stream of single-action pull requests is noise on a repository this size.
+    groups:
+      actions:
+        patterns: ["*"]
+    # Dependabot derives its pull request title from the commit subject, so the
+    # prefix is what keeps its own pull requests passing pr-conventions.yml.
+    commit-message:
+      prefix: chore

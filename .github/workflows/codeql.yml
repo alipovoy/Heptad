@@ -1,0 +1,100 @@
+name: CodeQL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Weekly, independent of pushes: CodeQL's Swift query pack keeps growing, so a
+  # quiet week should still have the code re-analysed against the current
+  # queries. Off-the-hour minute to avoid the top-of-hour scheduling crowd.
+  schedule:
+    - cron: "27 6 * * 1"
+  workflow_dispatch:
+
+# Restrictive default; the analyze job widens it to exactly what it needs.
+permissions:
+  contents: read
+
+# One run per ref: a new push supersedes and cancels the run already in flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze Swift
+    # macOS is not a choice here: Swift analysis needs a real Xcode toolchain.
+    runs-on: macos-26
+    # Roughly double the build-and-test budget: the same two builds run again
+    # under the CodeQL tracer, plus database creation and query evaluation.
+    timeout-minutes: 60
+
+    permissions:
+      contents: read
+      # Uploading results to the Security tab is a write.
+      security-events: write
+      # The upload step reads this workflow run's own metadata.
+      actions: read
+
+    steps:
+      # Shallow checkout on purpose: CodeQL analyses the tree as checked out and
+      # derives nothing from git history.
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      # Before init, so the tracer inherits the pinned toolchain: DEVELOPER_DIR
+      # is exported into the environment here and CodeQL reads it from there.
+      - name: Select Xcode
+        uses: ./.github/actions/select-xcode
+
+      - name: Install build tools
+        run: brew install xcodegen
+
+      # Also before init. Mandatory — Heptad.xcodeproj is generated from
+      # project.yml and is not committed — but it compiles nothing, so there is
+      # no reason for it to run under the tracer.
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      # build-mode: manual, not autobuild. Autobuild looks for an .xcodeproj or
+      # .xcworkspace and builds the largest target it finds; with a generated
+      # project it would have to be sequenced after xcodegen anyway, it would
+      # pick one of the two schemes rather than both, and it would not pass
+      # CODE_SIGNING_ALLOWED=NO. Manual gives the exact two build legs from
+      # build-and-test.yml, which are known to work.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: swift
+          build-mode: manual
+
+      # Both schemes, because neither one covers all the sources: macOS builds
+      # Sources/Shared + Sources/macOS and iOS builds Sources/Shared +
+      # Sources/iOS. Anything not compiled between init and analyze is not
+      # analysed. Test targets are deliberately left out — build-and-test.yml
+      # compiles and runs those, and test code is not what this scan is for.
+      #
+      # CODE_SIGNING_ALLOWED=NO for the same reason as everywhere else: there is
+      # no paid Apple Developer account, so nothing can be signed.
+      - name: Build macOS
+        run: |
+          xcodebuild build \
+            -project Heptad.xcodeproj \
+            -scheme Heptad-macOS \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO
+
+      # Simulator only, and a generic destination: no concrete device is needed
+      # because nothing is run, only compiled.
+      - name: Build iOS
+        run: |
+          xcodebuild build \
+            -project Heptad.xcodeproj \
+            -scheme Heptad-iOS \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:swift"

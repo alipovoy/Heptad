@@ -74,9 +74,9 @@ Please make sure both schemes' tests pass locally before opening a pull request.
 
 ## Linting
 
-The project is linted with [SwiftLint](https://github.com/realm/SwiftLint). No shared
-configuration is committed yet, so it currently runs with its default rules from the
-repository root:
+The project is linted with [SwiftLint](https://github.com/realm/SwiftLint). The shared
+configuration lives in `.swiftlint.yml` at the repository root, so running it needs no
+arguments:
 
 ```bash
 swiftlint lint
@@ -84,22 +84,27 @@ swiftlint lint
 
 Many violations can be fixed automatically with `swiftlint --fix`.
 
-The existing sources do not yet lint clean, so treat the current output as a baseline:
-avoid adding new violations rather than expecting a clean run.
+The sources lint clean, and CI runs `swiftlint lint --strict`, which fails on warnings as
+well as errors. Fix violations rather than adding `// swiftlint:disable` comments; if a
+rule genuinely does not fit, drop it from `.swiftlint.yml` with a comment explaining why.
 
 ## Commit messages
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
 a `type(optional scope): summary` subject, where type is one of `feat`, `fix`, `docs`,
-`refactor`, `test`, `chore`, `build`, or `ci`. For example:
+`refactor`, `test`, `chore`, `build`, `ci`, `perf`, `style`, or `revert`. Append `!`
+after the type or scope for a breaking change. For example:
 
 ```
 feat(macos): detach the popover into a floating window
 fix: avoid crash when the current event is nil
+chore!: raise the minimum macOS version to 15
 ```
 
-Keep the subject in the imperative mood and under about 72 characters. This convention
-will be enforced by CI once the commit-message check lands, so please follow it now.
+Keep the subject in the imperative mood and under about 72 characters. CI enforces this
+on both the pull request title and every commit in the pull request; the 72-character
+guideline is a warning, not a failure. Commits already on `main` predate the convention
+and are left as they are.
 
 ## Coding guidelines
 
