@@ -1,7 +1,11 @@
 name: CodeQL
 
 on:
-  pull_request:
+  # Deliberately not on pull_request: the Swift analysis is ~25 minutes, and
+  # scanning the PR and then the merge commit doubles that per change for a
+  # single-maintainer repo. Findings land in the Security tab post-merge
+  # instead of annotating the diff, and get fixed forward. build-and-test.yml
+  # is the check that gates a merge.
   push:
     branches: [main]
   # Weekly, independent of pushes: CodeQL's Swift query pack keeps growing, so a
