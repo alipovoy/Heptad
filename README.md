@@ -4,7 +4,7 @@ Heptad is a minimal rich-text note-taking app with exactly seven colour-coded no
 
 There are always seven notes, never more or fewer. They are created on first launch and never added, deleted, or renamed — a note is identified by its colour and its position. Content is saved continuously, with no save button.
 
-On macOS the app lives in the status bar. Left-clicking the icon opens a floating panel anchored beneath it; the panel dismisses when you click elsewhere. Dragging it away converts it into a regular movable window that stays open. On iOS the same UI runs full-screen with a row of seven coloured circles for switching notes.
+On macOS the app lives in the status bar. Left-clicking the icon — or pressing `⌃⌥Space` from any app — opens a floating panel anchored beneath it; the panel dismisses when you click elsewhere. Pinning it converts it into a regular movable window that stays open when you click into another app, and reopens where you left it. Pin from the toggle in the statistics bar, with `⌘P`, or by dragging the panel away. On iOS the same UI runs full-screen with a row of seven coloured circles for switching notes.
 
 ## Status
 
@@ -39,6 +39,8 @@ Tests and contribution details are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 | Shortcut | Action |
 | --- | --- |
+| `⌃⌥Space` | Show / hide the window, from any app |
+| `⌘P` | Pin / unpin the window |
 | `⌘1`–`⌘7` | Select note 1–7 |
 | `⌘0` | Select the first empty note |
 | `⌘B` / `⌘I` / `⌘⇧X` | Bold / italic / strikethrough |
@@ -49,7 +51,7 @@ Tests and contribution details are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 | `⌘A` | Select all |
 | `⌘W` / `⌘Q` | Close window / quit |
 
-Formatting and clipboard shortcuts require a focused editor; note switching, `⌘W`, and `⌘Q` do not.
+Formatting and clipboard shortcuts require a focused editor; note switching, `⌘P`, `⌘W`, and `⌘Q` do not. `⌃⌥Space` is registered system-wide and works while another app is frontmost — it needs no Accessibility permission.
 
 ## License
 
