@@ -16,12 +16,12 @@ final class NoteContentSaverTests: XCTestCase {
         // Act
         saver.save(attributedString: attrString)
 
-        // Wait for debounce + some buffer
-        try await Task.sleep(for: .milliseconds(200))
+        // Poll to a deadline rather than sleeping a fixed interval past the debounce — see
+        // `waitUntil`. Reaching the next line already proves the save landed.
+        try await waitUntil("the debounced save to write RTF") { !note.rtfData.isEmpty }
 
         // Assert
         let data = note.rtfData
-        XCTAssertFalse(data.isEmpty)
         let restored = try NSAttributedString(
             data: data,
             options: [.documentType: NSAttributedString.DocumentType.rtf],
@@ -43,10 +43,11 @@ final class NoteContentSaverTests: XCTestCase {
         saver.save(attributedString: str2)
         saver.save(attributedString: str3)
 
-        try await Task.sleep(for: .milliseconds(250))
+        // Only the last `save` survives — the earlier two are cancelled before they write —
+        // so a single non-empty `rtfData` is the whole observable outcome.
+        try await waitUntil("the debounced save to write RTF") { !note.rtfData.isEmpty }
 
         let data = note.rtfData
-        XCTAssertFalse(data.isEmpty)
         let restored = try NSAttributedString(
             data: data,
             options: [.documentType: NSAttributedString.DocumentType.rtf],
