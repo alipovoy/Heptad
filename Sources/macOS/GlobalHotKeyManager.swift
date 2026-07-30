@@ -153,7 +153,11 @@ private func hotKeyEventHandler(
     else { return OSStatus(eventNotHandledErr) }
 
     // Carbon dispatches hotkey events through the main run loop, so this is the main thread.
+    // assumeIsolated encodes that guarantee for the compiler instead of leaving it a comment:
+    // the handler ends up touching AppKit, and a debug build now traps if it ever runs elsewhere.
     let manager = Unmanaged<GlobalHotKeyManager>.fromOpaque(userData).takeUnretainedValue()
-    manager.onHotKey?()
+    MainActor.assumeIsolated {
+        manager.onHotKey?()
+    }
     return noErr
 }

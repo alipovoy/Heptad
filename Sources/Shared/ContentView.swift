@@ -79,7 +79,7 @@ struct ContentView: View {
                     NSApp.keyWindow?.performClose(nil)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
+                        .font(.system(size: AppConstants.Layout.titleBarIconSize))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -99,8 +99,8 @@ struct ContentView: View {
                 // deliberately does not live here: pin.slash and pin.fill are different widths,
                 // so toggling it nudged the circles sideways.
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 18))
-                    .opacity(0)
+                    .font(.system(size: AppConstants.Layout.titleBarIconSize))
+                    .hidden()  // Reserves the space without leaving it in the accessibility tree
                     .padding(.trailing, 14)
             }
             .padding(.top, 5)
@@ -122,7 +122,10 @@ struct TextStatisticsBar: View {
     var body: some View {
         HStack(spacing: 8) {
             Text("\(stats.lines) Lines ⋅ \(stats.words) Words ⋅ \(stats.characters) Characters")
-                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .font(
+                    .system(
+                        size: AppConstants.Layout.statisticsFontSize, weight: .medium,
+                        design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             #if os(macOS)
@@ -144,7 +147,7 @@ struct TextStatisticsBar: View {
                 NotificationCenter.default.post(name: .toggleWindowPin, object: nil)
             } label: {
                 Image(systemName: isWindowPinned ? "pin.fill" : "pin.slash")
-                    .font(.system(size: 13))
+                    .font(.system(size: AppConstants.Layout.pinToggleIconSize))
             }
             .buttonStyle(.plain)
             .focusable(false)

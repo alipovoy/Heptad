@@ -29,6 +29,16 @@ enum AppConstants {
         /// Standard default font size
         static let defaultFontSize: CGFloat = 16
 
+        /// Font size of the statistics line beneath the editor.
+        static let statisticsFontSize: CGFloat = 11
+
+        /// Icon sizes in the macOS window chrome: the title-bar close button, and the pin
+        /// toggle, which is sized against the statistics text it sits beside rather than
+        /// against the title bar. Deliberately fixed rather than Dynamic Type — the panel is
+        /// a fixed-size menubar popover and accessibility sizes would break its layout.
+        static let titleBarIconSize: CGFloat = 18
+        static let pinToggleIconSize: CGFloat = 13
+
         enum ColorCircle {
             /// Circle diameter = defaultFontSize * sizeMultiplier
             static let sizeMultiplier: CGFloat = 1.2
