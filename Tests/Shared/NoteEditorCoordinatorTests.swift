@@ -202,13 +202,9 @@ struct NoteEditorCoordinatorTests {
         coordinator.textDidChange(attributedString: NSAttributedString(string: typed), plainText: typed)
 
         // Poll to a deadline rather than sleeping past the 300 ms debounce: the flat sleep
-        // races process warm-up and CPU contention for whatever margin was hardcoded. Inlined
-        // rather than shared because the existing `waitUntil` is an `XCTestCase` extension,
-        // which a Swift Testing suite cannot reach.
-        let deadline = ContinuousClock.now + .seconds(5)
-        while notes[1].rtfData.isEmpty {
-            try #require(ContinuousClock.now < deadline, "timed out waiting for the debounced save")
-            try await Task.sleep(for: .milliseconds(10))
+        // races process warm-up and CPU contention for whatever margin was hardcoded.
+        try await waitUntil("the second note's debounced save to write RTF") {
+            notes[1].rtfData.isEmpty == false
         }
 
         // Reaching here already proves note 1 was written. Note 0 stays empty for the strong
