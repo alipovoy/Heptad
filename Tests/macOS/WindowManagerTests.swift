@@ -297,6 +297,49 @@ final class WindowManagerTests: XCTestCase {
         XCTAssertEqual(activation.deactivatedCurrentAppCount, 1)
     }
 
+    // MARK: - Flushing pending saves
+    //
+    // The third hide path — the click-outside monitor — is driven by a global NSEvent monitor
+    // that only the window server can fire, so it is covered by the same `flushPendingSaves()`
+    // call rather than by a test.
+
+    @MainActor
+    func testClosingTheWindowFlushesPendingSaves() throws {
+        let window = try showWindow()
+        let flushed = expectation(
+            forNotification: .flushPendingSaves, object: nil,
+            notificationCenter: notificationCenter)
+
+        _ = manager.windowShouldClose(window)
+
+        wait(for: [flushed], timeout: 1)
+    }
+
+    @MainActor
+    func testTogglingTheWindowClosedFlushesPendingSaves() throws {
+        _ = try showWindow()
+        let flushed = expectation(
+            forNotification: .flushPendingSaves, object: nil,
+            notificationCenter: notificationCenter)
+
+        let button = try XCTUnwrap(mockStatusBarItem.button, "No status bar button")
+        manager.toggleWindow(sender: button)
+
+        wait(for: [flushed], timeout: 1)
+    }
+
+    @MainActor
+    func testShowingTheWindowDoesNotFlush() throws {
+        let flushed = expectation(
+            forNotification: .flushPendingSaves, object: nil,
+            notificationCenter: notificationCenter)
+        flushed.isInverted = true
+
+        _ = try showWindow()
+
+        wait(for: [flushed], timeout: 0.2)
+    }
+
     @MainActor
     func testUnpinnedShowStillAnchorsBelowTheStatusItem() throws {
         let window = try showWindow()

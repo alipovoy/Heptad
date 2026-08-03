@@ -53,6 +53,9 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        // iOS backgrounding. Inert on macOS: ContentView is mounted in a bare NSHostingView with
+        // no Scene behind it, so scenePhase never changes there — WindowManager posts
+        // `.flushPendingSaves` itself when it hides the window.
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background || newPhase == .inactive {
                 flushPendingSaves()
@@ -63,8 +66,14 @@ struct ContentView: View {
         }
     }
 
+    /// Asks every `NoteContentSaver` to write its pending text, then commits the context.
+    ///
+    /// `NotificationCenter.post` is synchronous, so all the model writes have landed by the time
+    /// `save()` runs. Without it durability rests on `autosaveEnabled`, whose trigger points are
+    /// undocumented — at terminate that is a race against process exit.
     private func flushPendingSaves() {
         NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
+        try? modelContext.save()
     }
 
     private var backgroundFill: some View {
