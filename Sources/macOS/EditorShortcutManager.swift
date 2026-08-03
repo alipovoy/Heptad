@@ -13,9 +13,22 @@ import SwiftUI
 class EditorShortcutManager {
     private var localKeyMonitor: EventMonitor?
     private let notificationCenter: NotificationCenter
+    private let defaults: UserDefaults
 
-    init(notificationCenter: NotificationCenter = .default) {
+    /// The context ⌘0 searches for an empty note. Resolved on use rather than stored, so
+    /// constructing the manager is never what opens the on-disk store — the app deliberately
+    /// does that once, during launch, and a test that never presses ⌘0 never opens one at all.
+    private let modelContext: @MainActor () -> ModelContext
+
+    init(
+        notificationCenter: NotificationCenter = .default,
+        defaults: UserDefaults = .standard,
+        modelContext: @autoclosure @escaping @MainActor () -> ModelContext
+            = HeptadApp.sharedModelContainer.mainContext
+    ) {
         self.notificationCenter = notificationCenter
+        self.defaults = defaults
+        self.modelContext = modelContext
         setupMonitor()
     }
 
@@ -90,7 +103,7 @@ class EditorShortcutManager {
 
     /// Applies the text-view-scoped ⌘ shortcuts. Returns nil when the shortcut was
     /// handled and the event should be consumed, or the event itself to pass it through.
-    private func handleTextViewShortcut(
+    func handleTextViewShortcut(
         chars: String, hasShift: Bool, on textView: NSTextView, event: NSEvent
     ) -> NSEvent? {
         switch chars {
@@ -144,17 +157,24 @@ class EditorShortcutManager {
     @discardableResult
     func selectNote(noteIndex: Int) -> Bool {
         if noteIndex == 0 {
-            MainActor.assumeIsolated {
-                let context = HeptadApp.sharedModelContainer.mainContext
+            // The context stays put and only the note's id comes back out: a ModelContext is
+            // explicitly not Sendable, so it can't cross out of the actor it belongs to. The
+            // assumption itself is sound — the local key monitor that gets here, and the
+            // shared container's mainContext, are both the main thread's.
+            let firstEmptyId = MainActor.assumeIsolated { () -> Int? in
                 let descriptor = FetchDescriptor<NoteItem>(sortBy: [SortDescriptor(\.id)])
-                guard let notes = try? context.fetch(descriptor),
-                    let firstEmpty = notes.first(where: { $0.isEmpty })
-                else { return }
-                UserDefaults.standard.set(firstEmpty.id, forKey: AppConstants.selectedNoteIndexKey)
+                guard let notes = try? modelContext().fetch(descriptor) else { return nil }
+                return notes.first(where: { $0.isEmpty })?.id
+            }
+
+            // ⌘0 is handled either way: with every note full there is nothing to switch to,
+            // but the key still belongs to us and must not fall through to the text view.
+            if let firstEmptyId {
+                defaults.set(firstEmptyId, forKey: AppConstants.selectedNoteIndexKey)
             }
             return true
         } else if (1...AppConstants.noteCount).contains(noteIndex) {
-            UserDefaults.standard.set(noteIndex - 1, forKey: AppConstants.selectedNoteIndexKey)
+            defaults.set(noteIndex - 1, forKey: AppConstants.selectedNoteIndexKey)
             return true
         }
         return false
