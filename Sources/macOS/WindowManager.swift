@@ -49,6 +49,10 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// Backing store for the persisted pinned state.
     private let defaults: UserDefaults
 
+    /// Where `.flushPendingSaves` is posted when the window hides. Held so the injected centre
+    /// used in tests is the one that hears it.
+    private let notificationCenter: NotificationCenter
+
     /// Who owns activation, and how Heptad takes and returns it.
     private let activation: ActivationCoordinating
 
@@ -66,6 +70,7 @@ class WindowManager: NSObject, NSWindowDelegate {
         activation: ActivationCoordinating = SystemActivationCoordinator()
     ) {
         self.defaults = defaults
+        self.notificationCenter = notificationCenter
         self.activation = activation
         super.init()
 
@@ -106,10 +111,23 @@ class WindowManager: NSObject, NSWindowDelegate {
         if !(window?.isVisible ?? false) {
             showWindow(sender: sender)
         } else {
+            flushPendingSaves()
             window?.orderOut(nil)
             globalClickMonitor?.stop()
             yieldActivation()
         }
+    }
+
+    // MARK: - Hiding
+
+    /// Writes out any text still sitting in a `NoteContentSaver`'s debounce window.
+    ///
+    /// Dismissing the panel is the action users take constantly, and on macOS nothing else
+    /// triggers a flush before terminate — `ContentView`'s `scenePhase` handler never fires here
+    /// (it is mounted in a bare `NSHostingView`, with no `Scene` behind it). Without this, up to
+    /// one debounce interval of typing is dropped on every dismissal.
+    private func flushPendingSaves() {
+        notificationCenter.post(name: .flushPendingSaves, object: nil)
     }
 
     // MARK: - Activation
@@ -220,6 +238,7 @@ class WindowManager: NSObject, NSWindowDelegate {
     // MARK: - Window Delegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        flushPendingSaves()
         sender.orderOut(nil)
 
         // The pinned state is deliberately left untouched: it is persisted, and the next show
@@ -340,6 +359,7 @@ class WindowManager: NSObject, NSWindowDelegate {
                 return event
             }
 
+            self.flushPendingSaves()
             window.orderOut(nil)
             self.globalClickMonitor?.stop()
             self.yieldActivation()
