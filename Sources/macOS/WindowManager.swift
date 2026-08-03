@@ -49,11 +49,24 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// Backing store for the persisted pinned state.
     private let defaults: UserDefaults
 
+    /// Who owns activation, and how Heptad takes and returns it.
+    private let activation: ActivationCoordinating
+
+    /// The app that was frontmost when Heptad last took activation, so dismissing the window can
+    /// hand focus straight back to it. See `yieldActivation()` for why that is not automatic.
+    private var previouslyActiveApp: NSRunningApplication?
+
     /// Weak reference to the status bar button to prevent dismissal when the user clicks the button itself
     weak var statusBarButton: NSStatusBarButton?
 
-    init(defaults: UserDefaults = .standard, notificationCenter: NotificationCenter = .default) {
+    init(
+        defaults: UserDefaults = .standard,
+        notificationCenter: NotificationCenter = .default,
+        workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        activation: ActivationCoordinating = SystemActivationCoordinator()
+    ) {
         self.defaults = defaults
+        self.activation = activation
         super.init()
 
         // No removeObserver needed: selector-based observers auto-unregister on deinit.
@@ -61,6 +74,13 @@ class WindowManager: NSObject, NSWindowDelegate {
             self,
             selector: #selector(handleTogglePinRequest),
             name: .toggleWindowPin,
+            object: nil
+        )
+
+        workspaceNotificationCenter.addObserver(
+            self,
+            selector: #selector(handleAppActivation),
+            name: NSWorkspace.didActivateApplicationNotification,
             object: nil
         )
     }
@@ -78,7 +98,7 @@ class WindowManager: NSObject, NSWindowDelegate {
                 window.performClose(nil)  // delegates to windowShouldClose
             } else {
                 window.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
+                takeActivation()
             }
             return
         }
@@ -88,6 +108,55 @@ class WindowManager: NSObject, NSWindowDelegate {
         } else {
             window?.orderOut(nil)
             globalClickMonitor?.stop()
+            yieldActivation()
+        }
+    }
+
+    // MARK: - Activation
+
+    /// Keeps `previouslyActiveApp` current as the user moves between other apps.
+    ///
+    /// Reading the frontmost app at show time is not reliable on its own: clicking the status
+    /// item can make Heptad active before `toggleWindow` runs, at which point the app to hand
+    /// focus back to is no longer frontmost. Tracking activations as they happen survives that.
+    @objc private func handleAppActivation(_ notification: Notification) {
+        guard
+            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication,
+            app != .current
+        else { return }
+        previouslyActiveApp = app
+    }
+
+    /// Activates Heptad, remembering which app it is taking focus from.
+    ///
+    /// The notification above misses one case — an app that was already frontmost when Heptad
+    /// launched never posts an activation — so the frontmost app is also read here as a backstop.
+    private func takeActivation() {
+        if !activation.isCurrentAppActive, let frontmost = activation.frontmostApplication,
+            frontmost != .current {
+            previouslyActiveApp = frontmost
+        }
+        activation.activateCurrentApp()
+    }
+
+    /// Hands activation back to whichever app was frontmost before the window was shown.
+    ///
+    /// Ordering the window out is not enough. Heptad is an accessory app (`LSUIElement`), and
+    /// AppKit does not deactivate an app just because its last window went away: Heptad stays the
+    /// *active* application with nothing on screen. The app underneath is then drawn frontmost
+    /// but never becomes active, so its key window is never told to restore its first responder —
+    /// the user sees their editor back with no caret in it until they ⌘-Tab away and return,
+    /// which is what forces the real activation.
+    private func yieldActivation() {
+        // A click outside the panel has already activated whatever was clicked; only step aside
+        // when Heptad is still the one holding activation.
+        guard activation.isCurrentAppActive else { return }
+
+        if let previous = previouslyActiveApp, previous != .current, !previous.isTerminated {
+            activation.activate(previous)
+        } else {
+            activation.deactivateCurrentApp()
         }
     }
 
@@ -156,6 +225,7 @@ class WindowManager: NSObject, NSWindowDelegate {
         // The pinned state is deliberately left untouched: it is persisted, and the next show
         // restores it. Only the click monitor has to go — there is nothing left to dismiss.
         globalClickMonitor?.stop()
+        yieldActivation()
         return false
     }
 
@@ -237,7 +307,7 @@ class WindowManager: NSObject, NSWindowDelegate {
 
         window.makeKeyAndOrderFront(nil)
         applyPinnedState(to: window)
-        NSApp.activate(ignoringOtherApps: true)
+        takeActivation()
     }
 
     private func anchorBelowStatusItem(sender: NSStatusBarButton, window: NSPanel) {
@@ -272,6 +342,7 @@ class WindowManager: NSObject, NSWindowDelegate {
 
             window.orderOut(nil)
             self.globalClickMonitor?.stop()
+            self.yieldActivation()
             return event
         }
         globalClickMonitor?.start()

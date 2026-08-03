@@ -2,11 +2,39 @@ import XCTest
 
 @testable import Heptad
 
+/// Stands in for `NSApp`/`NSWorkspace` so the activation hand-off can be driven from a test
+/// without switching real applications around.
+final class SpyActivationCoordinator: ActivationCoordinating {
+    var isCurrentAppActive = false
+    var frontmostApplication: NSRunningApplication?
+
+    private(set) var activatedApps: [NSRunningApplication] = []
+    private(set) var activatedCurrentAppCount = 0
+    private(set) var deactivatedCurrentAppCount = 0
+
+    func activateCurrentApp() {
+        activatedCurrentAppCount += 1
+        isCurrentAppActive = true
+    }
+
+    func activate(_ app: NSRunningApplication) {
+        activatedApps.append(app)
+        isCurrentAppActive = false
+    }
+
+    func deactivateCurrentApp() {
+        deactivatedCurrentAppCount += 1
+        isCurrentAppActive = false
+    }
+}
+
 final class WindowManagerTests: XCTestCase {
     var manager: WindowManager!
     var defaults: UserDefaults!
     var suiteName: String!
     var notificationCenter: NotificationCenter!
+    var workspaceNotificationCenter: NotificationCenter!
+    var activation: SpyActivationCoordinator!
     var mockStatusBarItem: NSStatusItem!
 
     override func setUpWithError() throws {
@@ -14,7 +42,13 @@ final class WindowManagerTests: XCTestCase {
         suiteName = "WindowManagerTests.\(UUID().uuidString)"
         defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         notificationCenter = NotificationCenter()
-        manager = WindowManager(defaults: defaults, notificationCenter: notificationCenter)
+        workspaceNotificationCenter = NotificationCenter()
+        activation = SpyActivationCoordinator()
+        manager = WindowManager(
+            defaults: defaults,
+            notificationCenter: notificationCenter,
+            workspaceNotificationCenter: workspaceNotificationCenter,
+            activation: activation)
         mockStatusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     }
 
@@ -24,6 +58,8 @@ final class WindowManagerTests: XCTestCase {
         }
         manager = nil
         notificationCenter = nil
+        workspaceNotificationCenter = nil
+        activation = nil
         defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
         suiteName = nil
@@ -166,6 +202,99 @@ final class WindowManagerTests: XCTestCase {
         XCTAssertEqual(
             window.frame.origin, parked,
             "A pinned window stays where the user parked it instead of re-anchoring")
+    }
+
+    // MARK: - Activation hand-off
+
+    /// A real other running app, standing in for "the app the user was in before Heptad".
+    /// `NSRunningApplication` instances only come from the system, so one is borrowed here.
+    private func otherRunningApplication() throws -> NSRunningApplication {
+        let other = NSWorkspace.shared.runningApplications.first {
+            $0 != .current && !$0.isTerminated
+        }
+        return try XCTUnwrap(other, "Expected at least one other running application")
+    }
+
+    private func postActivation(of app: NSRunningApplication) {
+        workspaceNotificationCenter.post(
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: NSWorkspace.shared,
+            userInfo: [NSWorkspace.applicationUserInfoKey: app])
+    }
+
+    @MainActor
+    func testClosingHandsActivationBackToTheAppThatHadIt() throws {
+        let previous = try otherRunningApplication()
+        postActivation(of: previous)
+
+        let window = try showWindow()
+        XCTAssertTrue(activation.isCurrentAppActive, "Showing the window activates Heptad")
+
+        _ = manager.windowShouldClose(window)
+
+        XCTAssertEqual(
+            activation.activatedApps.last, previous,
+            "Ordering the window out is not enough — the previous app must be reactivated so its "
+                + "key window restores first responder")
+        XCTAssertEqual(activation.deactivatedCurrentAppCount, 0)
+    }
+
+    @MainActor
+    func testTogglingTheWindowClosedHandsActivationBack() throws {
+        let previous = try otherRunningApplication()
+        postActivation(of: previous)
+        _ = try showWindow()
+
+        let button = try XCTUnwrap(mockStatusBarItem.button, "No status bar button")
+        manager.toggleWindow(sender: button)
+
+        XCTAssertEqual(activation.activatedApps.last, previous)
+    }
+
+    @MainActor
+    func testShowingFallsBackToTheFrontmostAppWhenNoActivationWasObserved() throws {
+        // An app that was already frontmost when Heptad launched never posts an activation.
+        let previous = try otherRunningApplication()
+        activation.frontmostApplication = previous
+
+        let window = try showWindow()
+        _ = manager.windowShouldClose(window)
+
+        XCTAssertEqual(activation.activatedApps.last, previous)
+    }
+
+    @MainActor
+    func testClosingWithNoKnownPreviousAppJustGivesUpActiveStatus() throws {
+        let window = try showWindow()
+
+        _ = manager.windowShouldClose(window)
+
+        XCTAssertTrue(activation.activatedApps.isEmpty, "There is no app to hand activation to")
+        XCTAssertEqual(activation.deactivatedCurrentAppCount, 1)
+    }
+
+    @MainActor
+    func testClosingLeavesActivationAloneWhenAnotherAppAlreadyHasIt() throws {
+        postActivation(of: try otherRunningApplication())
+        let window = try showWindow()
+
+        // What a click outside the panel looks like: the click already activated the other app.
+        activation.isCurrentAppActive = false
+        _ = manager.windowShouldClose(window)
+
+        XCTAssertTrue(activation.activatedApps.isEmpty, "Must not steal focus back from the click")
+        XCTAssertEqual(activation.deactivatedCurrentAppCount, 0)
+    }
+
+    @MainActor
+    func testHeptadItselfIsNeverRecordedAsThePreviousApp() throws {
+        postActivation(of: .current)
+        let window = try showWindow()
+
+        _ = manager.windowShouldClose(window)
+
+        XCTAssertTrue(activation.activatedApps.isEmpty, "Reactivating Heptad would be a no-op loop")
+        XCTAssertEqual(activation.deactivatedCurrentAppCount, 1)
     }
 
     @MainActor
