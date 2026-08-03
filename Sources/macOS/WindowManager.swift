@@ -46,6 +46,11 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// One-shot monitor waiting for mouse-up to complete the drag-away-to-pin transition.
     private var pendingPinMonitor: EventMonitor?
 
+    /// True once a drag has passed the threshold and the transition is waiting for mouse-up.
+    /// The monitor itself is private; this exposes only the armed/not-armed state, which is
+    /// where every guard in `windowDidMove` shows up.
+    var isAwaitingDragToPinRelease: Bool { pendingPinMonitor != nil }
+
     /// Backing store for the persisted pinned state.
     private let defaults: UserDefaults
 
@@ -273,7 +278,7 @@ class WindowManager: NSObject, NSWindowDelegate {
         }
     }
 
-    private func panelDragDistance(of window: NSWindow) -> CGFloat {
+    func panelDragDistance(of window: NSWindow) -> CGFloat {
         hypot(window.frame.origin.x - anchorOrigin.x, window.frame.origin.y - anchorOrigin.y)
     }
 
