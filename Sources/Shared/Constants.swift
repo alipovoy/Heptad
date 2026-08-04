@@ -56,5 +56,9 @@ enum AppConstants {
     enum Timing {
         /// Debounce interval used when saving text
         static let debounceSave: Duration = .milliseconds(300)
+
+        /// How often `RelativeTimeTicker` re-reads the clock while the window is on screen.
+        /// Coarse on purpose — the edit-time label is a staleness cue, not a stopwatch.
+        static let relativeTimeRefresh: Duration = .seconds(30)
     }
 }
