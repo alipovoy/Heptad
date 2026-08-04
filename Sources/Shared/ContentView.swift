@@ -62,7 +62,19 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .onAppear { ticker.start() }
+        .onAppear {
+            ticker.start()
+
+            // Writes the clamp back, so every reader of the selection agrees on it. The editors
+            // and the colour circles take the stored value as a binding rather than through
+            // `clampedNoteIndex`, and left at a junk index `NoteEditorCoordinator.update` would
+            // decline to install any editor view at all: a blank, untypable note beside a
+            // statistics bar describing a different one. Reading it clamped above keeps the
+            // first frame — which renders before this runs — from indexing out of bounds.
+            if selectedNoteIndex != clampedNoteIndex {
+                selectedNoteIndex = clampedNoteIndex
+            }
+        }
         .onDisappear { ticker.stop() }
         // iOS backgrounding. Inert on macOS: ContentView is mounted in a bare NSHostingView with
         // no Scene behind it, so scenePhase never changes there — WindowManager posts
