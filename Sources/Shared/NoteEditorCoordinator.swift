@@ -63,7 +63,7 @@ class NoteEditorCoordinator: NSObject {
                 focus(editorView)
             }
 
-            updateStats(plainText: plainText(of: editorView))
+            updateStats(plainText: plainText(of: editorView), for: note.id)
         }
 
         currentNoteId = note.id
@@ -73,17 +73,32 @@ class NoteEditorCoordinator: NSObject {
     func textDidChange(attributedString: NSAttributedString, plainText: String) {
         guard let noteId = currentNoteId, let saver = savers[noteId] else { return }
         saver.save(attributedString: attributedString)
-        updateStats(plainText: plainText)
+        updateStats(plainText: plainText, for: noteId)
     }
 
     /// Counts characters/words/lines off the main actor so large notes don't stall typing,
     /// then delivers the result back on the main actor. Detached deliberately: a plain
     /// `Task {}` here would inherit this class's MainActor isolation and run inline.
-    private func updateStats(plainText: String) {
+    ///
+    /// Nothing orders these tasks against each other, so two quick note switches can deliver the
+    /// older count last and leave the bar showing the previous note's numbers until the next
+    /// keystroke. `noteId` is the note the text was read from, and it is re-checked against the
+    /// showing note on delivery so a result that has been overtaken is dropped.
+    ///
+    /// Passed in rather than read off `currentNoteId` here: the `update` path counts the incoming
+    /// note's text *before* it becomes the current one, so reading it would name the note being
+    /// left and drop every count taken on a switch.
+    private func updateStats(plainText: String, for noteId: Int) {
         Task.detached(priority: .utility) { [weak self] in
             let stats = TextStats(text: plainText)
-            await self?.statsDidChange(stats)
+            await self?.deliverStats(stats, for: noteId)
         }
+    }
+
+    /// Hands `stats` to the platform hook, unless the note moved on while they were being counted.
+    private func deliverStats(_ stats: TextStats, for noteId: Int) {
+        guard noteId == currentNoteId else { return }
+        statsDidChange(stats)
     }
 
     // MARK: - Platform hooks

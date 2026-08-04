@@ -261,6 +261,32 @@ struct NoteEditorCoordinatorTests {
         #expect(reportedStats.stats == TextStats(text: text))
     }
 
+    /// Counts computed for a note the user has already left are dropped rather than shown.
+    ///
+    /// Each count runs on its own detached task with nothing ordering it against the others, so
+    /// two quick note switches can deliver the first note's numbers last — leaving the statistics
+    /// bar describing a note that is no longer on screen until the next keystroke corrects it.
+    ///
+    /// The switches happen back to back on the main actor, so both counts are in flight before
+    /// either can land; whichever order they finish in, only note 1's may be reported.
+    @Test(.bug(id: 50))
+    func statisticsForANoteTheUserHasLeftAreDropped() async throws {
+        coordinator.plainTextByNoteId[0] = "First note"
+        coordinator.plainTextByNoteId[1] = "The second note, which is the one on screen"
+
+        coordinator.setup(container: container, notes: notes, selectedIndex: 0)
+        coordinator.update(notes: notes, selectedIndex: 1)
+
+        // Both counts were dispatched at .utility; draining a task of the same priority gives
+        // the stale one every chance to report before the count below is read.
+        await Task.detached(priority: .utility) {}.value
+
+        let showing = TextStats(text: coordinator.plainTextByNoteId[1] ?? "")
+        #expect(
+            coordinator.reportedStats.allSatisfy { $0.stats == showing },
+            "The bar must never be handed the statistics of the note that was just left")
+    }
+
     private static func isPinned(
         _ view: PlatformView,
         to container: PlatformView,
