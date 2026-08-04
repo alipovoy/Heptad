@@ -37,7 +37,6 @@ extension Notification.Name {
 /// and stays an accessory app in both modes, so a pinned window has no Dock icon or app menu.
 class WindowManager: NSObject, NSWindowDelegate {
     private(set) var window: NSPanel?
-    private var hostingView: NSView?
 
     /// Guard flag to prevent windowDidMove from triggering during initial positioning.
     private var isPositioningPanel = false
@@ -339,16 +338,29 @@ class WindowManager: NSObject, NSWindowDelegate {
         // Only the panel is anchored under the status item. A pinned window is restored to
         // wherever the user parked it (AppKit reloads that frame from the autosave), because
         // yanking a deliberately placed window back under the menubar is the opposite of pinning.
+        //
+        // The guard spans the ordering, not just the move: AppKit constrains a frame that hangs
+        // off a screen edge as the window is ordered on, so for a status item near an edge the
+        // correction — and the `windowDidMove` it posts — arrives inside `makeKeyAndOrderFront`,
+        // past the point the old bracket around `setFrameOrigin` had already been cleared.
+        // Unguarded it measured as a drag past `dragToPinThreshold` and armed the pin gesture on
+        // a show with no drag in it. `applyPinnedState` below then re-anchors on the settled
+        // frame, so `anchorOrigin` means "where the panel actually is" either way.
         if isPanelMode {
+            isPositioningPanel = true
             anchorBelowStatusItem(sender: sender, window: window)
         }
 
         window.makeKeyAndOrderFront(nil)
+        isPositioningPanel = false
+
         applyPinnedState(to: window)
         takeActivation()
         notificationCenter.post(name: .windowDidBecomeVisible, object: nil)
     }
 
+    /// Centres the panel under the status item. The caller owns `isPositioningPanel` and the
+    /// anchor that follows, both of which have to outlast the ordering this does not do.
     private func anchorBelowStatusItem(sender: NSStatusBarButton, window: NSPanel) {
         guard sender.window?.screen != nil else { return }
 
@@ -356,11 +368,7 @@ class WindowManager: NSObject, NSWindowDelegate {
         let xPos = buttonRect.midX - (window.frame.width / 2)
         let yPos = buttonRect.minY - window.frame.height - 5
 
-        let origin = NSPoint(x: xPos, y: yPos)
-        anchorOrigin = origin
-        isPositioningPanel = true
-        window.setFrameOrigin(origin)
-        isPositioningPanel = false
+        window.setFrameOrigin(NSPoint(x: xPos, y: yPos))
     }
 
     // MARK: - Global Click Monitor (click-outside to dismiss in panel mode)

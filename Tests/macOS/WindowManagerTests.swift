@@ -68,6 +68,9 @@ final class WindowManagerTests {
     private let activation: SpyActivationCoordinator
     private let mockStatusBarItem: NSStatusItem
 
+    /// Windows hosting stand-in menubar buttons, closed with the rest of the fixture.
+    private var menuBarStandIns: [NSWindow] = []
+
     init() async throws {
         suiteName = "WindowManagerTests.\(UUID().uuidString)"
         defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -95,6 +98,7 @@ final class WindowManagerTests {
     /// `isolated` so the AppKit teardown runs on the main actor wherever the last release lands.
     isolated deinit {
         manager.window?.close()
+        menuBarStandIns.forEach { $0.close() }
         defaults.removePersistentDomain(forName: suiteName)
         NSStatusBar.system.removeStatusItem(mockStatusBarItem)
     }
@@ -114,12 +118,15 @@ final class WindowManagerTests {
 
     /// Shows the panel well inside the screen with the drag gesture disarmed.
     ///
-    /// A plain show is not a clean starting point for the drag tests. When the status item sits
-    /// near the right-hand edge of the screen the anchor puts part of the panel past the edge,
-    /// AppKit pulls it back, and that correction is reported as a move once `isPositioningPanel`
-    /// has already been cleared — so the show itself can arm the gesture. Pinning across the show
-    /// sidesteps it: `windowDidMove` ignores a pinned window, and unpinning in place re-anchors
-    /// on wherever the panel now sits.
+    /// Parking it away from the edges is what the drag tests need: they move the panel by a few
+    /// points and read the distance back, which only holds while AppKit is not constraining the
+    /// frame under them. Pinning across the show is how it gets parked — a pinned window is not
+    /// re-anchored under the status item — and unpinning in place re-anchors on wherever it now
+    /// sits.
+    ///
+    /// It no longer has to work around the show arming the gesture by itself; `anchorOrigin` is
+    /// now read back off the settled frame (#62). The `isAwaitingDragToPinRelease` check below
+    /// stays as the assertion that this is still true.
     private func showPanelWithACleanAnchor() throws -> NSPanel {
         manager.setPinned(true)
         let window = try showWindow()
@@ -351,6 +358,68 @@ final class WindowManagerTests {
 
     // MARK: - Drag to pin
 
+    /// A panel show anchors on where the panel *landed*, so it cannot arm the pin gesture.
+    ///
+    /// Centred under a status item near the right-hand edge of the screen the panel would hang
+    /// off it, and AppKit pulls the frame back — during the ordering, after `anchorBelowStatusItem`
+    /// has run. Anchored on the requested origin, that correction measures as a drag of its own
+    /// distance, which can be more than the threshold: an ordinary show that involved no drag at
+    /// all arms the pin gesture and leaves a mouse-up monitor installed until the next click.
+    ///
+    /// The edge position is supplied rather than hoped for. The real status item sits wherever
+    /// the running Mac's menu bar puts it, and on a layout that leaves the panel fitting there is
+    /// no correction to catch — which is exactly why #44 skipped this case.
+    @Test(.bug(id: 62))
+    func aPanelShowNearAScreenEdgeAnchorsOnWhereThePanelLanded() throws {
+        let edgeButton = try statusBarButtonAtTheRightScreenEdge()
+
+        manager.toggleWindow(sender: edgeButton)
+        let window = try #require(manager.window, "Window was not created")
+
+        let buttonRect = try #require(edgeButton.window?.convertToScreen(edgeButton.frame))
+        try #require(
+            abs(window.frame.origin.x - (buttonRect.midX - window.frame.width / 2))
+                > AppConstants.Window.dragToPinThreshold,
+            "AppKit has to have corrected the frame for this to be testing the correction at all")
+
+        #expect(
+            manager.anchorOrigin == window.frame.origin,
+            "The anchor must be where the panel actually is, not where it was aimed")
+        #expect(manager.panelDragDistance(of: window) == 0, "A show is not a drag")
+        #expect(
+            manager.isAwaitingDragToPinRelease == false,
+            "Showing the panel must not leave a mouse-up monitor armed on an ordinary open")
+
+        // And the correction's own move notification, whenever it is delivered, still measures
+        // zero rather than re-arming what the show just declined to arm.
+        manager.windowDidMove(moveNotification(for: window))
+
+        #expect(manager.isAwaitingDragToPinRelease == false)
+    }
+
+    /// A stand-in menubar button parked at the right-hand end of the menu bar.
+    ///
+    /// Deliberately not the real status item, and deliberately not a resized panel: the panel
+    /// carries `setFrameAutosaveName`, so changing its size writes through to the standard
+    /// defaults every other test's panel is restored from — and to the real app's.
+    private func statusBarButtonAtTheRightScreenEdge() throws -> NSStatusBarButton {
+        let screen = try #require(NSScreen.main, "No screen to place the stand-in item on")
+        let frame = NSRect(
+            x: screen.frame.maxX - 40, y: screen.frame.maxY - 24, width: 32, height: 22)
+
+        let host = NSWindow(
+            contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        host.isReleasedWhenClosed = false
+        menuBarStandIns.append(host)
+
+        let button = NSStatusBarButton(frame: NSRect(origin: .zero, size: frame.size))
+        host.contentView?.addSubview(button)
+        host.orderFront(nil)
+
+        try #require(host.screen != nil, "`anchorBelowStatusItem` returns early without a screen")
+        return button
+    }
+
     @Test(.bug(id: 44))
     func dragDistanceIsMeasuredFromTheAnchorNotTheScreenOrigin() throws {
         let window = try showPanelWithACleanAnchor()
@@ -539,7 +608,7 @@ final class WindowManagerTests {
     @Test func closingTheWindowFlushesPendingSaves() async throws {
         let window = try showWindow()
 
-        try await expectingFlush {
+        await expectingFlush {
             _ = manager.windowShouldClose(window)
         }
     }
@@ -589,7 +658,7 @@ final class WindowManagerTests {
     @Test func closingTheWindowAnnouncesTheHide() async throws {
         let window = try showWindow()
 
-        try await expectingNotification(.windowDidHide) {
+        await expectingNotification(.windowDidHide) {
             _ = manager.windowShouldClose(window)
         }
     }

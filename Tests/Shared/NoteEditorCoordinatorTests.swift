@@ -261,6 +261,44 @@ struct NoteEditorCoordinatorTests {
         #expect(reportedStats.stats == TextStats(text: text))
     }
 
+    /// Counts computed for a note the user has already left are dropped rather than shown.
+    ///
+    /// Each count runs on its own detached task with nothing ordering it against the others, so
+    /// two quick note switches can deliver the first note's numbers last — leaving the statistics
+    /// bar describing a note that is no longer on screen until the next keystroke corrects it.
+    ///
+    /// The switches happen back to back on the main actor, so both counts are in flight before
+    /// either can land; whichever order they finish in, only note 1's may be reported.
+    ///
+    /// Waiting for the showing note's delivery rather than draining a task of the same priority
+    /// is what stops this passing for the wrong reason: `allSatisfy` on the deliveries that have
+    /// landed so far is vacuously true while none of them have, which a drain does not rule out.
+    @Test(.bug(id: 50))
+    func statisticsForANoteTheUserHasLeftAreDropped() async throws {
+        let leftBehind = "First note"
+        let showing = "The second note, which is the one on screen"
+        coordinator.plainTextByNoteId[0] = leftBehind
+        coordinator.plainTextByNoteId[1] = showing
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            // Installed before either count is requested, so the delivery cannot land before
+            // anyone is listening.
+            coordinator.onStats = { stats in
+                if stats == TextStats(text: showing) { continuation.resume() }
+            }
+            coordinator.setup(container: container, notes: notes, selectedIndex: 0)
+            coordinator.update(notes: notes, selectedIndex: 1)
+        }
+
+        // The showing note's count has landed, so the note-0 task has had at least that long to
+        // finish; this gives its delivery a further turn to arrive before the count is read.
+        await Task.detached(priority: .utility) {}.value
+
+        #expect(
+            coordinator.reportedStats.map(\.stats) == [TextStats(text: showing)],
+            "The bar must never be handed the statistics of the note that was just left")
+    }
+
     private static func isPinned(
         _ view: PlatformView,
         to container: PlatformView,
