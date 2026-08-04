@@ -608,7 +608,7 @@ final class WindowManagerTests {
     @Test func closingTheWindowFlushesPendingSaves() async throws {
         let window = try showWindow()
 
-        try await expectingFlush {
+        await expectingFlush {
             _ = manager.windowShouldClose(window)
         }
     }
@@ -658,7 +658,7 @@ final class WindowManagerTests {
     @Test func closingTheWindowAnnouncesTheHide() async throws {
         let window = try showWindow()
 
-        try await expectingNotification(.windowDidHide) {
+        await expectingNotification(.windowDidHide) {
             _ = manager.windowShouldClose(window)
         }
     }
