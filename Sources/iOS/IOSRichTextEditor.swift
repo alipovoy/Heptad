@@ -13,6 +13,9 @@ struct IOSRichTextEditor: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
+        // See the note in MacRichTextEditor: the coordinator would otherwise hold the struct
+        // instance from `makeCoordinator` for the life of the app.
+        context.coordinator.parent = self
         context.coordinator.update(notes: notes, selectedIndex: selectedNoteIndex)
     }
 

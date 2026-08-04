@@ -13,6 +13,12 @@ struct MacRichTextEditor: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
+        // The coordinator outlives every struct instance that drives it, so without this it
+        // keeps the one handed to `makeCoordinator` — and any `parent.` read sees launch-time
+        // values forever. Today only the `textStats` binding is read through it, and a Binding
+        // is a pair of closures rather than a snapshot, so the stale parent still writes to the
+        // live state; that is incidental, and this keeps it from mattering.
+        context.coordinator.parent = self
         context.coordinator.update(notes: notes, selectedIndex: selectedNoteIndex)
     }
 
@@ -32,29 +38,37 @@ struct MacRichTextEditor: NSViewRepresentable {
             scrollView.borderType = .noBorder
             scrollView.drawsBackground = false
 
-            if let textView = scrollView.documentView as? IsolatedUndoTextView {
-                textView.delegate = self
-                textView.allowsUndo = true
-                textView.isRichText = true
-                textView.importsGraphics = false
-                textView.allowsImageEditing = false
-                textView.font = .systemFont(ofSize: AppConstants.Layout.defaultFontSize)
-
-                textView.usesInspectorBar = false
-                textView.allowsDocumentBackgroundColorChange = false
-                textView.backgroundColor = .clear
-                textView.drawsBackground = false
-
-                // Apply text padding
-                textView.textContainerInset = NSSize(width: 8, height: 8)
-
-                if let attrString = note.attributedContent {
-                    textView.undoManager?.disableUndoRegistration()
-                    textView.textStorage?.setAttributedString(attrString)
-                    textView.undoManager?.enableUndoRegistration()
-                    textView.undoManager?.removeAllActions()
-                }
+            // Not `if let`: a failed cast would silently skip every line below — the whole
+            // editor configuration *and* the content load — and the note would just come up
+            // blank, with nothing logged anywhere to say why. `scrollableTextView()` is
+            // documented to vend this class, so a miss is a broken invariant, not a state to
+            // degrade into.
+            guard let textView = scrollView.documentView as? IsolatedUndoTextView else {
+                preconditionFailure("scrollableTextView() must vend an IsolatedUndoTextView")
             }
+
+            textView.delegate = self
+            textView.allowsUndo = true
+            textView.isRichText = true
+            textView.importsGraphics = false
+            textView.allowsImageEditing = false
+            textView.font = .systemFont(ofSize: AppConstants.Layout.defaultFontSize)
+
+            textView.usesInspectorBar = false
+            textView.allowsDocumentBackgroundColorChange = false
+            textView.backgroundColor = .clear
+            textView.drawsBackground = false
+
+            // Apply text padding
+            textView.textContainerInset = NSSize(width: 8, height: 8)
+
+            if let attrString = note.attributedContent {
+                textView.undoManager?.disableUndoRegistration()
+                textView.textStorage?.setAttributedString(attrString)
+                textView.undoManager?.enableUndoRegistration()
+                textView.undoManager?.removeAllActions()
+            }
+
             return scrollView
         }
 
