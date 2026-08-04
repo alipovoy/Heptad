@@ -78,4 +78,29 @@ struct NoteItemTests {
         #expect(note.modifiedAt >= before)
         #expect(note.modifiedAt <= .now)
     }
+
+    @Test func lastEditedAtReportsTheStampOfANoteWithContent() throws {
+        let edited = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let data = try #require(NoteItem.rtfData(from: NSAttributedString(string: "content")))
+
+        let note = NoteItem(id: 0, rtfData: data, modifiedAt: edited)
+
+        #expect(note.lastEditedAt == edited)
+    }
+
+    /// An empty note carries the creation stamp all seven notes got at first launch. Reporting
+    /// it would put an edit time the user never caused under a blank editor.
+    @Test func lastEditedAtIsNilForAnEmptyNote() {
+        #expect(NoteItem(id: 0).lastEditedAt == nil)
+    }
+
+    /// `.distantPast` is the lightweight-migration backfill for rows written before
+    /// `modifiedAt` existed. Formatted, it reads "2,025 years ago".
+    @Test func lastEditedAtIsNilForABackfilledStamp() throws {
+        let data = try #require(NoteItem.rtfData(from: NSAttributedString(string: "content")))
+
+        let note = NoteItem(id: 0, rtfData: data, modifiedAt: .distantPast)
+
+        #expect(note.lastEditedAt == nil)
+    }
 }

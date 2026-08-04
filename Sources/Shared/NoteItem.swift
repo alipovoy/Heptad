@@ -31,6 +31,18 @@ final class NoteItem {
 extension NoteItem {
     var isEmpty: Bool { rtfData.isEmpty }
 
+    /// When the note was last edited, or nil when there is no edit to report.
+    ///
+    /// Two cases have a `modifiedAt` that is worse than useless to show. An empty note has
+    /// never held anything — `init` stamps it with the time the seven notes were created,
+    /// which says nothing about the user. And `.distantPast` is the migration backfill for
+    /// rows written before the property existed. Formatting either one puts "2,025 years ago"
+    /// or a creation time the user never caused under a blank editor.
+    var lastEditedAt: Date? {
+        guard !isEmpty, modifiedAt != .distantPast else { return nil }
+        return modifiedAt
+    }
+
     /// The note's content decoded from RTF, ready to display, or nil when empty or undecodable.
     ///
     /// Colorless runs get the adaptive text color here, at the one point where stored data

@@ -9,6 +9,10 @@ struct ContentView: View {
     @AppStorage(AppConstants.selectedNoteIndexKey) private var selectedNoteIndex = 0
     @State private var textStats: TextStats = .zero
 
+    /// Ages the edit-time label in place. Started and stopped with the window below, so it
+    /// never ticks against a window nobody can see.
+    @State private var ticker = RelativeTimeTicker()
+
     static let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]
 
     #if os(macOS)
@@ -39,8 +43,13 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     #endif
 
-                    TextStatisticsBar(stats: textStats, color: Self.colors[selectedNoteIndex])
-                        .background(backgroundFill)
+                    TextStatisticsBar(
+                        stats: textStats,
+                        lastEditedAt: notes[selectedNoteIndex].lastEditedAt,
+                        now: ticker.now,
+                        color: Self.colors[selectedNoteIndex]
+                    )
+                    .background(backgroundFill)
                 }
                 #if os(macOS)
                     .frame(minWidth: 320, minHeight: 200)
@@ -53,17 +62,32 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .onAppear { ticker.start() }
+        .onDisappear { ticker.stop() }
         // iOS backgrounding. Inert on macOS: ContentView is mounted in a bare NSHostingView with
         // no Scene behind it, so scenePhase never changes there — WindowManager posts
-        // `.flushPendingSaves` itself when it hides the window.
+        // `.flushPendingSaves` itself when it hides the window, and the notifications below
+        // stand in for the visibility changes this never reports.
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background || newPhase == .inactive {
                 flushPendingSaves()
+                ticker.stop()
+            } else {
+                ticker.start()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: Self.willTerminateNotification)) { _ in
             flushPendingSaves()
         }
+        #if os(macOS)
+            // The window is ordered out, not unmounted, so `onDisappear` above never fires for it.
+            .onReceive(NotificationCenter.default.publisher(for: .windowDidBecomeVisible)) { _ in
+                ticker.start()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .windowDidHide)) { _ in
+                ticker.stop()
+            }
+        #endif
     }
 
     /// Asks every `NoteContentSaver` to write its pending text, then commits the context.
@@ -120,6 +144,14 @@ struct ContentView: View {
 
 struct TextStatisticsBar: View {
     let stats: TextStats
+
+    /// When the selected note was last edited, or nil for a note with no edit to report.
+    let lastEditedAt: Date?
+
+    /// What the edit time is measured against. Passed in rather than read here so the bar
+    /// re-renders when `RelativeTimeTicker` moves it on, and so tests can pin it.
+    let now: Date
+
     let color: Color
 
     #if os(macOS)
@@ -130,21 +162,42 @@ struct TextStatisticsBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text("\(stats.lines) Lines ⋅ \(stats.words) Words ⋅ \(stats.characters) Characters")
-                .font(
-                    .system(
-                        size: AppConstants.Layout.statisticsFontSize, weight: .medium,
-                        design: .rounded))
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(
+                """
+                \(stats.lines) Lines ⋅ \(stats.words) Words ⋅ \(stats.characters) \
+                Characters\(editedSuffix)
+                """
+            )
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            #if os(macOS)
+                // The exact time, for when "yesterday" is not precise enough. Empty when there
+                // is no edit to report, which AppKit reads as "no tooltip".
+                .help(lastEditedAt?.formatted(date: .abbreviated, time: .shortened) ?? "")
+            #endif
 
             #if os(macOS)
                 pinToggle
             #endif
         }
+        .font(
+            .system(
+                size: AppConstants.Layout.statisticsFontSize, weight: .medium, design: .rounded))
         .padding(.vertical, 8)
         .padding(.horizontal, 14)
         .background(color.opacity(0.2))
         .foregroundStyle(.secondary)  // Vivid text color relying on the background
+    }
+
+    /// The relative edit time as one more entry in the statistics run — " ⋅ 5 minutes ago" —
+    /// or empty for a note with no edit to report.
+    ///
+    /// Part of the same `Text` rather than a view of its own so it wraps and truncates as one
+    /// sentence with the counts, and so the separator matches the ones between them.
+    private var editedSuffix: String {
+        guard let lastEditedAt else { return "" }
+        return " ⋅ " + RelativeEditTimeFormatter.shared.string(for: lastEditedAt, relativeTo: now)
     }
 
     #if os(macOS)

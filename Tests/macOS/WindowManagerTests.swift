@@ -557,4 +557,65 @@ final class WindowManagerTests {
             _ = try showWindow()
         }
     }
+
+    // MARK: - Visibility
+    //
+    // Hiding orders the window out instead of tearing it down, so the hosted ContentView is
+    // never unmounted and hears nothing from SwiftUI. These notifications are its only signal,
+    // and the relative-time ticker is switched off by them.
+
+    /// Runs `action` with an observer on `name` and confirms it fired `count` times.
+    private func expectingNotification(
+        _ name: Notification.Name,
+        count: Int = 1,
+        during action: @MainActor () throws -> Void
+    ) async rethrows {
+        try await confirmation("\(name.rawValue) is posted", expectedCount: count) { posted in
+            let observer = notificationCenter.addObserver(forName: name, object: nil, queue: nil) { _ in
+                posted()
+            }
+            defer { notificationCenter.removeObserver(observer) }
+
+            try action()
+        }
+    }
+
+    @Test func showingTheWindowAnnouncesItIsVisible() async throws {
+        try await expectingNotification(.windowDidBecomeVisible) {
+            _ = try showWindow()
+        }
+    }
+
+    @Test func closingTheWindowAnnouncesTheHide() async throws {
+        let window = try showWindow()
+
+        try await expectingNotification(.windowDidHide) {
+            _ = manager.windowShouldClose(window)
+        }
+    }
+
+    @Test func togglingTheWindowClosedAnnouncesTheHide() async throws {
+        _ = try showWindow()
+
+        try await expectingNotification(.windowDidHide) {
+            manager.toggleWindow(sender: try statusBarButton())
+        }
+    }
+
+    /// Raising a pinned window that another app was covering is not a visibility change — it
+    /// was on screen throughout, and announcing a show would restart a ticker already running.
+    @Test(.bug(id: 59))
+    func raisingAnAlreadyVisiblePinnedWindowAnnouncesNothing() async throws {
+        let window = try showWindow()
+        manager.setPinned(true)
+
+        let cover = makeStandInWindow()
+        defer { cover.close() }
+        cover.makeKeyAndOrderFront(nil)
+        try #require(window.isKeyWindow == false, "The pinned window must not be the key window")
+
+        try await expectingNotification(.windowDidBecomeVisible, count: 0) {
+            manager.toggleWindow(sender: try statusBarButton())
+        }
+    }
 }

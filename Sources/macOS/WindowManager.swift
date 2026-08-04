@@ -8,6 +8,15 @@ extension Notification.Name {
     /// with iOS) and EditorShortcutManager free of any WindowManager reference, and leaves
     /// WindowManager the only writer of the state.
     static let toggleWindowPin = Notification.Name("Heptad.toggleWindowPin")
+
+    /// Posted when the window goes on and off screen.
+    ///
+    /// Hiding orders the window out rather than tearing it down, so the hosted `ContentView`
+    /// is never unmounted and SwiftUI's `onDisappear` never fires — these are the only signal
+    /// anything view-side gets that there is no longer anyone looking. `RelativeTimeTicker`
+    /// needs it to stop ticking behind a hidden window.
+    static let windowDidBecomeVisible = Notification.Name("Heptad.windowDidBecomeVisible")
+    static let windowDidHide = Notification.Name("Heptad.windowDidHide")
 }
 
 /// Owns the single app window and the two modes it can be in.
@@ -115,15 +124,24 @@ class WindowManager: NSObject, NSWindowDelegate {
 
         if !(window?.isVisible ?? false) {
             showWindow(sender: sender)
-        } else {
-            flushPendingSaves()
-            window?.orderOut(nil)
-            globalClickMonitor?.stop()
-            yieldActivation()
+        } else if let window {
+            hide(window)
         }
     }
 
     // MARK: - Hiding
+
+    /// The one way the window leaves the screen — the menubar icon, ⌘W/close, and a click
+    /// outside the panel all land here, and all three want the same four steps.
+    private func hide(_ window: NSWindow) {
+        flushPendingSaves()
+        window.orderOut(nil)
+
+        // Nothing left to dismiss, so the click-outside monitor has no work to do.
+        globalClickMonitor?.stop()
+        yieldActivation()
+        notificationCenter.post(name: .windowDidHide, object: nil)
+    }
 
     /// Writes out any text still sitting in a `NoteContentSaver`'s debounce window.
     ///
@@ -243,13 +261,9 @@ class WindowManager: NSObject, NSWindowDelegate {
     // MARK: - Window Delegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        flushPendingSaves()
-        sender.orderOut(nil)
-
         // The pinned state is deliberately left untouched: it is persisted, and the next show
-        // restores it. Only the click monitor has to go — there is nothing left to dismiss.
-        globalClickMonitor?.stop()
-        yieldActivation()
+        // restores it.
+        hide(sender)
         return false
     }
 
@@ -332,6 +346,7 @@ class WindowManager: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         applyPinnedState(to: window)
         takeActivation()
+        notificationCenter.post(name: .windowDidBecomeVisible, object: nil)
     }
 
     private func anchorBelowStatusItem(sender: NSStatusBarButton, window: NSPanel) {
@@ -364,10 +379,7 @@ class WindowManager: NSObject, NSWindowDelegate {
                 return event
             }
 
-            self.flushPendingSaves()
-            window.orderOut(nil)
-            self.globalClickMonitor?.stop()
-            self.yieldActivation()
+            self.hide(window)
             return event
         }
         globalClickMonitor?.start()
