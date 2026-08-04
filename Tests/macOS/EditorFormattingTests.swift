@@ -99,6 +99,20 @@ final class EditorFormattingTests {
             try selectionFont().pointSize == ceiling, "The ceiling holds on a repeated increase")
     }
 
+    /// Text already outside the range is left where it is rather than dragged to the bound.
+    ///
+    /// The editor is rich text with paste wired up, so a run pasted from another app can arrive
+    /// at 90pt. Clamping the stepped size in both directions would answer ⌘+ there by *shrinking*
+    /// it to the ceiling — making ⌘+ and ⌘- do the same thing to that run.
+    @Test(.bug(id: 50), arguments: [(true, CGFloat(90)), (false, CGFloat(4))])
+    func steppingPastABoundLeavesTheSizeAlone(increase: Bool, size: CGFloat) throws {
+        try setSelectionFontSize(size)
+
+        manager.changeFontSize(increase: increase, on: textView)
+
+        #expect(try selectionFont().pointSize == size)
+    }
+
     /// Puts "Test" at `size` and selects it, for the tests that step towards a bound.
     private func setSelectionFontSize(_ size: CGFloat) throws {
         let range = NSRange(location: 0, length: 4)

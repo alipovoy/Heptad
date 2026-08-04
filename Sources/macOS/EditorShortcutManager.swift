@@ -191,11 +191,19 @@ class EditorShortcutManager {
         }
     }
 
+    /// Steps the selection by two points, stopping at the bound in the direction of travel.
+    ///
+    /// The outer `max`/`min` are what keep a bound from *dragging* a run back to itself. The
+    /// editor is rich text with paste wired up, so a run pasted from another app can arrive well
+    /// past either bound — and ⌘+ on a 90pt heading pulling it down to 72 would mean ⌘+ and ⌘-
+    /// did the same thing to it. A run already outside the range is left where it is.
     func changeFontSize(increase: Bool, on textView: NSTextView) {
         applyFontChange(to: textView, actionName: "Font Size") { font in
-            let stepped = increase ? font.pointSize + 2 : font.pointSize - 2
-            let newSize = min(
-                AppConstants.Layout.maxFontSize, max(AppConstants.Layout.minFontSize, stepped))
+            let size = font.pointSize
+            let newSize =
+                increase
+                ? max(size, min(size + 2, AppConstants.Layout.maxFontSize))
+                : min(size, max(size - 2, AppConstants.Layout.minFontSize))
             return NSFontManager.shared.convert(font, toSize: newSize)
         }
     }
