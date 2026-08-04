@@ -173,7 +173,7 @@ struct ContentView: View {
 struct TextStatisticsBar: View {
     let stats: TextStats
 
-    /// The selected note's first line — the only place the note is named while it is open.
+    /// The selected note's first line, named here rather than only on hover over its circle.
     let title: String
 
     /// When the selected note was last edited, or nil for a note with no edit to report.
