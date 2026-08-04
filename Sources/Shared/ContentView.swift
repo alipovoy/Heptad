@@ -45,6 +45,7 @@ struct ContentView: View {
 
                     TextStatisticsBar(
                         stats: textStats,
+                        title: NoteTitleCache.shared.title(for: notes[clampedNoteIndex]),
                         lastEditedAt: notes[clampedNoteIndex].lastEditedAt,
                         now: ticker.now,
                         color: Self.colors[clampedNoteIndex]
@@ -172,6 +173,9 @@ struct ContentView: View {
 struct TextStatisticsBar: View {
     let stats: TextStats
 
+    /// The selected note's first line — the only place the note is named while it is open.
+    let title: String
+
     /// When the selected note was last edited, or nil for a note with no edit to report.
     let lastEditedAt: Date?
 
@@ -189,6 +193,16 @@ struct TextStatisticsBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            // Leading, and its own `Text`, so the counts stay one readable run. It yields
+            // width to them at the window's 320pt minimum — the counts are what this bar is
+            // for, and the title is also on every colour circle.
+            Text(title)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(title)  // The untruncated first line
+
+            Spacer(minLength: 8)
+
             Text(
                 """
                 \(stats.lines) Lines ⋅ \(stats.words) Words ⋅ \(stats.characters) \
@@ -197,7 +211,7 @@ struct TextStatisticsBar: View {
             )
             .lineLimit(1)
             .truncationMode(.tail)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
             #if os(macOS)
                 // The exact time, for when "yesterday" is not precise enough. Empty when there
                 // is no edit to report, which AppKit reads as "no tooltip".
