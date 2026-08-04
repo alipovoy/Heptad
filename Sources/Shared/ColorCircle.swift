@@ -4,6 +4,10 @@ struct ColorCircle: View {
     let index: Int
     let assignedColor: Color
     let isEmpty: Bool
+
+    /// The note's first line, so the circles say which note they are without opening each one.
+    let title: String
+
     @Binding var selectedNoteIndex: Int
 
     private var size: CGFloat {
@@ -65,6 +69,8 @@ struct ColorCircle: View {
         }
         .frame(width: size, height: size)
         .contentShape(Circle())
+        // A tooltip on macOS; an accessibility hint everywhere else.
+        .help(title)
         .onTapGesture {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                 selectedNoteIndex = index

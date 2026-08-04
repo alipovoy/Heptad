@@ -13,6 +13,7 @@ struct ColorPickerRow: View {
                     index: index,
                     assignedColor: colors[index],
                     isEmpty: notes[index].isEmpty,
+                    title: NoteTitleCache.shared.title(for: notes[index]),
                     selectedNoteIndex: $selectedNoteIndex
                 )
             }
