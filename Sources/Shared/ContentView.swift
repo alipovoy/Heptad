@@ -45,9 +45,9 @@ struct ContentView: View {
 
                     TextStatisticsBar(
                         stats: textStats,
-                        lastEditedAt: notes[selectedNoteIndex].lastEditedAt,
+                        lastEditedAt: notes[clampedNoteIndex].lastEditedAt,
                         now: ticker.now,
-                        color: Self.colors[selectedNoteIndex]
+                        color: Self.colors[clampedNoteIndex]
                     )
                     .background(backgroundFill)
                 }
@@ -100,8 +100,23 @@ struct ContentView: View {
         try? modelContext.save()
     }
 
+    /// `selectedNoteIndex` brought inside the bounds of `colors` and of `notes`.
+    ///
+    /// The stored value is plain `UserDefaults` — writable from outside the app, and carried
+    /// across versions that may not have had seven notes — and nothing sanity-checks it on read.
+    /// Indexing either array with it raw turns a junk default into a crash at launch, in a
+    /// menubar app with no window and no Dock icon: clicking the icon would simply do nothing,
+    /// with no visible explanation. `NoteEditorCoordinator.update` already guards its own
+    /// indexing; this is the same defensiveness on the views that read the selection directly.
+    ///
+    /// Bounded by the shorter of the two arrays it indexes: `colors`, and `notes`, whose count
+    /// this is only ever read after checking against `AppConstants.noteCount`.
+    private var clampedNoteIndex: Int {
+        min(max(selectedNoteIndex, 0), min(Self.colors.count, AppConstants.noteCount) - 1)
+    }
+
     private var backgroundFill: some View {
-        Self.colors[selectedNoteIndex].opacity(0.1)
+        Self.colors[clampedNoteIndex].opacity(0.1)
             .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
     }
 
