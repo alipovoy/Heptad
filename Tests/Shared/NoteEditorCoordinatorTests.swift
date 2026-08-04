@@ -269,21 +269,33 @@ struct NoteEditorCoordinatorTests {
     ///
     /// The switches happen back to back on the main actor, so both counts are in flight before
     /// either can land; whichever order they finish in, only note 1's may be reported.
+    ///
+    /// Waiting for the showing note's delivery rather than draining a task of the same priority
+    /// is what stops this passing for the wrong reason: `allSatisfy` on the deliveries that have
+    /// landed so far is vacuously true while none of them have, which a drain does not rule out.
     @Test(.bug(id: 50))
     func statisticsForANoteTheUserHasLeftAreDropped() async throws {
-        coordinator.plainTextByNoteId[0] = "First note"
-        coordinator.plainTextByNoteId[1] = "The second note, which is the one on screen"
+        let leftBehind = "First note"
+        let showing = "The second note, which is the one on screen"
+        coordinator.plainTextByNoteId[0] = leftBehind
+        coordinator.plainTextByNoteId[1] = showing
 
-        coordinator.setup(container: container, notes: notes, selectedIndex: 0)
-        coordinator.update(notes: notes, selectedIndex: 1)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            // Installed before either count is requested, so the delivery cannot land before
+            // anyone is listening.
+            coordinator.onStats = { stats in
+                if stats == TextStats(text: showing) { continuation.resume() }
+            }
+            coordinator.setup(container: container, notes: notes, selectedIndex: 0)
+            coordinator.update(notes: notes, selectedIndex: 1)
+        }
 
-        // Both counts were dispatched at .utility; draining a task of the same priority gives
-        // the stale one every chance to report before the count below is read.
+        // The showing note's count has landed, so the note-0 task has had at least that long to
+        // finish; this gives its delivery a further turn to arrive before the count is read.
         await Task.detached(priority: .utility) {}.value
 
-        let showing = TextStats(text: coordinator.plainTextByNoteId[1] ?? "")
         #expect(
-            coordinator.reportedStats.allSatisfy { $0.stats == showing },
+            coordinator.reportedStats.map(\.stats) == [TextStats(text: showing)],
             "The bar must never be handed the statistics of the note that was just left")
     }
 
