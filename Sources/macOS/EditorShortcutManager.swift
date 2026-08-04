@@ -193,7 +193,9 @@ class EditorShortcutManager {
 
     func changeFontSize(increase: Bool, on textView: NSTextView) {
         applyFontChange(to: textView, actionName: "Font Size") { font in
-            let newSize = increase ? font.pointSize + 2 : max(8, font.pointSize - 2)
+            let stepped = increase ? font.pointSize + 2 : font.pointSize - 2
+            let newSize = min(
+                AppConstants.Layout.maxFontSize, max(AppConstants.Layout.minFontSize, stepped))
             return NSFontManager.shared.convert(font, toSize: newSize)
         }
     }
@@ -230,6 +232,13 @@ class EditorShortcutManager {
 
     // MARK: - Strikethrough
 
+    /// Flips strikethrough on the selection, run by run.
+    ///
+    /// Per-run rather than reading the first character and painting that one answer over the
+    /// whole selection: on a selection that is half struck through, flattening loses the state
+    /// of every run after the first, and — the reason this matters beyond taste — it made ⌘⇧X
+    /// behave differently from ⌘B and ⌘I, which have always transformed each run on its own
+    /// terms via `applyFontChange`. Both commands now follow the same rule.
     func toggleStrikethrough(on textView: NSTextView) {
         let range = textView.selectedRange()
         let key = NSAttributedString.Key.strikethroughStyle
@@ -239,13 +248,14 @@ class EditorShortcutManager {
                 textView.shouldChangeText(in: range, replacementString: nil)
             else { return }
 
-            let hasStrikethrough =
-                (textStorage.attribute(key, at: range.location, effectiveRange: nil) as? Int ?? 0)
-                != 0
-            let newValue = hasStrikethrough ? 0 : NSUnderlineStyle.single.rawValue
-
             textStorage.beginEditing()
-            textStorage.addAttribute(key, value: newValue, range: range)
+            // Runs with no strikethrough attribute at all arrive here with a nil value, which
+            // is the unstruck case and gets struck like any other.
+            textStorage.enumerateAttribute(key, in: range, options: []) { value, attrRange, _ in
+                let isStruck = (value as? Int ?? 0) != 0
+                textStorage.addAttribute(
+                    key, value: isStruck ? 0 : NSUnderlineStyle.single.rawValue, range: attrRange)
+            }
             textStorage.endEditing()
             textView.didChangeText()
             textView.undoManager?.setActionName("Formatting")

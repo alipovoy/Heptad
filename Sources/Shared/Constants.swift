@@ -29,6 +29,11 @@ enum AppConstants {
         /// Standard default font size
         static let defaultFontSize: CGFloat = 16
 
+        /// Bounds ⌘+ and ⌘- step between. Both ends matter: without the ceiling a held ⌘+
+        /// grows the font without limit, and without the floor ⌘- walks it down through zero.
+        static let minFontSize: CGFloat = 8
+        static let maxFontSize: CGFloat = 72
+
         /// Font size of the statistics line beneath the editor.
         static let statisticsFontSize: CGFloat = 11
 
