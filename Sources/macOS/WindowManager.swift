@@ -37,7 +37,6 @@ extension Notification.Name {
 /// and stays an accessory app in both modes, so a pinned window has no Dock icon or app menu.
 class WindowManager: NSObject, NSWindowDelegate {
     private(set) var window: NSPanel?
-    private var hostingView: NSView?
 
     /// Guard flag to prevent windowDidMove from triggering during initial positioning.
     private var isPositioningPanel = false
