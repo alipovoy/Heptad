@@ -21,7 +21,12 @@ brew install xcodegen swiftlint
 
 ## Project layout
 
-* `Sources/Shared/` — code shared by both apps (SwiftUI views, SwiftData model)
+* `Sources/Shared/` — code shared by both apps, grouped by layer:
+  * `App/` — the `App` entry point and its model container
+  * `Models/` — the SwiftData model, the title derived from it, and the note palette
+  * `Views/` — SwiftUI views
+  * `Editing/` — the text-editing core the platform editors are built on
+  * `Support/` — constants, formatters, statistics, snapshots, preview fixtures
 * `Sources/macOS/` — macOS-only code (menu bar, window management, entitlements)
 * `Sources/iOS/` — iOS-only code
 * `Tests/Shared/` — tests compiled into both test targets
@@ -29,6 +34,11 @@ brew install xcodegen swiftlint
 * `project.yml` — XcodeGen project definition
 
 There is no `Tests/iOS/`; the `Heptad-iOSTests` target compiles `Tests/Shared` only.
+
+The subfolders under `Sources/Shared/` are grouping only. Everything is one module, so
+nothing imports anything else, and moving a file between them changes no code. `project.yml`
+takes `Sources/Shared` as a whole and recurses, so a new subfolder needs no project change —
+just `xcodegen generate`.
 
 ### `project.yml` is the source of truth
 
