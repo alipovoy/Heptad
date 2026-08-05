@@ -112,10 +112,25 @@ final class SnapshotStore {
 
     /// Named so that a plain lexicographic sort is a sort by age.
     ///
-    /// Down to the millisecond, not the second: a forced snapshot at termination can land in
-    /// the same second as a scheduled one, and two files of the same name is one snapshot
-    /// silently overwriting another.
+    /// Down to the millisecond, then nudged forward a millisecond at a time until the name is
+    /// free: two forced snapshots — a scene phase change and a termination — can land in the
+    /// same millisecond, and two files of the same name is one snapshot silently overwriting
+    /// another. The stamp only has to sort; `createdAt` inside the file is the real date.
+    ///
+    /// Nudging rather than suffixing is what keeps the sort honest. A `-2` on the second file
+    /// would sort *below* the first, because `-` precedes the `.` of `.json`; a later stamp of
+    /// the same width always sorts above.
     private func url(for date: Date) -> URL {
+        var date = date
+        var url = fileURL(for: date)
+        while fileManager.fileExists(atPath: url.path(percentEncoded: false)) {
+            date.addTimeInterval(0.001)
+            url = fileURL(for: date)
+        }
+        return url
+    }
+
+    private func fileURL(for date: Date) -> URL {
         let stamp = date.ISO8601Format(
             .iso8601(timeZone: .gmt)
                 .dateSeparator(.omitted)
