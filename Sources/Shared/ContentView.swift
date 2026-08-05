@@ -192,35 +192,26 @@ struct TextStatisticsBar: View {
     #endif
 
     var body: some View {
-        HStack(spacing: 8) {
-            // Leading, and its own `Text`, so the counts stay one readable run. It yields
-            // width to them at the window's 320pt minimum — the counts are what this bar is
-            // for, and the title is also on every colour circle.
-            Text(title)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .help(title)  // The untruncated first line
+        // Both when they fit, the counts alone when they do not. Squeezing the two against
+        // each other instead leaves the loser as a one-glyph stub at the window's 320pt
+        // minimum; dropping the title whole is tidier, and it is still on every colour circle.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                titleText
+                Spacer(minLength: 8)
+                countsText
+                #if os(macOS)
+                    pinToggle
+                #endif
+            }
 
-            Spacer(minLength: 8)
-
-            Text(
-                """
-                \(stats.lines) Lines ⋅ \(stats.words) Words ⋅ \(stats.characters) \
-                Characters\(editedSuffix)
-                """
-            )
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .layoutPriority(1)
-            #if os(macOS)
-                // The exact time, for when "yesterday" is not precise enough. Empty when there
-                // is no edit to report, which AppKit reads as "no tooltip".
-                .help(lastEditedAt?.formatted(date: .abbreviated, time: .shortened) ?? "")
-            #endif
-
-            #if os(macOS)
-                pinToggle
-            #endif
+            HStack(spacing: 8) {
+                countsText
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                #if os(macOS)
+                    pinToggle
+                #endif
+            }
         }
         .font(
             .system(
@@ -229,6 +220,33 @@ struct TextStatisticsBar: View {
         .padding(.horizontal, 14)
         .background(color.opacity(0.2))
         .foregroundStyle(.secondary)  // Vivid text color relying on the background
+    }
+
+    /// Capped so a long first line does not make the whole two-part layout look unfittable
+    /// and drop itself; past the cap it truncates, which is what the tooltip is for.
+    private var titleText: some View {
+        Text(title)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: 160, alignment: .leading)
+            .help(title)  // The untruncated first line
+    }
+
+    /// One `Text` so the counts read as a single run and wrap and truncate together.
+    private var countsText: some View {
+        Text(
+            """
+            \(stats.lines) Lines ⋅ \(stats.words) Words ⋅ \(stats.characters) \
+            Characters\(editedSuffix)
+            """
+        )
+        .lineLimit(1)
+        .truncationMode(.tail)
+        #if os(macOS)
+            // The exact time, for when "yesterday" is not precise enough. Empty when there
+            // is no edit to report, which AppKit reads as "no tooltip".
+            .help(lastEditedAt?.formatted(date: .abbreviated, time: .shortened) ?? "")
+        #endif
     }
 
     /// The relative edit time as one more entry in the statistics run — " ⋅ 5 minutes ago" —
@@ -258,4 +276,55 @@ struct TextStatisticsBar: View {
             .help(isWindowPinned ? "Unpin window (⌘P)" : "Keep window open (⌘P)")
         }
     #endif
+}
+
+#Preview("Seeded") {
+    ContentView()
+        .modelContainer(PreviewFixtures.container())
+        .frame(width: 420, height: 320)
+}
+
+/// The branch that shows until the seven notes exist — an empty store stands in for the
+/// moment before `HeptadApp` has seeded one.
+#Preview("Initializing") {
+    ContentView()
+        .modelContainer(PreviewFixtures.container(seeded: false))
+        .frame(width: 420, height: 320)
+}
+
+/// Both halves of the bar's one branch — no edit to report, and a real edit time — and both
+/// halves of its fit: 320pt is the window minimum, where the title drops out entirely.
+#Preview("Statistics bar") {
+    let populated = TextStats(text: "Lab credentials\nuser: admin\npass: rotate-me")
+
+    return VStack(spacing: 12) {
+        TextStatisticsBar(
+            stats: .zero, title: NoteTitleCache.emptyTitle, lastEditedAt: nil,
+            now: PreviewFixtures.now, color: .yellow
+        )
+        .frame(width: 480)
+
+        TextStatisticsBar(
+            stats: populated, title: "Lab credentials",
+            lastEditedAt: PreviewFixtures.now.addingTimeInterval(-300),
+            now: PreviewFixtures.now, color: .red
+        )
+        .frame(width: 480)
+
+        TextStatisticsBar(
+            stats: populated,
+            title: "Release checklist for the long-title case, truncated in the bar",
+            lastEditedAt: PreviewFixtures.now.addingTimeInterval(-86_400),
+            now: PreviewFixtures.now, color: .green
+        )
+        .frame(width: 480)
+
+        TextStatisticsBar(
+            stats: populated, title: "Lab credentials",
+            lastEditedAt: PreviewFixtures.now.addingTimeInterval(-300),
+            now: PreviewFixtures.now, color: .blue
+        )
+        .frame(width: 320)
+    }
+    .padding()
 }

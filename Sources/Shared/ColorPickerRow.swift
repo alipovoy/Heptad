@@ -20,3 +20,11 @@ struct ColorPickerRow: View {
         }
     }
 }
+
+/// The row as it is normally seen: mostly empty notes, two with content, one of them selected.
+#Preview("Mixed row") {
+    ColorPickerRow(
+        selectedNoteIndex: .constant(3), colors: ContentView.colors, notes: PreviewFixtures.notes()
+    )
+    .padding()
+}
