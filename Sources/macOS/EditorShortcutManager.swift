@@ -185,7 +185,11 @@ class EditorShortcutManager {
 
     // MARK: - Font Formatting
 
+    /// No-op in a plain-text note: the point of the mode is one uniform font, so ⌘B and ⌘I
+    /// have nothing to apply. The key stays consumed either way — it is still the app's.
     func toggleFontTrait(_ trait: NSFontTraitMask, on textView: NSTextView) {
+        guard textView.isRichText else { return }
+
         let fontManager = NSFontManager.shared
         applyFontChange(to: textView, actionName: "Formatting") { font in
             fontManager.traits(of: font).contains(trait)
@@ -265,7 +269,10 @@ class EditorShortcutManager {
     /// of every run after the first, and — the reason this matters beyond taste — it made ⌘⇧X
     /// behave differently from ⌘B and ⌘I, which have always transformed each run on its own
     /// terms via `applyFontChange`. Both commands now follow the same rule.
+    /// No-op in a plain-text note, for the same reason as ⌘B and ⌘I.
     func toggleStrikethrough(on textView: NSTextView) {
+        guard textView.isRichText else { return }
+
         let range = textView.selectedRange()
         let key = NSAttributedString.Key.strikethroughStyle
 

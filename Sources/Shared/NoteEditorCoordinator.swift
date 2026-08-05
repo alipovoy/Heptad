@@ -29,7 +29,12 @@ class NoteEditorCoordinator: NSObject {
         let note = notes[selectedIndex]
 
         if currentNoteId == note.id {
-            return  // already showing
+            // Already showing, but its settings may have just changed — the plain-text toggle
+            // acts on the note, not on the view, and the view is cached across updates.
+            if let editorView = editorViews[note.id] {
+                configure(editorView, for: note)
+            }
+            return
         }
 
         guard let container else { return }
@@ -107,6 +112,10 @@ class NoteEditorCoordinator: NSObject {
     func makeEditorView(for note: NoteItem) -> PlatformView {
         fatalError("Subclasses must override makeEditorView(for:)")
     }
+
+    /// Applies a note's own settings — plain-text mode today — to a view that already exists.
+    /// `makeEditorView` starts a new view off in the right mode; this keeps it there.
+    func configure(_ editorView: PlatformView, for note: NoteItem) {}
 
     func resignFocus(from editorView: PlatformView) {}
 

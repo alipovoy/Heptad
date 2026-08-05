@@ -20,10 +20,18 @@ final class NoteItem {
     /// and it keeps them behind every genuinely timestamped note in a recency ordering.
     var modifiedAt: Date = Date.distantPast
 
-    init(id: Int, rtfData: Data = Data(), modifiedAt: Date = .now) {
+    /// Whether the note is edited as plain, monospaced text.
+    ///
+    /// The store is RTF either way; this only says what the editor may put in it. Same reason
+    /// as `modifiedAt` for carrying a default: SwiftData needs one to lightweight-migrate
+    /// stores written before the property existed, and rich text is what those notes were.
+    var isPlainText: Bool = false
+
+    init(id: Int, rtfData: Data = Data(), modifiedAt: Date = .now, isPlainText: Bool = false) {
         self.id = id
         self.rtfData = rtfData
         self.modifiedAt = modifiedAt
+        self.isPlainText = isPlainText
     }
 }
 

@@ -1,0 +1,168 @@
+import AppKit
+import SwiftUI
+import Testing
+
+@testable import Heptad
+
+/// Per-note plain-text mode, where it is applied: the text view the coordinator configures,
+/// and the formatting shortcuts that have to stop working in it.
+@MainActor
+final class PlainTextModeTests {
+    private let coordinator: MacRichTextEditor.Coordinator
+    private let scrollView: NSScrollView
+    private let suiteName: String
+    private let defaults: UserDefaults
+    private let manager: EditorShortcutManager
+
+    init() throws {
+        coordinator = MacRichTextEditor.Coordinator(
+            MacRichTextEditor(
+                notes: [], selectedNoteIndex: .constant(0), textStats: .constant(.zero)))
+
+        // The coordinator vends the same scroll-view-wrapped text view the app installs, so
+        // `configure` is exercised through the shape it actually meets.
+        scrollView = try #require(
+            coordinator.makeEditorView(for: NoteItem(id: 0)) as? NSScrollView)
+
+        suiteName = "PlainTextModeTests.\(UUID().uuidString)"
+        defaults = try #require(UserDefaults(suiteName: suiteName))
+        manager = EditorShortcutManager(defaults: defaults)
+    }
+
+    isolated deinit {
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    private func textView() throws -> NSTextView {
+        try #require(scrollView.documentView as? NSTextView)
+    }
+
+    private func font(at location: Int) throws -> NSFont {
+        let storage = try #require(try textView().textStorage)
+        return try #require(storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont)
+    }
+
+    // MARK: - Storage
+
+    @Test func notesAreRichTextUntilToldOtherwise() {
+        #expect(NoteItem(id: 0).isPlainText == false)
+    }
+
+    // MARK: - Applying the mode
+
+    @Test func aPlainNoteOpensPlainAndMonospaced() throws {
+        let scrollView = try #require(
+            coordinator.makeEditorView(for: NoteItem(id: 1, isPlainText: true)) as? NSScrollView)
+        let textView = try #require(scrollView.documentView as? NSTextView)
+
+        #expect(textView.isRichText == false)
+        #expect(textView.font == .monospacedSystemFont(
+            ofSize: AppConstants.Layout.defaultFontSize, weight: .regular))
+    }
+
+    /// Switching to plain keeps every character and drops only how it looked — the note is
+    /// flattened to one uniform font, not emptied.
+    @Test func switchingToPlainFlattensTheFormattingAndKeepsTheText() throws {
+        let textView = try textView()
+        textView.string = "user: admin"
+        textView.textStorage?.addAttribute(
+            .font, value: NSFont.boldSystemFont(ofSize: 24),
+            range: NSRange(location: 0, length: 4))
+
+        coordinator.configure(scrollView, for: NoteItem(id: 0, isPlainText: true))
+
+        #expect(textView.string == "user: admin")
+        #expect(textView.isRichText == false)
+        let monospaced = NSFont.monospacedSystemFont(
+            ofSize: AppConstants.Layout.defaultFontSize, weight: .regular)
+        #expect(try font(at: 0) == monospaced, "The styled run is flattened")
+        #expect(try font(at: 6) == monospaced, "So is the rest")
+    }
+
+    @Test func switchingBackToRichRestoresTheProportionalFont() throws {
+        let textView = try textView()
+        textView.string = "user: admin"
+
+        coordinator.configure(scrollView, for: NoteItem(id: 0, isPlainText: true))
+        coordinator.configure(scrollView, for: NoteItem(id: 0, isPlainText: false))
+
+        #expect(textView.isRichText)
+        #expect(try font(at: 0) == .systemFont(ofSize: AppConstants.Layout.defaultFontSize))
+    }
+
+    /// `configure` runs on every update, so it has to be inert when the mode has not moved.
+    /// Left unguarded it would re-flatten a rich note's formatting on the next keystroke.
+    @Test func configuringAnUnchangedModeLeavesTheTextAlone() throws {
+        let textView = try textView()
+        textView.string = "user: admin"
+        let bold = NSFont.boldSystemFont(ofSize: 24)
+        textView.textStorage?.addAttribute(
+            .font, value: bold, range: NSRange(location: 0, length: 4))
+
+        coordinator.configure(scrollView, for: NoteItem(id: 0))
+
+        #expect(try font(at: 0) == bold)
+    }
+
+    // MARK: - Paste
+
+    /// The other half of what `isRichText = false` buys: styled text arriving from another app
+    /// lands as text. Read from a private pasteboard rather than `paste(_:)`, which would take
+    /// over the user's real clipboard for the length of the run.
+    @Test func pastingStyledTextIntoAPlainNoteDropsTheStyling() throws {
+        let textView = try textView()
+        coordinator.configure(scrollView, for: NoteItem(id: 0, isPlainText: true))
+
+        let styled = NSAttributedString(
+            string: "rotate-me", attributes: [.font: NSFont.boldSystemFont(ofSize: 24)])
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("PlainTextModeTests.\(UUID())"))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        pasteboard.setData(
+            try #require(styled.rtf(from: NSRange(location: 0, length: styled.length))),
+            forType: .rtf)
+        pasteboard.setString(styled.string, forType: .string)
+
+        #expect(textView.readSelection(from: pasteboard))
+
+        #expect(textView.string == "rotate-me")
+        #expect(
+            try font(at: 0) == .monospacedSystemFont(
+                ofSize: AppConstants.Layout.defaultFontSize, weight: .regular),
+            "The pasted run takes the note's own font, not the source app's")
+    }
+
+    // MARK: - Formatting shortcuts
+
+    /// ⌘B, ⌘I and ⌘⇧X have nothing to apply in a note that is one uniform font.
+    @Test func formattingShortcutsDoNothingInAPlainNote() throws {
+        let textView = try textView()
+        textView.string = "user: admin"
+        coordinator.configure(scrollView, for: NoteItem(id: 0, isPlainText: true))
+        textView.setSelectedRange(NSRange(location: 0, length: 4))
+        let before = try font(at: 0)
+
+        manager.toggleFontTrait(.boldFontMask, on: textView)
+        manager.toggleFontTrait(.italicFontMask, on: textView)
+        manager.toggleStrikethrough(on: textView)
+
+        #expect(try font(at: 0) == before)
+        let storage = try #require(textView.textStorage)
+        #expect(storage.attribute(.strikethroughStyle, at: 0, effectiveRange: nil) == nil)
+    }
+
+    /// The same commands still work in a rich note — the guard is on the mode, not on the
+    /// commands. `EditorFormattingTests` covers what they do in detail.
+    @Test func formattingShortcutsStillWorkInARichNote() throws {
+        let textView = try textView()
+        textView.string = "user: admin"
+        textView.textStorage?.addAttribute(
+            .font, value: NSFont.systemFont(ofSize: 16), range: NSRange(location: 0, length: 11))
+        textView.setSelectedRange(NSRange(location: 0, length: 4))
+
+        manager.toggleFontTrait(.boldFontMask, on: textView)
+
+        #expect(
+            NSFontManager.shared.traits(of: try font(at: 0)).contains(.boldFontMask))
+    }
+}

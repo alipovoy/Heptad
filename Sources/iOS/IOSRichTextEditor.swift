@@ -34,8 +34,9 @@ struct IOSRichTextEditor: UIViewRepresentable {
             let textView = UITextView()
 
             textView.delegate = self
-            textView.allowsEditingTextAttributes = true
-            textView.font = .systemFont(ofSize: AppConstants.Layout.defaultFontSize)
+            // Plain mode is attribute editing off, which is also what makes paste unstyled.
+            textView.allowsEditingTextAttributes = !note.isPlainText
+            textView.font = .editorBody(plainText: note.isPlainText)
             textView.backgroundColor = .clear
 
             // Apply text padding
@@ -46,6 +47,34 @@ struct IOSRichTextEditor: UIViewRepresentable {
                 textView.undoManager?.removeAllActions()  // clear undo history on load
             }
             return textView
+        }
+
+        /// Switches the visible text view between rich and plain, flattening what is already
+        /// there. `allowsEditingTextAttributes` is the applied state, so this is a no-op until
+        /// the note's mode actually changes.
+        override func configure(_ editorView: UIView, for note: NoteItem) {
+            guard let textView = editorView as? UITextView,
+                textView.allowsEditingTextAttributes == note.isPlainText
+            else { return }
+
+            textView.allowsEditingTextAttributes = !note.isPlainText
+
+            let attributes = PlainTextMode.attributes(plainText: note.isPlainText)
+            let flattened = NSMutableAttributedString(attributedString: textView.attributedText)
+            if flattened.length > 0 {
+                flattened.setAttributes(
+                    attributes, range: NSRange(location: 0, length: flattened.length))
+            }
+
+            // Assigning `attributedText` resets both of these, so they are restored after it.
+            let selection = textView.selectedRange
+            textView.attributedText = flattened
+            textView.selectedRange = selection
+            textView.typingAttributes = attributes
+
+            // Assigning the text does not call the delegate, so the saver is told directly —
+            // otherwise the flattening would sit in the view until the next keystroke.
+            textDidChange(attributedString: flattened, plainText: textView.text ?? "")
         }
 
         override func resignFocus(from editorView: UIView) {
