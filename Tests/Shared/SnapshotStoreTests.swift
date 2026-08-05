@@ -83,6 +83,30 @@ final class SnapshotStoreTests {
         #expect(store.snapshots().count == 2)
     }
 
+    /// Collided names must still sort newest first — the property that decides what
+    /// `mostRecent()` returns and which end `rotate()` drops.
+    ///
+    /// Suffixing the second file instead of moving its stamp would invert exactly this and
+    /// leave the count above unchanged: `-` precedes the `.` of `.json`, so `-2` sorts *below*
+    /// the name it was meant to follow. The last millisecond of a second, so the nudges have to
+    /// carry through the second as well.
+    @Test(.bug(id: 85)) func collidedSnapshotsStillSortNewestFirst() throws {
+        let notes = try notes()
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000).addingTimeInterval(0.999)
+
+        for step in 0..<3 {
+            notes[0].rtfData = try #require(
+                NoteItem.rtfData(from: NSAttributedString(string: "step \(step)")))
+            #expect(store.writeIfDue(notes: notes, now: now, force: true))
+        }
+
+        #expect(fileCount() == 3)
+
+        let listed = store.snapshots()
+        #expect(listed.count == 3)
+        #expect(listed.first?.notes.first?.rtfData == notes[0].rtfData, "Newest first")
+    }
+
     // MARK: - Rotation
 
     @Test func onlyTheMostRecentSnapshotsAreKept() throws {
