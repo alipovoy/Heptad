@@ -49,10 +49,11 @@ struct MacRichTextEditor: NSViewRepresentable {
 
             textView.delegate = self
             textView.allowsUndo = true
-            textView.isRichText = true
+            // Plain mode is `isRichText = false`, which is also what makes ⌘V paste unstyled.
+            textView.isRichText = !note.isPlainText
             textView.importsGraphics = false
             textView.allowsImageEditing = false
-            textView.font = .systemFont(ofSize: AppConstants.Layout.defaultFontSize)
+            textView.font = .editorBody(plainText: note.isPlainText)
 
             textView.usesInspectorBar = false
             textView.allowsDocumentBackgroundColorChange = false
@@ -70,6 +71,29 @@ struct MacRichTextEditor: NSViewRepresentable {
             }
 
             return scrollView
+        }
+
+        /// Switches the visible text view between rich and plain, flattening what is already
+        /// there. `isRichText` is the applied state, so this is a no-op until the note's mode
+        /// actually changes.
+        override func configure(_ editorView: NSView, for note: NoteItem) {
+            guard let textView = textView(in: editorView),
+                textView.isRichText == note.isPlainText
+            else { return }
+
+            textView.isRichText = !note.isPlainText
+
+            let attributes = PlainTextMode.attributes(plainText: note.isPlainText)
+            textView.typingAttributes = attributes
+
+            // Through the change hooks, so the flattening is one undo step and reaches the
+            // saver — the note keeps its text and loses only how it looked.
+            guard let textStorage = textView.textStorage, textStorage.length > 0 else { return }
+            let range = NSRange(location: 0, length: textStorage.length)
+            guard textView.shouldChangeText(in: range, replacementString: nil) else { return }
+
+            textStorage.setAttributes(attributes, range: range)
+            textView.didChangeText()
         }
 
         override func resignFocus(from editorView: NSView) {

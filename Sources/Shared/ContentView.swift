@@ -48,7 +48,9 @@ struct ContentView: View {
                         title: NoteTitleCache.shared.title(for: notes[clampedNoteIndex]),
                         lastEditedAt: notes[clampedNoteIndex].lastEditedAt,
                         now: ticker.now,
-                        color: Self.colors[clampedNoteIndex]
+                        color: Self.colors[clampedNoteIndex],
+                        isPlainText: notes[clampedNoteIndex].isPlainText,
+                        togglePlainText: { notes[clampedNoteIndex].isPlainText.toggle() }
                     )
                     .background(backgroundFill)
                 }
@@ -185,6 +187,11 @@ struct TextStatisticsBar: View {
 
     let color: Color
 
+    /// The selected note's editing mode, and the way to flip it. Both live on the note, so
+    /// the bar only reports and asks — `ContentView` owns the write.
+    let isPlainText: Bool
+    let togglePlainText: () -> Void
+
     #if os(macOS)
         /// Read-only mirror of the window state WindowManager persists, so the pin button always
         /// shows the truth — including when the state changes by ⌘P or by dragging the panel away.
@@ -200,6 +207,7 @@ struct TextStatisticsBar: View {
                 titleText
                 Spacer(minLength: 8)
                 countsText
+                plainTextToggle
                 #if os(macOS)
                     pinToggle
                 #endif
@@ -208,6 +216,7 @@ struct TextStatisticsBar: View {
             HStack(spacing: 8) {
                 countsText
                     .frame(maxWidth: .infinity, alignment: .leading)
+                plainTextToggle
                 #if os(macOS)
                     pinToggle
                 #endif
@@ -220,6 +229,22 @@ struct TextStatisticsBar: View {
         .padding(.horizontal, 14)
         .background(color.opacity(0.2))
         .foregroundStyle(.secondary)  // Vivid text color relying on the background
+    }
+
+    /// The per-note plain-text switch. It sits here rather than in the macOS title bar the
+    /// issue suggested: the two icons are different widths, and anything of variable width up
+    /// there pushes the colour circles off centre — the same reason the pin toggle is here.
+    private var plainTextToggle: some View {
+        Button(action: togglePlainText) {
+            Image(systemName: isPlainText ? "curlybraces" : "textformat")
+                .font(.system(size: AppConstants.Layout.pinToggleIconSize))
+        }
+        .buttonStyle(.plain)
+        #if os(macOS)
+            .focusable(false)
+        #endif
+        .accessibilityLabel(isPlainText ? "Use rich text" : "Use plain text")
+        .help(isPlainText ? "Rich text for this note" : "Plain monospaced text for this note")
     }
 
     /// Capped so a long first line does not make the whole two-part layout look unfittable
@@ -292,22 +317,23 @@ struct TextStatisticsBar: View {
         .frame(width: 420, height: 320)
 }
 
-/// Both halves of the bar's one branch — no edit to report, and a real edit time — and both
-/// halves of its fit: 320pt is the window minimum, where the title drops out entirely.
+/// Both halves of the bar's one branch — no edit to report, and a real edit time — both modes
+/// of the plain-text toggle, and both halves of its fit: 320pt is the window minimum, where
+/// the title drops out entirely.
 #Preview("Statistics bar") {
     let populated = TextStats(text: "Lab credentials\nuser: admin\npass: rotate-me")
 
     return VStack(spacing: 12) {
         TextStatisticsBar(
             stats: .zero, title: NoteTitleCache.emptyTitle, lastEditedAt: nil,
-            now: PreviewFixtures.now, color: .yellow
+            now: PreviewFixtures.now, color: .yellow, isPlainText: false, togglePlainText: {}
         )
         .frame(width: 480)
 
         TextStatisticsBar(
             stats: populated, title: "Lab credentials",
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-300),
-            now: PreviewFixtures.now, color: .red
+            now: PreviewFixtures.now, color: .red, isPlainText: true, togglePlainText: {}
         )
         .frame(width: 480)
 
@@ -315,14 +341,14 @@ struct TextStatisticsBar: View {
             stats: populated,
             title: "Release checklist for the long-title case, truncated in the bar",
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-86_400),
-            now: PreviewFixtures.now, color: .green
+            now: PreviewFixtures.now, color: .green, isPlainText: false, togglePlainText: {}
         )
         .frame(width: 480)
 
         TextStatisticsBar(
             stats: populated, title: "Lab credentials",
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-300),
-            now: PreviewFixtures.now, color: .blue
+            now: PreviewFixtures.now, color: .blue, isPlainText: true, togglePlainText: {}
         )
         .frame(width: 320)
     }
