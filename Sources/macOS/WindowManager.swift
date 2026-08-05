@@ -76,15 +76,21 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// Weak reference to the status bar button to prevent dismissal when the user clicks the button itself
     weak var statusBarButton: NSStatusBarButton?
 
+    /// What AppKit persists the panel's frame under; "" persists nothing. Injected because the
+    /// autosave bypasses `defaults` above — see the call in `WindowManagerTests`.
+    private let frameAutosaveName: NSWindow.FrameAutosaveName
+
     init(
         defaults: UserDefaults = .standard,
         notificationCenter: NotificationCenter = .default,
         workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
-        activation: ActivationCoordinating = SystemActivationCoordinator()
+        activation: ActivationCoordinating = SystemActivationCoordinator(),
+        frameAutosaveName: NSWindow.FrameAutosaveName = "HeptadPanel"
     ) {
         self.defaults = defaults
         self.notificationCenter = notificationCenter
         self.activation = activation
+        self.frameAutosaveName = frameAutosaveName
         super.init()
 
         // No removeObserver needed: selector-based observers auto-unregister on deinit.
@@ -298,9 +304,7 @@ class WindowManager: NSObject, NSWindowDelegate {
     // MARK: - Hosting View
 
     private lazy var mainHostingView: NSView = {
-        let view = ContentView()
-            .modelContainer(HeptadApp.sharedModelContainer)
-        return NSHostingView(rootView: view)
+        NSHostingView(rootView: ContentView().modelContainer(HeptadApp.sharedModelContainer))
     }()
 
     // MARK: - Showing the Window
@@ -315,7 +319,7 @@ class WindowManager: NSObject, NSWindowDelegate {
                 backing: .buffered, defer: false)
 
             // AppKit persists and restores the frame; panel mode re-anchors the origin on every show.
-            panel.setFrameAutosaveName("HeptadPanel")
+            panel.setFrameAutosaveName(frameAutosaveName)
 
             panel.titlebarAppearsTransparent = true
             panel.titleVisibility = .hidden

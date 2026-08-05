@@ -81,7 +81,12 @@ final class WindowManagerTests {
             defaults: defaults,
             notificationCenter: notificationCenter,
             workspaceNotificationCenter: workspaceNotificationCenter,
-            activation: activation)
+            activation: activation,
+            // Frame autosaving off. AppKit keys it on the name in *standard* defaults, outside
+            // the scratch suite above, so the shipping name would have this fixture restoring
+            // the installed app's parked frame — and writing its own back over it. That is what
+            // made the position assertions pass or fail on what the machine already had.
+            frameAutosaveName: "")
         mockStatusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         // A status item is handed its slot in the menu bar asynchronously. Until that lands its
