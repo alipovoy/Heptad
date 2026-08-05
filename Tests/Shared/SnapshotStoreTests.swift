@@ -61,20 +61,25 @@ final class SnapshotStoreTests {
     /// `force` is what termination uses — but not a licence to write copies.
     @Test func forcingSkipsASnapshotThatWouldBeIdentical() throws {
         let notes = try notes()
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
 
-        #expect(store.writeIfDue(notes: notes, force: true))
-        #expect(store.writeIfDue(notes: notes, force: true) == false)
+        #expect(store.writeIfDue(notes: notes, now: now, force: true))
+        #expect(store.writeIfDue(notes: notes, now: now, force: true) == false)
 
         #expect(store.snapshots().count == 1)
     }
 
-    @Test func forcingWritesWhenTheNotesHaveChanged() throws {
+    /// The same instant on purpose: two forced writes in one millisecond is reachable when a
+    /// scene phase change and a termination arrive together, and the second must not overwrite
+    /// the first.
+    @Test(.bug(id: 85)) func forcingWritesWhenTheNotesHaveChanged() throws {
         let notes = try notes()
-        #expect(store.writeIfDue(notes: notes, force: true))
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        #expect(store.writeIfDue(notes: notes, now: now, force: true))
 
         notes[0].rtfData = Data()
 
-        #expect(store.writeIfDue(notes: notes, force: true))
+        #expect(store.writeIfDue(notes: notes, now: now, force: true))
         #expect(store.snapshots().count == 2)
     }
 
