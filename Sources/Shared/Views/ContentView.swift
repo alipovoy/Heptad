@@ -18,8 +18,6 @@ struct ContentView: View {
     @State private var snapshots = SnapshotStore()
     @State private var isShowingSnapshots = false
 
-    static let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]
-
     #if os(macOS)
         private static let willTerminateNotification = NSApplication.willTerminateNotification
     #else
@@ -37,10 +35,7 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(backgroundFill)
                     #else
-                        ColorPickerRow(
-                            selectedNoteIndex: $selectedNoteIndex, colors: Self.colors,
-                            notes: notes
-                        )
+                        ColorPickerRow(selectedNoteIndex: $selectedNoteIndex, notes: notes)
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
 
@@ -53,7 +48,7 @@ struct ContentView: View {
                         title: NoteTitleCache.shared.title(for: notes[clampedNoteIndex]),
                         lastEditedAt: notes[clampedNoteIndex].lastEditedAt,
                         now: ticker.now,
-                        color: Self.colors[clampedNoteIndex],
+                        color: NotePalette.colors[clampedNoteIndex],
                         isPlainText: notes[clampedNoteIndex].isPlainText,
                         togglePlainText: { notes[clampedNoteIndex].isPlainText.toggle() },
                         showSnapshots: { isShowingSnapshots = true }
@@ -144,7 +139,7 @@ struct ContentView: View {
         NotificationCenter.default.post(name: .notesDidRestore, object: nil)
     }
 
-    /// `selectedNoteIndex` brought inside the bounds of `colors` and of `notes`.
+    /// `selectedNoteIndex` brought inside the bounds of `NotePalette.colors` and of `notes`.
     ///
     /// The stored value is plain `UserDefaults` — writable from outside the app, and carried
     /// across versions that may not have had seven notes — and nothing sanity-checks it on read.
@@ -153,14 +148,14 @@ struct ContentView: View {
     /// with no visible explanation. `NoteEditorCoordinator.update` already guards its own
     /// indexing; this is the same defensiveness on the views that read the selection directly.
     ///
-    /// Bounded by the shorter of the two arrays it indexes: `colors`, and `notes`, whose count
-    /// this is only ever read after checking against `AppConstants.noteCount`.
+    /// Bounded by the shorter of the two arrays it indexes: the palette, and `notes`, whose
+    /// count this is only ever read after checking against `AppConstants.noteCount`.
     private var clampedNoteIndex: Int {
-        min(max(selectedNoteIndex, 0), min(Self.colors.count, AppConstants.noteCount) - 1)
+        min(max(selectedNoteIndex, 0), min(NotePalette.colors.count, AppConstants.noteCount) - 1)
     }
 
     private var backgroundFill: some View {
-        Self.colors[clampedNoteIndex].opacity(0.1)
+        NotePalette.colors[clampedNoteIndex].opacity(0.1)
             .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
     }
 
@@ -181,9 +176,7 @@ struct ContentView: View {
 
                 Spacer()
 
-                ColorPickerRow(
-                    selectedNoteIndex: $selectedNoteIndex, colors: Self.colors,
-                    notes: notes)
+                ColorPickerRow(selectedNoteIndex: $selectedNoteIndex, notes: notes)
 
                 Spacer()
 
