@@ -99,6 +99,24 @@ struct MacRichTextEditor: NSViewRepresentable {
             (editorView as? NSScrollView)?.documentView as? NSTextView
         }
 
+        /// Continues or ends a list when Return is pressed on one, by making the edit here and
+        /// declining the newline that would otherwise be inserted.
+        ///
+        /// Re-entrant by design: `apply` calls `shouldChangeText(in:replacementString:)`, which
+        /// asks this method again — with the marker text, never a bare "\n", so it passes.
+        func textView(
+            _ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange,
+            replacementString: String?
+        ) -> Bool {
+            guard replacementString == "\n",
+                let edit = ListContinuation.returnEdit(
+                    in: textView.string as NSString, selectedRange: affectedCharRange)
+            else { return true }
+
+            textView.apply(edit)
+            return false
+        }
+
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView,
                 let textStorage = textView.textStorage
