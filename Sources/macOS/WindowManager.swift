@@ -35,6 +35,7 @@ extension Notification.Name {
 ///
 /// Pinning does not touch `NSApp.setActivationPolicy`: the app ships with `LSUIElement: true`
 /// and stays an accessory app in both modes, so a pinned window has no Dock icon or app menu.
+@MainActor
 class WindowManager: NSObject, NSWindowDelegate {
     private(set) var window: NSPanel?
 

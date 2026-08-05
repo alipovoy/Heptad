@@ -8,19 +8,25 @@ import Carbon.HIToolbox
 /// needs no Accessibility permission, so the app never has to ask the user for one.
 ///
 /// The manager knows nothing about windows — it just calls `onHotKey`.
+@MainActor
 class GlobalHotKeyManager {
     /// Invoked every time the registered hotkey is pressed, on the main thread.
     var onHotKey: (() -> Void)?
 
+    // The four constants below are `nonisolated`: they are immutable values, and the Carbon
+    // callback at the bottom of this file reads two of them from a C function pointer, which
+    // has no isolation to inherit. Left isolated with the rest of the class, that read is a
+    // warning today and an error under the Swift 6 language mode.
+
     /// Default binding: ⌃⌥Space.
-    static let defaultKeyCode = UInt32(kVK_Space)
-    static let defaultModifierFlags: NSEvent.ModifierFlags = [.control, .option]
+    nonisolated static let defaultKeyCode = UInt32(kVK_Space)
+    nonisolated static let defaultModifierFlags: NSEvent.ModifierFlags = [.control, .option]
 
     /// Four-char code 'Hept', marking hotkey events as belonging to this app.
-    static let signature = OSType(0x4865_7074)
+    nonisolated static let signature = OSType(0x4865_7074)
 
     /// Only one hotkey is registered, so a fixed id is enough to identify it.
-    static let hotKeyIdentifier: UInt32 = 1
+    nonisolated static let hotKeyIdentifier: UInt32 = 1
 
     private let defaults: UserDefaults
     private var hotKeyRef: EventHotKeyRef?
@@ -30,7 +36,9 @@ class GlobalHotKeyManager {
         self.defaults = defaults
     }
 
-    deinit {
+    /// `isolated` for the same reason as `EventMonitor`'s: the teardown has to keep running on
+    /// the main actor, and a nonisolated `deinit` cannot call an isolated method at all.
+    isolated deinit {
         unregister()
     }
 

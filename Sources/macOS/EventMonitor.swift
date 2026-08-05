@@ -2,6 +2,10 @@ import Cocoa
 
 /// A utility class that encapsulates the lifecycle of an NSEvent monitor.
 /// Adheres to RAII principles: the monitor is unregistered automatically on deinit.
+///
+/// Main-actor isolated: `NSEvent`'s monitor registration is AppKit, and the handler is called
+/// on the main thread by both the local and the global variant.
+@MainActor
 class EventMonitor {
     private var monitor: Any?
     private let mask: NSEvent.EventTypeMask
@@ -39,7 +43,11 @@ class EventMonitor {
         }
     }
 
-    deinit {
+    /// `isolated` so the RAII teardown keeps running on the main actor wherever the last
+    /// release happens to land. Removing an `NSEvent` monitor is AppKit, and a plain `deinit`
+    /// is nonisolated: it could not call `stop()` at all, and `assumeIsolated` would be an
+    /// assumption rather than a fact, since the last reference can be dropped on any thread.
+    isolated deinit {
         stop()
     }
 }
