@@ -78,3 +78,20 @@ struct ColorCircle: View {
         }
     }
 }
+
+/// Every state the circle has: selected — which is also the only one with the number overlay —
+/// unselected with content, and empty.
+#Preview("States") {
+    HStack(spacing: AppConstants.Layout.defaultSpacing) {
+        ColorCircle(
+            index: 0, assignedColor: .red, isEmpty: false, title: "Lab credentials",
+            selectedNoteIndex: .constant(0))
+        ColorCircle(
+            index: 1, assignedColor: .orange, isEmpty: false, title: "Prompt drafts",
+            selectedNoteIndex: .constant(0))
+        ColorCircle(
+            index: 2, assignedColor: .yellow, isEmpty: true, title: NoteTitleCache.emptyTitle,
+            selectedNoteIndex: .constant(0))
+    }
+    .padding()
+}
