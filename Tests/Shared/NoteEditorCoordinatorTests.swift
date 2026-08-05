@@ -143,6 +143,24 @@ struct NoteEditorCoordinatorTests {
         #expect(container.subviews.first === firstView)
     }
 
+    /// A restore rewrites `rtfData` underneath views that are already installed, and nothing
+    /// about a model write reaches a text view. The cache is dropped so the next update
+    /// rebuilds from the notes — otherwise the editor keeps showing the text that was replaced.
+    @Test func restoringDropsTheCachedViews() throws {
+        coordinator.setup(container: container, notes: notes, selectedIndex: 0)
+        let beforeRestore = try #require(container.subviews.first)
+
+        NotificationCenter.default.post(name: .notesDidRestore, object: nil)
+
+        #expect(coordinator.currentNoteId == nil)
+        #expect(container.subviews.isEmpty)
+
+        coordinator.update(notes: notes, selectedIndex: 0)
+
+        #expect(coordinator.madeViewNoteIds == [0, 0], "Rebuilt rather than reused")
+        #expect(container.subviews.first !== beforeRestore)
+    }
+
     // MARK: - View swapping
 
     @Test func switchingAwayResignsAndRemovesTheOutgoingView() throws {
