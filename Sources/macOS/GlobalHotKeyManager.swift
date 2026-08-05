@@ -29,17 +29,34 @@ class GlobalHotKeyManager {
     nonisolated static let hotKeyIdentifier: UInt32 = 1
 
     private let defaults: UserDefaults
-    private var hotKeyRef: EventHotKeyRef?
-    private var eventHandler: EventHandlerRef?
+
+    /// The two Carbon handles, `nonisolated(unsafe)` so `deinit` can release them.
+    ///
+    /// They are `OpaquePointer`s and so not Sendable, which under the Swift 6 language mode
+    /// puts them out of reach of a nonisolated `deinit` — and `deinit` is where the teardown
+    /// has to happen. The exemption is narrow: every other access is through the isolated
+    /// methods below, and by `deinit` no other reference to this object exists, so there is
+    /// nothing left for the isolation to serialise against.
+    nonisolated(unsafe) private var hotKeyRef: EventHotKeyRef?
+    nonisolated(unsafe) private var eventHandler: EventHandlerRef?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
 
-    /// `isolated` for the same reason as `EventMonitor`'s: the teardown has to keep running on
-    /// the main actor, and a nonisolated `deinit` cannot call an isolated method at all.
-    isolated deinit {
-        unregister()
+    /// The teardown, inlined for the same reason as `EventMonitor`'s: a nonisolated `deinit`
+    /// cannot call the isolated `unregister()`, and `isolated deinit` is not safe to ship at
+    /// this project's macOS 14 target. See the note there, and #88.
+    ///
+    /// Both calls are plain C and carry no isolation of their own, and by `deinit` nothing
+    /// else holds these refs.
+    deinit {
+        if let hotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+        }
+        if let eventHandler {
+            RemoveEventHandler(eventHandler)
+        }
     }
 
     // MARK: - Binding
