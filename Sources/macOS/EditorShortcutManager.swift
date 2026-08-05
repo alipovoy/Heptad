@@ -10,24 +10,35 @@ import SwiftUI
 /// SwiftUI's Settings scene resets any manually-installed mainMenu once it becomes active
 /// anyway, so a real menu isn't a reliable substitute yet. This monitor is the single source
 /// of truth for shortcuts until the app can show a Dock icon and a real, SwiftUI-owned menu.
+@MainActor
 class EditorShortcutManager {
     private var localKeyMonitor: EventMonitor?
     private let notificationCenter: NotificationCenter
     private let defaults: UserDefaults
 
+    /// Quit and close-window, behind a protocol so the tests can assert the decision without
+    /// performing it. See `AppCommanding`.
+    private let appCommands: AppCommanding
+
     /// The context ⌘0 searches for an empty note. Resolved on use rather than stored, so
     /// constructing the manager is never what opens the on-disk store — the app deliberately
     /// does that once, during launch, and a test that never presses ⌘0 never opens one at all.
+    ///
+    /// `@MainActor` on the closure, not just on the class: a default argument is evaluated in
+    /// the caller's context rather than the callee's, and the container it reaches for is
+    /// main-actor isolated.
     private let modelContext: @MainActor () -> ModelContext
 
     init(
         notificationCenter: NotificationCenter = .default,
         defaults: UserDefaults = .standard,
+        appCommands: AppCommanding = SystemAppCommander(),
         modelContext: @autoclosure @escaping @MainActor () -> ModelContext
             = HeptadApp.sharedModelContainer.mainContext
     ) {
         self.notificationCenter = notificationCenter
         self.defaults = defaults
+        self.appCommands = appCommands
         self.modelContext = modelContext
         setupMonitor()
     }
@@ -76,12 +87,12 @@ class EditorShortcutManager {
     /// should be consumed.
     func handleAppShortcut(chars: String, hasShift: Bool) -> Bool {
         if chars == "q" && !hasShift {
-            NSApp.terminate(nil)
+            appCommands.terminate()
             return true
         }
 
         if chars == "w" && !hasShift {
-            NSApp.keyWindow?.performClose(nil)
+            appCommands.closeKeyWindow()
             return true
         }
 
@@ -165,15 +176,12 @@ class EditorShortcutManager {
     @discardableResult
     func selectNote(noteIndex: Int) -> Bool {
         if noteIndex == 0 {
-            // The context stays put and only the note's id comes back out: a ModelContext is
-            // explicitly not Sendable, so it can't cross out of the actor it belongs to. The
-            // assumption itself is sound — the local key monitor that gets here, and the
-            // shared container's mainContext, are both the main thread's.
-            let firstEmptyId = MainActor.assumeIsolated { () -> Int? in
-                let descriptor = FetchDescriptor<NoteItem>(sortBy: [SortDescriptor(\.id)])
-                guard let notes = try? modelContext().fetch(descriptor) else { return nil }
-                return notes.first(where: { $0.isEmpty })?.id
-            }
+            // A ModelContext is explicitly not Sendable and belongs to the main actor, which is
+            // where this now runs — the class is isolated, so the assumption the local key
+            // monitor used to state by hand is the compiler's to check.
+            let descriptor = FetchDescriptor<NoteItem>(sortBy: [SortDescriptor(\.id)])
+            let firstEmptyId = (try? modelContext().fetch(descriptor))?
+                .first(where: { $0.isEmpty })?.id
 
             // ⌘0 is handled either way: with every note full there is nothing to switch to,
             // but the key still belongs to us and must not fall through to the text view.

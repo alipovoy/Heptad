@@ -2,6 +2,7 @@ import Cocoa
 import SwiftData
 import SwiftUI
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusBarItem: NSStatusItem!
     let windowManager = WindowManager()
