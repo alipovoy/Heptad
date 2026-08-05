@@ -31,6 +31,18 @@ private final class SpyTextView: NSTextView {
     override func selectAll(_ sender: Any?) { record("selectAll") }
 }
 
+/// Records the app-level actions ⌘Q and ⌘W ask for, instead of quitting the test process or
+/// closing whichever window another suite left key.
+@MainActor
+private final class SpyAppCommander: AppCommanding {
+    private(set) var performed: [String] = []
+
+    nonisolated init() {}
+
+    func terminate() { performed.append("terminate") }
+    func closeKeyWindow() { performed.append("closeKeyWindow") }
+}
+
 private final class SpyUndoManager: UndoManager {
     private let onCommand: (String) -> Void
 
@@ -241,11 +253,29 @@ final class EditorShortcutManagerTests {
     }
 
     // MARK: - App-wide shortcuts
-    //
-    // ⌘Q and ⌘W are left uncovered on purpose: `handleAppShortcut` runs them rather than
-    // reporting them, and `NSApp.terminate(nil)` would take the test process with it while
-    // `NSApp.keyWindow?.performClose(nil)` would close whichever window another suite happens
-    // to have made key.
+
+    /// ⌘Q and ⌘W reach the app commands, and the shifted forms reach nothing.
+    ///
+    /// Against the real `NSApp` neither could be asserted at all — `terminate(nil)` takes the
+    /// test process with it, and `performClose` acts on whichever window another suite happened
+    /// to make key. `SpyAppCommander` is what makes the decision observable without carrying
+    /// it out; see `AppCommanding`.
+    @Test(
+        arguments: [
+            ("q", false, ["terminate"]), ("q", true, []),
+            ("w", false, ["closeKeyWindow"]), ("w", true, [])
+        ])
+    func quitAndCloseReachTheAppCommands(chars: String, hasShift: Bool, expected: [String]) {
+        let commands = SpyAppCommander()
+        let shortcutManager = EditorShortcutManager(defaults: defaults, appCommands: commands)
+
+        let isConsumed = shortcutManager.handleAppShortcut(chars: chars, hasShift: hasShift)
+
+        #expect(commands.performed == expected)
+        // A key that reaches an app command is ours to consume; one that reaches none has to
+        // fall through to the text view.
+        #expect(isConsumed == !expected.isEmpty)
+    }
 
     @Test func pinShortcutPostsTheTogglePinNotification() async {
         let center = NotificationCenter()

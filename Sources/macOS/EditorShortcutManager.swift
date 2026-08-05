@@ -16,6 +16,10 @@ class EditorShortcutManager {
     private let notificationCenter: NotificationCenter
     private let defaults: UserDefaults
 
+    /// Quit and close-window, behind a protocol so the tests can assert the decision without
+    /// performing it. See `AppCommanding`.
+    private let appCommands: AppCommanding
+
     /// The context ⌘0 searches for an empty note. Resolved on use rather than stored, so
     /// constructing the manager is never what opens the on-disk store — the app deliberately
     /// does that once, during launch, and a test that never presses ⌘0 never opens one at all.
@@ -28,11 +32,13 @@ class EditorShortcutManager {
     init(
         notificationCenter: NotificationCenter = .default,
         defaults: UserDefaults = .standard,
+        appCommands: AppCommanding = SystemAppCommander(),
         modelContext: @autoclosure @escaping @MainActor () -> ModelContext
             = HeptadApp.sharedModelContainer.mainContext
     ) {
         self.notificationCenter = notificationCenter
         self.defaults = defaults
+        self.appCommands = appCommands
         self.modelContext = modelContext
         setupMonitor()
     }
@@ -81,12 +87,12 @@ class EditorShortcutManager {
     /// should be consumed.
     func handleAppShortcut(chars: String, hasShift: Bool) -> Bool {
         if chars == "q" && !hasShift {
-            NSApp.terminate(nil)
+            appCommands.terminate()
             return true
         }
 
         if chars == "w" && !hasShift {
-            NSApp.keyWindow?.performClose(nil)
+            appCommands.closeKeyWindow()
             return true
         }
 
