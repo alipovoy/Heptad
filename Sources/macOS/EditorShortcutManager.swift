@@ -147,6 +147,11 @@ class EditorShortcutManager {
         case "a" where !hasShift:
             textView.selectAll(nil)
             return nil
+        // ⌘⌫. Takes the key from NSTextView's "delete to beginning of line", which is a poor
+        // trade for a note whose whole point is being disposable — and it is undoable.
+        case "\u{7F}" where !hasShift:
+            textView.clearNote()
+            return nil
         default:
             return event  // pass through
         }

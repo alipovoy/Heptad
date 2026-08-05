@@ -117,6 +117,28 @@ struct MacRichTextEditor: NSViewRepresentable {
             return false
         }
 
+        /// Adds "Clear Note" to the editor's context menu — the same action as ⌘⌫, for when
+        /// the shortcut is not what comes to mind. This app has no main menu to put it in.
+        func textView(
+            _ view: NSTextView, menu: NSMenu, for event: NSEvent, at charIndex: Int
+        ) -> NSMenu? {
+            menu.addItem(.separator())
+
+            let item = NSMenuItem(
+                title: "Clear Note", action: #selector(clearNoteFromMenu(_:)),
+                keyEquivalent: "\u{8}")
+            item.keyEquivalentModifierMask = .command
+            item.target = self
+            item.representedObject = view
+            menu.addItem(item)
+
+            return menu
+        }
+
+        @objc private func clearNoteFromMenu(_ sender: NSMenuItem) {
+            (sender.representedObject as? NSTextView)?.clearNote()
+        }
+
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView,
                 let textStorage = textView.textStorage
@@ -127,6 +149,22 @@ struct MacRichTextEditor: NSViewRepresentable {
                 attributedString: NSAttributedString(attributedString: textStorage),
                 plainText: textView.string)
         }
+    }
+}
+
+extension NSTextView {
+    /// Empties the note, in one undoable step.
+    ///
+    /// These notes are meant to be thrown away — a lab ends and its credentials go with it —
+    /// which is exactly what makes an accidental clear expensive. Routing it through the
+    /// change hooks is what puts it on the per-note undo stack, so ⌘Z brings the note back.
+    func clearNote() {
+        let range = NSRange(location: 0, length: (string as NSString).length)
+        guard range.length > 0, shouldChangeText(in: range, replacementString: "") else { return }
+
+        textStorage?.replaceCharacters(in: range, with: "")
+        didChangeText()
+        undoManager?.setActionName("Clear Note")
     }
 }
 
