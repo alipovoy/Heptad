@@ -1,0 +1,175 @@
+import Foundation
+import Testing
+
+#if canImport(UIKit)
+    import UIKit
+#else
+    import AppKit
+#endif
+
+@testable import Heptad
+
+/// The list rules, on their own: what Return does to a line, and what ⌘⇧U does to a checkbox.
+/// The text views that apply the results are covered on the macOS side.
+struct ListContinuationTests {
+
+    /// Return at the end of `line`, which is the whole text.
+    private func returnEdit(atEndOf line: String) -> ListContinuation.Edit? {
+        let text = line as NSString
+        return ListContinuation.returnEdit(
+            in: text, selectedRange: NSRange(location: text.length, length: 0))
+    }
+
+    // MARK: - Continuing a list
+
+    @Test(
+        arguments: [
+            ("- item", "\n- "),
+            ("* item", "\n* "),
+            ("1. item", "\n2. "),
+            ("9. item", "\n10. "),
+            ("- [ ] task", "\n- [ ] "),
+            // A checked item continues as an unchecked one: the next thing to do, not a
+            // second copy of the thing already done.
+            ("- [x] task", "\n- [ ] "),
+            ("- [X] task", "\n- [ ] "),
+            // Indentation carries, so a nested list stays nested.
+            ("    - item", "\n    - "),
+            ("\t1. item", "\n\t2. ")
+        ])
+    func returnContinuesAListItem(line: String, inserted: String) throws {
+        let edit = try #require(returnEdit(atEndOf: line))
+
+        #expect(edit.replacement == inserted)
+        #expect(edit.range == NSRange(location: (line as NSString).length, length: 0))
+    }
+
+    /// Return mid-item still continues the list — the item splits in two, both marked.
+    @Test func returnContinuesFromInsideTheItem() throws {
+        let text = "- item" as NSString
+
+        let edit = try #require(
+            ListContinuation.returnEdit(in: text, selectedRange: NSRange(location: 4, length: 0)))
+
+        #expect(edit.replacement == "\n- ")
+        #expect(edit.range == NSRange(location: 4, length: 0))
+    }
+
+    @Test func returnContinuesTheLineTheCaretIsOn() throws {
+        let text = "- first\n- second" as NSString
+
+        let edit = try #require(
+            ListContinuation.returnEdit(
+                in: text, selectedRange: NSRange(location: text.length, length: 0)))
+
+        #expect(edit.replacement == "\n- ")
+    }
+
+    // MARK: - Ending a list
+
+    /// An empty item removes its own marker instead of adding another, which is how a list
+    /// stops. The replacement is the marker's range, not the caret's.
+    @Test(arguments: ["- ", "* ", "3. ", "- [ ] ", "- [x] ", "  - "])
+    func returnOnAnEmptyItemRemovesTheMarker(line: String) throws {
+        let edit = try #require(returnEdit(atEndOf: line))
+
+        #expect(edit.replacement.isEmpty)
+        #expect(edit.range == NSRange(location: 0, length: (line as NSString).length))
+    }
+
+    // MARK: - Leaving Return alone
+
+    @Test(
+        arguments: [
+            "plain text",
+            "-no space after the dash",
+            "1.no space after the dot",
+            "[ ] a box with no bullet",
+            ""
+        ])
+    func returnIsUntouchedOffAList(line: String) {
+        #expect(returnEdit(atEndOf: line) == nil)
+    }
+
+    /// Return over a selection replaces it; continuing the list there would drop the
+    /// selected text or duplicate the marker, so the plain newline stands.
+    @Test func returnOverASelectionIsUntouched() {
+        let text = "- item" as NSString
+
+        #expect(
+            ListContinuation.returnEdit(in: text, selectedRange: NSRange(location: 2, length: 4))
+                == nil)
+    }
+
+    // MARK: - Checkboxes
+
+    @Test(arguments: [("- [ ] task", "x"), ("- [x] task", " "), ("- [X] task", " ")])
+    func checkboxEditFlipsTheBox(line: String, replacement: String) throws {
+        let edit = try #require(
+            ListContinuation.checkboxEdit(in: line as NSString, selectedRange: NSRange()))
+
+        #expect(edit.replacement == replacement)
+        #expect(edit.range == NSRange(location: 3, length: 1))
+    }
+
+    /// The offset is measured from the start of the line, not the start of the text, and the
+    /// indent counts toward it.
+    @Test func checkboxEditTargetsTheLineTheCaretIsOn() throws {
+        let text = "- [ ] first\n  - [x] second" as NSString
+
+        let edit = try #require(
+            ListContinuation.checkboxEdit(
+                in: text, selectedRange: NSRange(location: text.length, length: 0)))
+
+        #expect(edit.range == NSRange(location: 17, length: 1))
+        #expect(edit.replacement == " ")
+    }
+
+    @Test(arguments: ["- item", "plain text", "1. item"])
+    func checkboxEditIsNilWithoutABox(line: String) {
+        #expect(ListContinuation.checkboxEdit(in: line as NSString, selectedRange: NSRange()) == nil)
+    }
+}
+
+/// The applier that turns an `Edit` into a change in the text view. There is one per platform
+/// and they take different routes to the same result, so the assertions live here, where both
+/// test targets run them. `ListEditingTests` covers the macOS one's undo behaviour.
+@MainActor
+struct ListEditApplyTests {
+
+    @Test func applyingAnEditReplacesTheRange() {
+        let textView = makeTextView(text: "- item")
+
+        textView.apply(
+            ListContinuation.Edit(range: NSRange(location: 6, length: 0), replacement: "\n- "))
+
+        #expect(currentText(of: textView) == "- item\n- ")
+    }
+
+    @Test func applyingAnEmptyReplacementDeletesTheRange() {
+        let textView = makeTextView(text: "- item\n- ")
+
+        textView.apply(
+            ListContinuation.Edit(range: NSRange(location: 7, length: 2), replacement: ""))
+
+        #expect(currentText(of: textView) == "- item\n")
+    }
+
+    #if canImport(UIKit)
+        private func makeTextView(text: String) -> UITextView {
+            let textView = UITextView(frame: CGRect(x: 0, y: 0, width: 200, height: 200))
+            textView.text = text
+            return textView
+        }
+
+        private func currentText(of textView: UITextView) -> String { textView.text }
+    #else
+        private func makeTextView(text: String) -> NSTextView {
+            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
+            textView.string = text
+            return textView
+        }
+
+        private func currentText(of textView: NSTextView) -> String { textView.string }
+    #endif
+}

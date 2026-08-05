@@ -66,6 +66,20 @@ struct IOSRichTextEditor: UIViewRepresentable {
             parent.textStats = stats
         }
 
+        /// Continues or ends a list when Return is pressed on one. See the macOS editor for
+        /// why declining the newline here is safe against re-entry.
+        func textView(
+            _ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String
+        ) -> Bool {
+            guard text == "\n",
+                let edit = ListContinuation.returnEdit(
+                    in: (textView.text ?? "") as NSString, selectedRange: range)
+            else { return true }
+
+            textView.apply(edit)
+            return false
+        }
+
         func textViewDidChange(_ textView: UITextView) {
             // Snapshot the attributed string on the main thread
             textDidChange(

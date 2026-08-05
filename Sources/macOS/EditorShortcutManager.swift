@@ -141,6 +141,9 @@ class EditorShortcutManager {
         case "x" where hasShift, "X":
             toggleStrikethrough(on: textView)
             return nil
+        case "u" where hasShift, "U":
+            toggleCheckbox(on: textView)
+            return nil
         case "a" where !hasShift:
             textView.selectAll(nil)
             return nil
@@ -236,6 +239,21 @@ class EditorShortcutManager {
             attrs[.font] = transform(currentFont)
             textView.typingAttributes = attrs
         }
+    }
+
+    // MARK: - Checkboxes
+
+    /// ⌘⇧U flips the checkbox on the line holding the insertion point, and does nothing on a
+    /// line without one. Unlike the formatting commands this is a text edit, so it goes
+    /// through the same should/didChangeText pair the list continuation uses.
+    func toggleCheckbox(on textView: NSTextView) {
+        guard
+            let edit = ListContinuation.checkboxEdit(
+                in: textView.string as NSString, selectedRange: textView.selectedRange())
+        else { return }
+
+        textView.apply(edit)
+        textView.undoManager?.setActionName("Checkbox")
     }
 
     // MARK: - Strikethrough
