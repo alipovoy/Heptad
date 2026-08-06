@@ -25,9 +25,7 @@ final class ListEditingTests {
         textView.isRichText = true
         textView.allowsUndo = true
 
-        coordinator = MacRichTextEditor.Coordinator(
-            MacRichTextEditor(
-                notes: [], selectedNoteIndex: .constant(0), textStats: .constant(.zero)))
+        coordinator = MacRichTextEditor.Coordinator(statistics: EditorStatistics())
         textView.delegate = coordinator
 
         // A scratch suite, so a killed run cannot leave state in the real app's defaults.

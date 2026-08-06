@@ -4,7 +4,10 @@ import SwiftUI
 struct MacRichTextEditor: NSViewRepresentable {
     var notes: [NoteItem]
     @Binding var selectedNoteIndex: Int
-    @Binding var textStats: TextStats
+
+    /// Where the coordinator reports its counts. A reference, so the coordinator keeps writing
+    /// to the live one no matter which struct instance SwiftUI is driving at the time.
+    let statistics: EditorStatistics
 
     func makeNSView(context: Context) -> NSView {
         let container = NSView()
@@ -13,24 +16,18 @@ struct MacRichTextEditor: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        // The coordinator outlives every struct instance that drives it, so without this it
-        // keeps the one handed to `makeCoordinator` — and any `parent.` read sees launch-time
-        // values forever. Today only the `textStats` binding is read through it, and a Binding
-        // is a pair of closures rather than a snapshot, so the stale parent still writes to the
-        // live state; that is incidental, and this keeps it from mattering.
-        context.coordinator.parent = self
         context.coordinator.update(notes: notes, selectedIndex: selectedNoteIndex)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(self)
+        Coordinator(statistics: statistics)
     }
 
     class Coordinator: NoteEditorCoordinator, NSTextViewDelegate {
-        var parent: MacRichTextEditor
+        private let statistics: EditorStatistics
 
-        init(_ parent: MacRichTextEditor) {
-            self.parent = parent
+        init(statistics: EditorStatistics) {
+            self.statistics = statistics
         }
 
         override func makeEditorView(for note: NoteItem) -> NSView {
@@ -116,7 +113,7 @@ struct MacRichTextEditor: NSViewRepresentable {
         }
 
         override func statsDidChange(_ stats: TextStats) {
-            parent.textStats = stats
+            statistics.stats = stats
         }
 
         private func textView(in editorView: NSView) -> NSTextView? {

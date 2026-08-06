@@ -15,9 +15,7 @@ final class PlainTextModeTests {
     private let manager: EditorShortcutManager
 
     init() throws {
-        coordinator = MacRichTextEditor.Coordinator(
-            MacRichTextEditor(
-                notes: [], selectedNoteIndex: .constant(0), textStats: .constant(.zero)))
+        coordinator = MacRichTextEditor.Coordinator(statistics: EditorStatistics())
 
         // The coordinator vends the same scroll-view-wrapped text view the app installs, so
         // `configure` is exercised through the shape it actually meets.

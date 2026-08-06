@@ -4,7 +4,10 @@ import UIKit
 struct IOSRichTextEditor: UIViewRepresentable {
     var notes: [NoteItem]
     @Binding var selectedNoteIndex: Int
-    @Binding var textStats: TextStats
+
+    /// See the note in `MacRichTextEditor`: a reference, so the coordinator outliving this
+    /// struct does not leave it writing to a stale one.
+    let statistics: EditorStatistics
 
     func makeUIView(context: Context) -> UIView {
         let container = UIView()
@@ -13,21 +16,18 @@ struct IOSRichTextEditor: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
-        // See the note in MacRichTextEditor: the coordinator would otherwise hold the struct
-        // instance from `makeCoordinator` for the life of the app.
-        context.coordinator.parent = self
         context.coordinator.update(notes: notes, selectedIndex: selectedNoteIndex)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(self)
+        Coordinator(statistics: statistics)
     }
 
     class Coordinator: NoteEditorCoordinator, UITextViewDelegate {
-        var parent: IOSRichTextEditor
+        private let statistics: EditorStatistics
 
-        init(_ parent: IOSRichTextEditor) {
-            self.parent = parent
+        init(statistics: EditorStatistics) {
+            self.statistics = statistics
         }
 
         override func makeEditorView(for note: NoteItem) -> UIView {
@@ -92,7 +92,7 @@ struct IOSRichTextEditor: UIViewRepresentable {
         }
 
         override func statsDidChange(_ stats: TextStats) {
-            parent.textStats = stats
+            statistics.stats = stats
         }
 
         /// Continues or ends a list when Return is pressed on one. See the macOS editor for
