@@ -33,7 +33,15 @@ class NoteContentSaver {
         )
     }
 
-    /// Snapshots the attributed string and debounces serialization and saving.
+    /// Debounces serialization and saving of `attributedString`.
+    ///
+    /// The argument may be the text view's own storage rather than a copy of it. Copying every
+    /// character and every attribute run on each keystroke, only for all but the last copy in a
+    /// 300 ms window to be thrown away by the next `save`, is the cost this avoids.
+    ///
+    /// What that changes: the RTF written is the text as of the *flush*, not as of this call.
+    /// Both run on the main actor, and any keystroke in between would have replaced the copy
+    /// anyway, so what lands in the note is the same either way.
     func save(attributedString: NSAttributedString) {
         saveTask?.cancel()
         pendingAttributedString = attributedString

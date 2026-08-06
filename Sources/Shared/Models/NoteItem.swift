@@ -57,20 +57,36 @@ extension NoteItem {
     /// becomes displayable content, so every editor shows them in the system appearance
     /// instead of the black that text layout would otherwise default to.
     var attributedContent: NSAttributedString? {
+        decodedContent?.fillingInAdaptiveTextColor()
+    }
+
+    /// The note's text with nothing but the characters, for callers that only read those.
+    ///
+    /// Separate from `attributedContent` because filling in the adaptive colour costs an
+    /// attribute enumeration and a whole `NSMutableAttributedString` copy — all of it wasted on
+    /// a caller that is about to take `.string` and throw the rest away.
+    var plainTextContent: String {
+        decodedContent?.string ?? ""
+    }
+
+    private var decodedContent: NSAttributedString? {
         guard !rtfData.isEmpty else { return nil }
-        let decoded = try? NSAttributedString(
+        return try? NSAttributedString(
             data: rtfData,
             options: [.documentType: NSAttributedString.DocumentType.rtf],
             documentAttributes: nil
         )
-        return decoded?.fillingInAdaptiveTextColor()
     }
 
     /// Encodes the attributed string as RTF. Whitespace-only content encodes as
     /// empty data; nil means encoding failed and the previous data should be kept.
     static func rtfData(from attributedString: NSAttributedString) -> Data? {
+        // Asking whether any non-whitespace exists, rather than trimming and measuring what is
+        // left: this runs on every debounced save, and the trimmed copy was built only to be
+        // thrown away.
         let isEmpty = attributedString.length == 0
-            || attributedString.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || attributedString.string.rangeOfCharacter(
+                from: .whitespacesAndNewlines.inverted) == nil
         guard !isEmpty else { return Data() }
 
         let range = NSRange(location: 0, length: attributedString.length)

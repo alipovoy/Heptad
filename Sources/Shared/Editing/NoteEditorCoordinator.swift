@@ -104,6 +104,10 @@ class NoteEditorCoordinator: NSObject {
     func textDidChange(attributedString: NSAttributedString, plainText: String) {
         guard let noteId = currentNoteId, let saver = savers[noteId] else { return }
         saver.save(attributedString: attributedString)
+
+        // The title's only input is this text, so handing it over here is what keeps the cache
+        // from having to decode the RTF the saver is about to write.
+        NoteTitleCache.shared.record(plainText: plainText, for: noteId)
         updateStats(plainText: plainText, for: noteId)
     }
 
