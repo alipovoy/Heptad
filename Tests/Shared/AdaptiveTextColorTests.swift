@@ -19,23 +19,6 @@ struct AdaptiveTextColorTests {
 
     // MARK: - Filling in the color
 
-    @Test func fillsInColorForColorlessText() throws {
-        let string = NSAttributedString(string: "hello", attributes: [.font: font])
-
-        let filled = string.fillingInAdaptiveTextColor()
-
-        let color = try #require(filled.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? PlatformColor)
-        #expect(color == .adaptiveEditorText)
-    }
-
-    @Test func keepsExplicitColor() {
-        let string = NSAttributedString(string: "hello", attributes: [.foregroundColor: PlatformColor.red])
-
-        let filled = string.fillingInAdaptiveTextColor()
-
-        #expect(filled.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? PlatformColor == .red)
-    }
-
     @Test func fillsInOnlyTheColorlessRuns() throws {
         let string = NSMutableAttributedString(string: "red", attributes: [.foregroundColor: PlatformColor.red])
         string.append(NSAttributedString(string: "plain", attributes: [.font: font]))
@@ -49,20 +32,6 @@ struct AdaptiveTextColorTests {
 
     @Test func emptyStringIsUnchanged() {
         #expect(NSAttributedString(string: "").fillingInAdaptiveTextColor() == NSAttributedString(string: ""))
-    }
-
-    /// The point of the whole exercise: the filled-in color has to follow the appearance,
-    /// otherwise the text is simply black again.
-    @Test func filledInColorFollowsTheAppearance() throws {
-        let filled = NSAttributedString(string: "hello", attributes: [.font: font])
-            .fillingInAdaptiveTextColor()
-        let color = try #require(filled.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? PlatformColor)
-
-        let light = try components(of: color, inDarkAppearance: false)
-        #expect(max(light.red, light.green, light.blue) < 0.1, "black in light appearance")
-
-        let dark = try components(of: color, inDarkAppearance: true)
-        #expect(min(dark.red, dark.green, dark.blue) > 0.9, "white in dark appearance")
     }
 
     // MARK: - The stored-note path

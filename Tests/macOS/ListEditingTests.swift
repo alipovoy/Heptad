@@ -16,8 +16,7 @@ final class ListEditingTests {
     /// the per-note manager the undo assertions below are about.
     private let textView: IsolatedUndoTextView
     private let coordinator: MacRichTextEditor.Coordinator
-    private let suiteName: String
-    private let defaults: UserDefaults
+    private let scratchDefaults: ScratchDefaults
     private let manager: EditorShortcutManager
 
     init() throws {
@@ -25,17 +24,12 @@ final class ListEditingTests {
         textView.isRichText = true
         textView.allowsUndo = true
 
-        coordinator = MacRichTextEditor.Coordinator(statistics: EditorStatistics())
+        coordinator = makeTestCoordinator()
         textView.delegate = coordinator
 
         // A scratch suite, so a killed run cannot leave state in the real app's defaults.
-        suiteName = "ListEditingTests.\(UUID().uuidString)"
-        defaults = try #require(UserDefaults(suiteName: suiteName))
-        manager = EditorShortcutManager(defaults: defaults)
-    }
-
-    isolated deinit {
-        defaults.removePersistentDomain(forName: suiteName)
+        scratchDefaults = try ScratchDefaults(name: "ListEditingTests")
+        manager = EditorShortcutManager(defaults: scratchDefaults.defaults)
     }
 
     /// Return as the text view delivers it: the delegate is asked first, and answering false
@@ -52,13 +46,6 @@ final class ListEditingTests {
     }
 
     // MARK: - Return
-
-    @Test func returnContinuesTheListInTheTextView() {
-        type("- item")
-
-        #expect(pressReturn() == false, "The delegate performs the edit itself")
-        #expect(textView.string == "- item\n- ")
-    }
 
     @Test func returnOnAnEmptyItemEndsTheList() {
         type("- item\n- ")

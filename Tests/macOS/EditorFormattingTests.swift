@@ -13,28 +13,21 @@ import Testing
 /// `NSTextView` is a main-actor type, and the suite drives it directly.
 @MainActor
 final class EditorFormattingTests {
-    private let suiteName: String
-    private let defaults: UserDefaults
+    private let scratchDefaults: ScratchDefaults
     private let textView: NSTextView
     private let manager: EditorShortcutManager
 
     init() throws {
         // A scratch suite rather than `.standard`, so a killed run can never leave the real app's
         // stored state behind it. Nothing here writes to defaults; the manager just needs one.
-        suiteName = "EditorFormattingTests.\(UUID().uuidString)"
-        defaults = try #require(UserDefaults(suiteName: suiteName))
+        scratchDefaults = try ScratchDefaults(name: "EditorFormattingTests")
 
         textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
         textView.string = "Test Text"
         textView.textStorage?.addAttribute(
             .font, value: NSFont.systemFont(ofSize: 14), range: NSRange(location: 0, length: 9))
 
-        manager = EditorShortcutManager(defaults: defaults)
-    }
-
-    /// `isolated` so the AppKit teardown runs on the main actor wherever the last release lands.
-    isolated deinit {
-        defaults.removePersistentDomain(forName: suiteName)
+        manager = EditorShortcutManager(defaults: scratchDefaults.defaults)
     }
 
     // MARK: - Fixtures

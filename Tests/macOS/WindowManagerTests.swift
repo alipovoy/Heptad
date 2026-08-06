@@ -61,8 +61,7 @@ private extension Trait where Self == ConditionTrait {
 // swiftlint:disable:next type_body_length
 final class WindowManagerTests {
     private let manager: WindowManager
-    private let defaults: UserDefaults
-    private let suiteName: String
+    private let scratchDefaults: ScratchDefaults
     private let notificationCenter: NotificationCenter
     private let workspaceNotificationCenter: NotificationCenter
     private let activation: SpyActivationCoordinator
@@ -72,13 +71,12 @@ final class WindowManagerTests {
     private var menuBarStandIns: [NSWindow] = []
 
     init() async throws {
-        suiteName = "WindowManagerTests.\(UUID().uuidString)"
-        defaults = try #require(UserDefaults(suiteName: suiteName))
+        scratchDefaults = try ScratchDefaults(name: "WindowManagerTests")
         notificationCenter = NotificationCenter()
         workspaceNotificationCenter = NotificationCenter()
         activation = SpyActivationCoordinator()
         manager = WindowManager(
-            defaults: defaults,
+            defaults: scratchDefaults.defaults,
             notificationCenter: notificationCenter,
             workspaceNotificationCenter: workspaceNotificationCenter,
             activation: activation,
@@ -104,7 +102,6 @@ final class WindowManagerTests {
     isolated deinit {
         manager.window?.close()
         menuBarStandIns.forEach { $0.close() }
-        defaults.removePersistentDomain(forName: suiteName)
         NSStatusBar.system.removeStatusItem(mockStatusBarItem)
     }
 

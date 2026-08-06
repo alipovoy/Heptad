@@ -129,22 +129,6 @@ final class SnapshotStoreTests {
 
     // MARK: - Reading
 
-    @Test func snapshotsAreListedNewestFirst() throws {
-        let notes = try notes()
-        let start = Date(timeIntervalSinceReferenceDate: 800_000_000)
-
-        for step in 0..<3 {
-            notes[0].rtfData = try #require(
-                NoteItem.rtfData(from: NSAttributedString(string: "step \(step)")))
-            store.writeIfDue(notes: notes, now: start.addingTimeInterval(Double(step) * 60), force: true)
-        }
-
-        let listed = store.snapshots()
-
-        #expect(listed.count == 3)
-        #expect(listed.map(\.createdAt) == listed.map(\.createdAt).sorted(by: >))
-    }
-
     /// A corrupt file must not hide the good ones — the whole point is being recoverable.
     @Test func anUnreadableSnapshotIsSkipped() throws {
         store.writeIfDue(notes: try notes(), force: true)

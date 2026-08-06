@@ -30,17 +30,19 @@ struct NoteContentSaverTests {
 
     /// Whitespace-only content encodes to empty data, so it never reaches the note.
     ///
+    /// Which whitespace variants encode to empty is `NoteItemTests.rtfDataIsEmptyForBlankContent`'s
+    /// rule to pin; one case here is enough to prove the saver honours it.
+    ///
     /// `flush` rather than a sleep: there is no state transition to poll for here — the
     /// assertion is that nothing was written — so only a synchronous write makes the test
     /// capable of failing at all. Asserting straight after `save` would pass for any
     /// implementation, including one that dropped the whitespace check entirely.
-    @Test(arguments: ["", "   \n  ", "\t", "\n\n"])
-    func blankContentStoresNoData(text: String) {
+    @Test func blankContentStoresNoData() {
         let note = NoteItem(id: 0)
         let center = NotificationCenter()
         let saver = NoteContentSaver(note: note, debounce: .seconds(5), notificationCenter: center)
 
-        saver.save(attributedString: NSAttributedString(string: text))
+        saver.save(attributedString: NSAttributedString(string: "   \n  "))
         center.post(name: .flushPendingSaves, object: nil)
 
         #expect(note.rtfData.isEmpty)
