@@ -43,6 +43,13 @@ private final class SpyEditorCoordinator: NoteEditorCoordinator {
     private(set) var resignedViews: [ResignedView] = []
     private(set) var reportedStats: [ReportedStats] = []
 
+    /// Note ids passed to `configure`, in call order.
+    private(set) var configuredNoteIds: [Int] = []
+
+    /// What the coordinator had done by the time each hook ran, so the ordering
+    /// `makeCachedEditorView` keeps can be asserted rather than assumed.
+    private(set) var stepsInOrder: [String] = []
+
     /// What each note's view reports as its text; the real subclasses read this off a text view.
     var plainTextByNoteId: [Int: String] = [:]
 
@@ -54,9 +61,19 @@ private final class SpyEditorCoordinator: NoteEditorCoordinator {
 
     override func makeEditorView(for note: NoteItem) -> PlatformView {
         madeViewNoteIds.append(note.id)
+        stepsInOrder.append("make")
         let view = PlatformView()
         noteIdsByView[ObjectIdentifier(view)] = note.id
         return view
+    }
+
+    override func configure(_ editorView: PlatformView, for note: NoteItem) {
+        configuredNoteIds.append(note.id)
+        stepsInOrder.append("configure(showing: \(currentNoteId.map(String.init) ?? "nil"))")
+    }
+
+    override func load(_ content: NSAttributedString?, into editorView: PlatformView) {
+        stepsInOrder.append("load")
     }
 
     override func resignFocus(from editorView: PlatformView) {
@@ -159,6 +176,39 @@ struct NoteEditorCoordinatorTests {
 
         #expect(coordinator.madeViewNoteIds == [0, 0], "Rebuilt rather than reused")
         #expect(container.subviews.first !== beforeRestore)
+    }
+
+    // MARK: - Applying the note's mode
+
+    /// The note's mode is applied on the install path, not only on the early return for the note
+    /// already showing.
+    ///
+    /// Before this, `makeEditorView` applied the mode at creation and `update` re-applied it only
+    /// when the same note came round again — so a cached view whose note changed mode while it
+    /// was off screen came back in the old one, and "apply the mode" existed twice per platform.
+    @Test(.bug(id: 103))
+    func everyInstalledViewIsConfiguredForItsNote() {
+        coordinator.setup(container: container, notes: notes, selectedIndex: 0)
+        coordinator.update(notes: notes, selectedIndex: 1)
+        coordinator.update(notes: notes, selectedIndex: 0)  // the cached view coming back
+
+        #expect(coordinator.configuredNoteIds == [0, 1, 0])
+        #expect(coordinator.madeViewNoteIds == [0, 1], "Still only built once each")
+    }
+
+    /// A new view is built, then configured, then loaded — and the coordinator already names the
+    /// incoming note by the time it is configured.
+    ///
+    /// Every step of that order is load-bearing. `configure` flattens what is already in the
+    /// view, so running it before `load` is what leaves the note's own attributes intact.
+    /// `configure` also reports its edit through `textDidChange`, which resolves the saver by the
+    /// showing note — so with `currentNoteId` still naming the note being left, opening a plain
+    /// note would write it over that one.
+    @Test(.bug(id: 103))
+    func aNewViewIsConfiguredBeforeItsContentIsLoaded() {
+        coordinator.setup(container: container, notes: notes, selectedIndex: 1)
+
+        #expect(coordinator.stepsInOrder == ["make", "configure(showing: 1)", "load"])
     }
 
     // MARK: - View swapping
