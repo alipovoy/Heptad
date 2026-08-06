@@ -1,25 +1,26 @@
 name: CodeQL
 
 on:
-  # Deliberately not on pull_request: the Swift analysis is ~25 minutes, and
-  # scanning the PR and then the merge commit doubles that per change for a
-  # single-maintainer repo. Findings land in the Security tab post-merge
-  # instead of annotating the diff, and get fixed forward. build-and-test.yml
-  # is the check that gates a merge.
-  push:
-    branches: [main]
-  # Weekly, independent of pushes: CodeQL's Swift query pack keeps growing, so a
-  # quiet week should still have the code re-analysed against the current
-  # queries. Off-the-hour minute to avoid the top-of-hour scheduling crowd.
+  # Schedule and manual dispatch only. The Swift analysis is ~25 minutes of
+  # macOS runner time, which is too much to spend per pull request or per push
+  # for a single-maintainer repo. Weekly is enough: CodeQL's Swift query pack
+  # keeps growing, so even a quiet week re-analyses the code against the current
+  # queries, and a busy week's changes are picked up at the next run. Findings
+  # land in the Security tab rather than annotating a diff, and get fixed
+  # forward. build-and-test.yml is the check that gates a merge.
+  #
+  # Off-the-hour minute to avoid the top-of-hour scheduling crowd.
   schedule:
     - cron: "27 6 * * 1"
+  # For when a change warrants a scan before the next Monday comes round.
   workflow_dispatch:
 
 # Restrictive default; the analyze job widens it to exactly what it needs.
 permissions:
   contents: read
 
-# One run per ref: a new push supersedes and cancels the run already in flight.
+# One run per ref: a manual dispatch supersedes and cancels the scheduled run
+# already in flight, rather than paying for two analyses of the same tree.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
