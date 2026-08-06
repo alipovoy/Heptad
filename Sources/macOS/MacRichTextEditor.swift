@@ -46,11 +46,13 @@ struct MacRichTextEditor: NSViewRepresentable {
 
             textView.delegate = self
             textView.allowsUndo = true
-            // Plain mode is `isRichText = false`, which is also what makes ⌘V paste unstyled.
-            textView.isRichText = !note.isPlainText
             textView.importsGraphics = false
             textView.allowsImageEditing = false
-            textView.font = .editorBody(plainText: note.isPlainText)
+
+            // A new text view is a rich one. `configure` is what makes it plain, so the note's
+            // mode is applied in exactly one place rather than once here and once there.
+            textView.isRichText = true
+            textView.font = .editorBody(plainText: false)
 
             textView.usesInspectorBar = false
             textView.allowsDocumentBackgroundColorChange = false
@@ -60,14 +62,16 @@ struct MacRichTextEditor: NSViewRepresentable {
             // Apply text padding
             textView.textContainerInset = NSSize(width: 8, height: 8)
 
-            if let attrString = note.attributedContent {
-                textView.undoManager?.disableUndoRegistration()
-                textView.textStorage?.setAttributedString(attrString)
-                textView.undoManager?.enableUndoRegistration()
-                textView.undoManager?.removeAllActions()
-            }
-
             return scrollView
+        }
+
+        override func load(_ content: NSAttributedString?, into editorView: NSView) {
+            guard let content, let textView = textView(in: editorView) else { return }
+
+            textView.undoManager?.disableUndoRegistration()
+            textView.textStorage?.setAttributedString(content)
+            textView.undoManager?.enableUndoRegistration()
+            textView.undoManager?.removeAllActions()
         }
 
         /// Switches the visible text view between rich and plain, flattening what is already

@@ -71,33 +71,58 @@ class NoteEditorCoordinator: NSObject {
             oldView.removeFromSuperview()
         }
 
-        // Create views for the new note lazily if they don't exist yet
-        if editorViews[note.id] == nil {
-            editorViews[note.id] = makeEditorView(for: note)
-            savers[note.id] = NoteContentSaver(note: note)
-        }
-
-        // Add and show the new note's view
-        if let editorView = editorViews[note.id] {
-            editorView.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(editorView)
-
-            NSLayoutConstraint.activate([
-                editorView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-                editorView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-                editorView.topAnchor.constraint(equalTo: container.topAnchor),
-                editorView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-            ])
-
-            // Focus the text view when it appears (e.g. after tapping a note circle) so user can type immediately.
-            Task {
-                focus(editorView)
-            }
-
-            updateStats(plainText: plainText(of: editorView), for: note.id)
-        }
-
+        // Before anything below can build or configure a view: applying a note's mode is a text
+        // edit, and it reports itself back through `textDidChange`, which looks the saver up by
+        // the *current* note. Set at the end of this method instead, that lookup would find the
+        // note being left and write the incoming note's text into it.
         currentNoteId = note.id
+
+        let editorView: PlatformView
+        if let cached = editorViews[note.id] {
+            editorView = cached
+
+            // On this path too, not only on the early return above: a cached view whose note
+            // changed mode while it was off screen would otherwise come back in the old one.
+            // A new view is configured inside `makeCachedEditorView`, which has to do it at a
+            // particular point in the build.
+            configure(editorView, for: note)
+        } else {
+            editorView = makeCachedEditorView(for: note)
+        }
+
+        editorView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(editorView)
+
+        NSLayoutConstraint.activate([
+            editorView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            editorView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            editorView.topAnchor.constraint(equalTo: container.topAnchor),
+            editorView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+
+        // Focus the text view when it appears (e.g. after tapping a note circle) so user can type immediately.
+        Task {
+            focus(editorView)
+        }
+
+        updateStats(plainText: plainText(of: editorView), for: note.id)
+    }
+
+    /// Builds the note's editor view and its saver, and caches both.
+    ///
+    /// The order here is the whole reason this is not three lines inline. The saver has to
+    /// exist before `configure` can route a flattening edit to it. `configure` has to run
+    /// before the content is loaded, because it flattens whatever is already in the view —
+    /// against an empty view it only sets the mode, which leaves the note's own attributes to
+    /// arrive intact with `load`.
+    private func makeCachedEditorView(for note: NoteItem) -> PlatformView {
+        let editorView = makeEditorView(for: note)
+        editorViews[note.id] = editorView
+        savers[note.id] = NoteContentSaver(note: note)
+
+        configure(editorView, for: note)
+        load(note.attributedContent, into: editorView)
+        return editorView
     }
 
     /// Called by the platform delegate methods when the visible note's text changes.
@@ -138,14 +163,22 @@ class NoteEditorCoordinator: NSObject {
 
     // MARK: - Platform hooks
 
-    /// Creates and configures the view to install for the given note (including loading its content).
+    /// Creates the view to install for the given note: the editor's chrome, in the state a new
+    /// rich-text view starts in. The note's own mode and content arrive through `configure` and
+    /// `load`, which is what keeps either of them from having a second implementation here.
     func makeEditorView(for note: NoteItem) -> PlatformView {
         fatalError("Subclasses must override makeEditorView(for:)")
     }
 
-    /// Applies a note's own settings — plain-text mode today — to a view that already exists.
-    /// `makeEditorView` starts a new view off in the right mode; this keeps it there.
+    /// Applies a note's own settings — plain-text mode today — to a view.
+    ///
+    /// Runs on every install and on every update of the showing note, so it must be inert when
+    /// the mode has not moved: it reads the applied state back off the view and returns when
+    /// that already matches. Left unguarded it would re-flatten a rich note on every keystroke.
     func configure(_ editorView: PlatformView, for note: NoteItem) {}
+
+    /// Puts the note's stored content into a view that has just been created and configured.
+    func load(_ content: NSAttributedString?, into editorView: PlatformView) {}
 
     func resignFocus(from editorView: PlatformView) {}
 

@@ -34,19 +34,24 @@ struct IOSRichTextEditor: UIViewRepresentable {
             let textView = UITextView()
 
             textView.delegate = self
-            // Plain mode is attribute editing off, which is also what makes paste unstyled.
-            textView.allowsEditingTextAttributes = !note.isPlainText
-            textView.font = .editorBody(plainText: note.isPlainText)
+
+            // A new text view is a rich one. `configure` is what makes it plain — see the note
+            // in `MacRichTextEditor`.
+            textView.allowsEditingTextAttributes = true
+            textView.font = .editorBody(plainText: false)
             textView.backgroundColor = .clear
 
             // Apply text padding
             textView.textContainerInset = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
 
-            if let attrString = note.attributedContent {
-                textView.attributedText = attrString
-                textView.undoManager?.removeAllActions()  // clear undo history on load
-            }
             return textView
+        }
+
+        override func load(_ content: NSAttributedString?, into editorView: UIView) {
+            guard let content, let textView = editorView as? UITextView else { return }
+
+            textView.attributedText = content
+            textView.undoManager?.removeAllActions()  // clear undo history on load
         }
 
         /// Switches the visible text view between rich and plain, flattening what is already
@@ -60,11 +65,17 @@ struct IOSRichTextEditor: UIViewRepresentable {
             textView.allowsEditingTextAttributes = !note.isPlainText
 
             let attributes = PlainTextMode.attributes(plainText: note.isPlainText)
+            textView.typingAttributes = attributes
+
+            // Nothing to flatten and, more to the point, nothing to report: this also runs on a
+            // view that has just been created and has not been loaded yet, and telling the saver
+            // about an empty view would debounce a write that empties the note. macOS returns
+            // here for the same reason.
             let flattened = NSMutableAttributedString(attributedString: textView.attributedText)
-            if flattened.length > 0 {
-                flattened.setAttributes(
-                    attributes, range: NSRange(location: 0, length: flattened.length))
-            }
+            guard flattened.length > 0 else { return }
+
+            flattened.setAttributes(
+                attributes, range: NSRange(location: 0, length: flattened.length))
 
             // Assigning `attributedText` resets both of these, so they are restored after it.
             let selection = textView.selectedRange
