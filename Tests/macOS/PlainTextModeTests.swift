@@ -83,6 +83,44 @@ final class PlainTextModeTests {
         #expect(note.rtfData == stored, "Opening a note is not an edit to it")
     }
 
+    /// A rich note opens proportional. The counterpart to the plain case above: `configure`
+    /// declines to touch a view that is already in the note's mode, so the font a rich note
+    /// opens with is the one `makeEditorView` established, and nothing re-applies it.
+    @Test func aRichNoteOpensProportional() throws {
+        let container = NSView()
+
+        coordinator.setup(container: container, notes: [NoteItem(id: 1)], selectedIndex: 0)
+
+        let scrollView = try #require(container.subviews.first as? NSScrollView)
+        let textView = try #require(scrollView.documentView as? NSTextView)
+        #expect(textView.isRichText)
+        #expect(textView.font == .systemFont(ofSize: AppConstants.Layout.defaultFontSize))
+    }
+
+    /// A cached view comes back in its note's *current* mode, not the one it was built in.
+    ///
+    /// This is the case #103 fixed, driven through the real text view rather than the
+    /// coordinator's spy. `update` used to apply the mode only on the early return for the note
+    /// already showing, so a view returning from the cache kept whatever mode it was created
+    /// with — the note would come back proportional after being switched to plain.
+    @Test(.bug(id: 103))
+    func aCachedViewComesBackInItsNotesCurrentMode() throws {
+        let container = NSView()
+        let notes = [NoteItem(id: 0), NoteItem(id: 1)]
+        coordinator.setup(container: container, notes: notes, selectedIndex: 0)
+
+        // Leave note 0, flip its mode while its view is off screen, then come back to it.
+        coordinator.update(notes: notes, selectedIndex: 1)
+        notes[0].isPlainText = true
+        coordinator.update(notes: notes, selectedIndex: 0)
+
+        let scrollView = try #require(container.subviews.first as? NSScrollView)
+        let textView = try #require(scrollView.documentView as? NSTextView)
+        #expect(textView.isRichText == false)
+        #expect(textView.font == .monospacedSystemFont(
+            ofSize: AppConstants.Layout.defaultFontSize, weight: .regular))
+    }
+
     /// Switching to plain keeps every character and drops only how it looked — the note is
     /// flattened to one uniform font, not emptied.
     @Test func switchingToPlainFlattensTheFormattingAndKeepsTheText() throws {
