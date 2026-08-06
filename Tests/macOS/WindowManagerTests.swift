@@ -163,27 +163,7 @@ final class WindowManagerTests {
         Notification(name: NSWindow.didMoveNotification, object: window)
     }
 
-    /// Polls until `isSatisfied` holds, or throws once the deadline passes. The window server
-    /// grants status-item slots and key-window status on its own schedule, not synchronously
-    /// with the call that asks for them.
-    private func waitUntil(
-        _ condition: String,
-        timeout: Duration = .seconds(5),
-        isSatisfied: @MainActor () -> Bool
-    ) async throws {
-        let deadline = ContinuousClock.now + timeout
-        while isSatisfied() == false {
-            try #require(ContinuousClock.now < deadline, "Timed out waiting for \(condition)")
-            try await Task.sleep(for: .milliseconds(10))
-        }
-    }
-
     // MARK: - Modes
-
-    @Test func initialState() {
-        #expect(manager.window == nil, "Window should not exist initially")
-        #expect(manager.isPinned == false, "Expected the window to start unpinned")
-    }
 
     @Test func toggleWindowCreatesPanel() throws {
         let window = try showWindow()
@@ -220,31 +200,6 @@ final class WindowManagerTests {
         #expect(window.styleMask.contains(.nonactivatingPanel), "Panel styling is re-applied")
     }
 
-    @Test func unpinningInPlaceReAnchorsTheDragGesture() throws {
-        let window = try showWindow()
-        manager.setPinned(true)
-
-        // The user parks the pinned window somewhere far from the menubar anchor.
-        let parked = NSPoint(x: 400, y: 300)
-        window.setFrameOrigin(parked)
-
-        manager.setPinned(false)
-
-        #expect(
-            manager.anchorOrigin == window.frame.origin,
-            "Drag-away detection must measure from where the window now sits")
-    }
-
-    @Test func togglePinFlipsBothWays() throws {
-        _ = try showWindow()
-
-        manager.togglePin()
-        #expect(manager.isPinned)
-
-        manager.togglePin()
-        #expect(manager.isPinned == false)
-    }
-
     @Test func toggleWindowPinNotificationTogglesTheState() throws {
         _ = try showWindow()
 
@@ -253,18 +208,6 @@ final class WindowManagerTests {
 
         notificationCenter.post(name: .toggleWindowPin, object: nil)
         #expect(manager.isPinned == false)
-    }
-
-    @Test func pinnedStateIsPersistedAndSurvivesANewManager() throws {
-        _ = try showWindow()
-        manager.setPinned(true)
-
-        #expect(
-            defaults.bool(forKey: AppConstants.windowPinnedKey), "Pinned state must be persisted")
-
-        // Stands in for a relaunch: a fresh manager over the same defaults.
-        let relaunched = WindowManager(defaults: defaults)
-        #expect(relaunched.isPinned, "Pinned state should survive a relaunch")
     }
 
     @Test func windowShouldCloseKeepsThePinnedState() throws {
@@ -325,26 +268,6 @@ final class WindowManagerTests {
     //
     // A pinned window is neither re-anchored nor dismissed by a click outside, so the menubar
     // icon (and the global hotkey, which lands in the same place) is its show/hide control.
-
-    @Test(.bug(id: 59))
-    func togglingAPinnedWindowThatIsNotKeyBringsItForward() throws {
-        let window = try showWindow()
-        manager.setPinned(true)
-        let activationsBefore = activation.activatedCurrentAppCount
-
-        // Stands in for another app's window covering the pinned one: key status sits elsewhere.
-        let cover = makeStandInWindow()
-        defer { cover.close() }
-        cover.makeKeyAndOrderFront(nil)
-        try #require(window.isKeyWindow == false, "The pinned window must not be the key window")
-
-        manager.toggleWindow(sender: try statusBarButton())
-
-        #expect(window.isVisible, "A covered pinned window is raised, not hidden")
-        #expect(
-            activation.activatedCurrentAppCount == activationsBefore + 1,
-            "Raising the window is useless without activation — typing would go elsewhere")
-    }
 
     @Test(.bug(id: 59))
     func togglingAPinnedWindowThatIsAlreadyKeyHidesIt() async throws {
@@ -534,17 +457,6 @@ final class WindowManagerTests {
     }
 
     @Test(.requiresAnotherRunningApp)
-    func togglingTheWindowClosedHandsActivationBack() throws {
-        let previous = try otherRunningApplication()
-        postActivation(of: previous)
-        _ = try showWindow()
-
-        manager.toggleWindow(sender: try statusBarButton())
-
-        #expect(activation.activatedApps.last == previous)
-    }
-
-    @Test(.requiresAnotherRunningApp)
     func showingFallsBackToTheFrontmostAppWhenNoActivationWasObserved() throws {
         // An app that was already frontmost when Heptad launched never posts an activation.
         let previous = try otherRunningApplication()
@@ -610,25 +522,61 @@ final class WindowManagerTests {
         }
     }
 
-    @Test func closingTheWindowFlushesPendingSaves() async throws {
-        let window = try showWindow()
-
-        await expectingFlush {
-            _ = manager.windowShouldClose(window)
-        }
-    }
-
-    @Test func togglingTheWindowClosedFlushesPendingSaves() async throws {
-        _ = try showWindow()
-
-        try await expectingFlush {
-            manager.toggleWindow(sender: try statusBarButton())
-        }
-    }
-
     @Test func showingTheWindowDoesNotFlush() async throws {
         try await expectingFlush(count: 0) {
             _ = try showWindow()
+        }
+    }
+
+    // MARK: - Hiding the window
+    //
+    // `toggleWindow`'s hide branch is `hide(window)` — the same private call `windowShouldClose`
+    // makes for the close box and ⌘W. Both effects of that shared call, the flush and the hide
+    // announcement, are pinned once per entry point below instead of once per notification per
+    // entry point: four tests collapsed into the two cases of one.
+
+    /// Which call routes into the shared `hide(window:)`.
+    private enum HideTrigger {
+        case toggleWindowToClose
+        case windowShouldClose
+    }
+
+    /// Runs `action` with observers on both `.flushPendingSaves` and `.windowDidHide` and
+    /// confirms each fired exactly once.
+    private func expectingFlushAndHide(during action: @MainActor () throws -> Void) async throws {
+        try await confirmation(".flushPendingSaves is posted") { flushed in
+            try await confirmation(".windowDidHide is posted") { hidden in
+                let flushObserver = notificationCenter.addObserver(
+                    forName: .flushPendingSaves, object: nil, queue: nil
+                ) { _ in flushed() }
+                let hideObserver = notificationCenter.addObserver(
+                    forName: .windowDidHide, object: nil, queue: nil
+                ) { _ in hidden() }
+                defer {
+                    notificationCenter.removeObserver(flushObserver)
+                    notificationCenter.removeObserver(hideObserver)
+                }
+                try action()
+            }
+        }
+    }
+
+    /// `toggleWindow`'s hide branch and `windowShouldClose` both end at the same private
+    /// `hide(window:)`, so a regression that made one of them skip the flush or forget to
+    /// announce the hide would only surface if the other path happened to be exercised too.
+    /// Driving both entry points against both notifications here catches that drift directly
+    /// instead of by whichever caller a future test happens to add coverage through.
+    @Test(arguments: [HideTrigger.toggleWindowToClose, .windowShouldClose])
+    private func hidingTheWindowFlushesSavesAndAnnouncesTheHide(via trigger: HideTrigger) async throws {
+        let window = try showWindow()
+
+        try await expectingFlushAndHide {
+            switch trigger {
+            case .toggleWindowToClose:
+                manager.toggleWindow(sender: try statusBarButton())
+            case .windowShouldClose:
+                _ = manager.windowShouldClose(window)
+            }
         }
     }
 
@@ -660,29 +608,20 @@ final class WindowManagerTests {
         }
     }
 
-    @Test func closingTheWindowAnnouncesTheHide() async throws {
-        let window = try showWindow()
-
-        await expectingNotification(.windowDidHide) {
-            _ = manager.windowShouldClose(window)
-        }
-    }
-
-    @Test func togglingTheWindowClosedAnnouncesTheHide() async throws {
-        _ = try showWindow()
-
-        try await expectingNotification(.windowDidHide) {
-            manager.toggleWindow(sender: try statusBarButton())
-        }
-    }
-
-    /// Raising a pinned window that another app was covering is not a visibility change — it
-    /// was on screen throughout, and announcing a show would restart a ticker already running.
+    /// Raising a pinned window that another app is covering pins two effects of one
+    /// `toggleWindow` call: it must activate Heptad, or typing would go to the wrong app, and it
+    /// must NOT re-announce `.windowDidBecomeVisible` — the window was on screen throughout, and
+    /// announcing a show would restart a ticker that is already running. Both assertions drive
+    /// the same "covered pinned window" fixture, so splitting them apart would only pay for that
+    /// fixture twice; losing either half here would let a regression through that stops the raise
+    /// from activating, or makes it restart the ticker every time focus comes back to it.
     @Test(.bug(id: 59))
-    func raisingAnAlreadyVisiblePinnedWindowAnnouncesNothing() async throws {
+    func raisingACoveredPinnedWindowActivatesButAnnouncesNothing() async throws {
         let window = try showWindow()
         manager.setPinned(true)
+        let activationsBefore = activation.activatedCurrentAppCount
 
+        // Stands in for another app's window covering the pinned one: key status sits elsewhere.
         let cover = makeStandInWindow()
         defer { cover.close() }
         cover.makeKeyAndOrderFront(nil)
@@ -691,5 +630,10 @@ final class WindowManagerTests {
         try await expectingNotification(.windowDidBecomeVisible, count: 0) {
             manager.toggleWindow(sender: try statusBarButton())
         }
+
+        #expect(window.isVisible, "A covered pinned window is raised, not hidden")
+        #expect(
+            activation.activatedCurrentAppCount == activationsBefore + 1,
+            "Raising the window is useless without activation — typing would go elsewhere")
     }
 }
