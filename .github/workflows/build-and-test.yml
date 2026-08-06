@@ -44,12 +44,18 @@ jobs:
       # CODE_SIGNING_ALLOWED=NO on every leg: there is no paid Apple Developer
       # account, so nothing can be signed. macOS logs "Disabling hardened
       # runtime with ad-hoc codesigning" as a result; that is expected.
-      - name: Build macOS
+      #
+      # The build legs are Release and the test legs are Debug, so one run covers
+      # both configurations without building either twice. Release is not
+      # cosmetic: `#Preview` is type-checked in every configuration, and only a
+      # Release build catches code that resolves under `#if DEBUG` alone.
+      - name: Build macOS (Release)
         run: |
           xcodebuild build \
             -project Heptad.xcodeproj \
             -scheme Heptad-macOS \
             -destination 'platform=macOS' \
+            -configuration Release \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Test macOS
@@ -63,12 +69,13 @@ jobs:
       # Simulator only, for the same signing reason: a device destination needs
       # provisioning that does not exist. A generic destination keeps the build
       # leg independent of which simulators the runner image happens to ship.
-      - name: Build iOS
+      - name: Build iOS (Release)
         run: |
           xcodebuild build \
             -project Heptad.xcodeproj \
             -scheme Heptad-iOS \
             -destination 'generic/platform=iOS Simulator' \
+            -configuration Release \
             CODE_SIGNING_ALLOWED=NO
 
       # Testing needs a concrete device, and simulator names are never
