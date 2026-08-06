@@ -7,7 +7,11 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \NoteItem.id) private var notes: [NoteItem]
     @AppStorage(AppConstants.selectedNoteIndexKey) private var selectedNoteIndex = 0
-    @State private var textStats: TextStats = .zero
+    /// Deliberately not read in this body: the editors write to it and `TextStatisticsBar`
+    /// reads it, so a keystroke invalidates the bar and nothing else. Held here as plain
+    /// `TextStats` it re-evaluated this whole view — title bar, seven colour circles,
+    /// background and the representable — for every character typed.
+    @State private var statistics = EditorStatistics()
 
     /// Ages the edit-time label in place. Started and stopped with the window below, so it
     /// never ticks against a window nobody can see.
@@ -31,7 +35,7 @@ struct ContentView: View {
                     #if os(macOS)
                         macOSTitleBar
 
-                        MacRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex, textStats: $textStats)
+                        MacRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex, statistics: statistics)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(backgroundFill)
                     #else
@@ -39,12 +43,12 @@ struct ContentView: View {
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
 
-                        IOSRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex, textStats: $textStats)
+                        IOSRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex, statistics: statistics)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     #endif
 
                     TextStatisticsBar(
-                        stats: textStats,
+                        statistics: statistics,
                         title: NoteTitleCache.shared.title(for: notes[clampedNoteIndex]),
                         lastEditedAt: notes[clampedNoteIndex].lastEditedAt,
                         now: ticker.now,

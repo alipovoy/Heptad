@@ -1,7 +1,9 @@
 import SwiftUI
 
 struct TextStatisticsBar: View {
-    let stats: TextStats
+    /// Read here rather than passed in as plain `TextStats`, so that a keystroke invalidates
+    /// this bar alone instead of `ContentView` and everything under it.
+    let statistics: EditorStatistics
 
     /// The selected note's first line, named here rather than only on hover over its circle.
     let title: String
@@ -105,7 +107,8 @@ struct TextStatisticsBar: View {
 
     /// One `Text` so the counts read as a single run and wrap and truncate together.
     private var countsText: some View {
-        Text(
+        let stats = statistics.stats
+        return Text(
             """
             \(stats.lines) Lines ⋅ \(stats.words) Words ⋅ \(stats.characters) \
             Characters\(editedSuffix)
@@ -157,14 +160,14 @@ struct TextStatisticsBar: View {
 
     return VStack(spacing: 12) {
         TextStatisticsBar(
-            stats: .zero, title: NoteTitleCache.emptyTitle, lastEditedAt: nil,
+            statistics: EditorStatistics(), title: NoteTitleCache.emptyTitle, lastEditedAt: nil,
             now: PreviewFixtures.now, color: .yellow, isPlainText: false, togglePlainText: {},
             showSnapshots: {}
         )
         .frame(width: 480)
 
         TextStatisticsBar(
-            stats: populated, title: "Lab credentials",
+            statistics: EditorStatistics(stats: populated), title: "Lab credentials",
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-300),
             now: PreviewFixtures.now, color: .red, isPlainText: true, togglePlainText: {},
             showSnapshots: {}
@@ -172,7 +175,7 @@ struct TextStatisticsBar: View {
         .frame(width: 480)
 
         TextStatisticsBar(
-            stats: populated,
+            statistics: EditorStatistics(stats: populated),
             title: "Release checklist for the long-title case, truncated in the bar",
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-86_400),
             now: PreviewFixtures.now, color: .green, isPlainText: false, togglePlainText: {},
@@ -181,7 +184,7 @@ struct TextStatisticsBar: View {
         .frame(width: 480)
 
         TextStatisticsBar(
-            stats: populated, title: "Lab credentials",
+            statistics: EditorStatistics(stats: populated), title: "Lab credentials",
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-300),
             now: PreviewFixtures.now, color: .blue, isPlainText: true, togglePlainText: {},
             showSnapshots: {}

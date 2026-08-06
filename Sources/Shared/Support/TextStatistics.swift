@@ -1,4 +1,27 @@
 import Foundation
+import Observation
+
+/// The counts the editors produce and the statistics bar shows, held in an object rather than
+/// in `ContentView`'s own state.
+///
+/// As `@State` on the root view these re-evaluated the entire tree on every keystroke — the
+/// macOS title bar, all seven colour circles, the background fill and the representable's
+/// `updateNSView` — to move three numbers in the bar at the bottom. `@Observable` tracking is
+/// per property read, so only the view that actually reads `stats` is invalidated.
+///
+/// It is also what the editor coordinators write through. A coordinator outlives every
+/// `NSViewRepresentable` struct that drives it, so reaching the binding used to mean holding a
+/// back-reference to that struct and refreshing it on each update (#47); a reference type is
+/// simply the same object throughout.
+@MainActor
+@Observable
+final class EditorStatistics {
+    var stats: TextStats
+
+    init(stats: TextStats = .zero) {
+        self.stats = stats
+    }
+}
 
 struct TextStats: Equatable {
     var characters = 0

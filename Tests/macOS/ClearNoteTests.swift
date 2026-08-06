@@ -21,9 +21,7 @@ final class ClearNoteTests {
         textView.allowsUndo = true
         textView.string = "user: admin\npass: rotate-me"
 
-        coordinator = MacRichTextEditor.Coordinator(
-            MacRichTextEditor(
-                notes: [], selectedNoteIndex: .constant(0), textStats: .constant(.zero)))
+        coordinator = MacRichTextEditor.Coordinator(statistics: EditorStatistics())
         textView.delegate = coordinator
 
         suiteName = "ClearNoteTests.\(UUID().uuidString)"
