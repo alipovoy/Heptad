@@ -86,30 +86,22 @@ class EditorShortcutManager {
     /// holds first responder. Returns true when the shortcut was handled and the key event
     /// should be consumed.
     func handleAppShortcut(chars: String, hasShift: Bool) -> Bool {
-        if chars == "q" && !hasShift {
+        switch chars {
+        case "q" where !hasShift:
             appCommands.terminate()
-            return true
-        }
-
-        if chars == "w" && !hasShift {
+        case "w" where !hasShift:
             appCommands.closeKeyWindow()
-            return true
-        }
-
         // ⌘P pins/unpins the window. WindowManager owns the state and observes this;
         // the shortcut manager stays free of any window dependency.
-        if chars == "p" && !hasShift {
+        case "p" where !hasShift:
             notificationCenter.post(name: .toggleWindowPin, object: nil)
-            return true
+        default:
+            // Consume the event only when the digit maps to a real note (⌘0–⌘7);
+            // out-of-range digits fall through so they aren't silently swallowed.
+            guard !hasShift, let noteIndex = Int(chars) else { return false }
+            return selectNote(noteIndex: noteIndex)
         }
-
-        // Consume the event only when the digit maps to a real note (⌘0–⌘7);
-        // out-of-range digits fall through so they aren't silently swallowed.
-        if !hasShift, let noteIndex = Int(chars), selectNote(noteIndex: noteIndex) {
-            return true
-        }
-
-        return false
+        return true
     }
 
     /// Applies the text-view-scoped ⌘ shortcuts. Returns nil when the shortcut was
@@ -204,7 +196,7 @@ class EditorShortcutManager {
         guard textView.isRichText else { return }
 
         let fontManager = NSFontManager.shared
-        applyFontChange(to: textView, actionName: "Formatting") { font in
+        applyAttributeChange(Self.fontAttribute, on: textView, actionName: "Formatting") { font in
             fontManager.traits(of: font).contains(trait)
                 ? fontManager.convert(font, toNotHaveTrait: trait)
                 : fontManager.convert(font, toHaveTrait: trait)
@@ -217,8 +209,12 @@ class EditorShortcutManager {
     /// editor is rich text with paste wired up, so a run pasted from another app can arrive well
     /// past either bound — and ⌘+ on a 90pt heading pulling it down to 72 would mean ⌘+ and ⌘-
     /// did the same thing to it. A run already outside the range is left where it is.
+    ///
+    /// Deliberately not behind the `isRichText` guard the two commands above carry: one uniform
+    /// font is still a size the user may want to change. `PlainTextModeTests` names ⌘B, ⌘I and
+    /// ⌘⇧X as the commands plain mode silences, and leaves this one out.
     func changeFontSize(increase: Bool, on textView: NSTextView) {
-        applyFontChange(to: textView, actionName: "Font Size") { font in
+        applyAttributeChange(Self.fontAttribute, on: textView, actionName: "Font Size") { font in
             let size = font.pointSize
             let newSize =
                 increase
@@ -228,34 +224,65 @@ class EditorShortcutManager {
         }
     }
 
-    /// Applies a font transform to the selection (undoably, via the text view's
-    /// standard should/didChangeText hooks) or to the typing attributes when empty.
-    private func applyFontChange(
-        to textView: NSTextView, actionName: String, transform: (NSFont) -> NSFont
+    // MARK: - Attribute mutation
+
+    /// An attribute the formatting commands mutate, plus what its *absence* counts as.
+    ///
+    /// The two fallbacks differ per attribute rather than by accident. A run carrying no
+    /// strikethrough is an unstruck run and gets struck like any other, so `inRuns` is `0`; a
+    /// run carrying no font has no font to convert, so `inRuns` is nil and the run is left
+    /// exactly as it was. `whileTyping` has no such split — there is one set of typing
+    /// attributes, and the command has to land somewhere.
+    private struct MutableAttribute<Value> {
+        let key: NSAttributedString.Key
+
+        /// nil leaves a run without the attribute alone.
+        let inRuns: Value?
+        let whileTyping: Value
+    }
+
+    private static let fontAttribute = MutableAttribute<NSFont>(
+        key: .font, inRuns: nil,
+        whileTyping: .systemFont(ofSize: AppConstants.Layout.defaultFontSize))
+
+    private static let strikethroughAttribute = MutableAttribute<Int>(
+        key: .strikethroughStyle, inRuns: 0, whileTyping: 0)
+
+    /// Applies a transform to one attribute across the selection (undoably, via the text view's
+    /// standard should/didChangeText hooks) or to the typing attributes when the selection is
+    /// empty. Every formatting command in this file is a transform over this one path.
+    ///
+    /// Per run rather than reading the first character and painting that answer over everything:
+    /// on a half-formatted selection, flattening discards the state of every run after the first,
+    /// and makes the result depend on which end the selection started at (#50).
+    private func applyAttributeChange<Value>(
+        _ attribute: MutableAttribute<Value>,
+        on textView: NSTextView,
+        actionName: String,
+        transform: (Value) -> Value
     ) {
+        let key = attribute.key
         let range = textView.selectedRange()
 
-        if range.length > 0 {
-            guard let textStorage = textView.textStorage,
-                textView.shouldChangeText(in: range, replacementString: nil)
-            else { return }
-
-            textStorage.beginEditing()
-            textStorage.enumerateAttribute(.font, in: range, options: []) { value, attrRange, _ in
-                guard let oldFont = value as? NSFont else { return }
-                textStorage.addAttribute(.font, value: transform(oldFont), range: attrRange)
-            }
-            textStorage.endEditing()
-            textView.didChangeText()
-            textView.undoManager?.setActionName(actionName)
-        } else {
+        guard range.length > 0 else {
             var attrs = textView.typingAttributes
-            let currentFont =
-                attrs[.font] as? NSFont
-                ?? NSFont.systemFont(ofSize: AppConstants.Layout.defaultFontSize)
-            attrs[.font] = transform(currentFont)
+            attrs[key] = transform(attrs[key] as? Value ?? attribute.whileTyping)
             textView.typingAttributes = attrs
+            return
         }
+
+        guard let textStorage = textView.textStorage,
+            textView.shouldChangeText(in: range, replacementString: nil)
+        else { return }
+
+        textStorage.beginEditing()
+        textStorage.enumerateAttribute(key, in: range, options: []) { value, attrRange, _ in
+            guard let old = value as? Value ?? attribute.inRuns else { return }
+            textStorage.addAttribute(key, value: transform(old), range: attrRange)
+        }
+        textStorage.endEditing()
+        textView.didChangeText()
+        textView.undoManager?.setActionName(actionName)
     }
 
     // MARK: - Checkboxes
@@ -275,41 +302,17 @@ class EditorShortcutManager {
 
     // MARK: - Strikethrough
 
-    /// Flips strikethrough on the selection, run by run.
+    /// Flips strikethrough on the selection, run by run — the same path, and so the same rule
+    /// about mixed selections, as ⌘B and ⌘I. See `applyAttributeChange`.
     ///
-    /// Per-run rather than reading the first character and painting that one answer over the
-    /// whole selection: on a selection that is half struck through, flattening loses the state
-    /// of every run after the first, and — the reason this matters beyond taste — it made ⌘⇧X
-    /// behave differently from ⌘B and ⌘I, which have always transformed each run on its own
-    /// terms via `applyFontChange`. Both commands now follow the same rule.
     /// No-op in a plain-text note, for the same reason as ⌘B and ⌘I.
     func toggleStrikethrough(on textView: NSTextView) {
         guard textView.isRichText else { return }
 
-        let range = textView.selectedRange()
-        let key = NSAttributedString.Key.strikethroughStyle
-
-        if range.length > 0 {
-            guard let textStorage = textView.textStorage,
-                textView.shouldChangeText(in: range, replacementString: nil)
-            else { return }
-
-            textStorage.beginEditing()
-            // Runs with no strikethrough attribute at all arrive here with a nil value, which
-            // is the unstruck case and gets struck like any other.
-            textStorage.enumerateAttribute(key, in: range, options: []) { value, attrRange, _ in
-                let isStruck = (value as? Int ?? 0) != 0
-                textStorage.addAttribute(
-                    key, value: isStruck ? 0 : NSUnderlineStyle.single.rawValue, range: attrRange)
-            }
-            textStorage.endEditing()
-            textView.didChangeText()
-            textView.undoManager?.setActionName("Formatting")
-        } else {
-            var attrs = textView.typingAttributes
-            let hasStrikethrough = (attrs[key] as? Int ?? 0) != 0
-            attrs[key] = hasStrikethrough ? 0 : NSUnderlineStyle.single.rawValue
-            textView.typingAttributes = attrs
+        applyAttributeChange(
+            Self.strikethroughAttribute, on: textView, actionName: "Formatting"
+        ) { style in
+            style == 0 ? NSUnderlineStyle.single.rawValue : 0
         }
     }
 }
