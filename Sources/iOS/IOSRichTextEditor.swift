@@ -110,10 +110,10 @@ struct IOSRichTextEditor: UIViewRepresentable {
         }
 
         func textViewDidChange(_ textView: UITextView) {
-            // Snapshot the attributed string on the main thread
+            // `attributedText` already hands back a copy, so wrapping it in another one made
+            // two per keystroke where the saver needs none of its own.
             textDidChange(
-                attributedString: NSAttributedString(attributedString: textView.attributedText),
-                plainText: textView.text ?? "")
+                attributedString: textView.attributedText, plainText: textView.text ?? "")
         }
     }
 }

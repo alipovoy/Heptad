@@ -168,10 +168,9 @@ struct MacRichTextEditor: NSViewRepresentable {
                 let textStorage = textView.textStorage
             else { return }
 
-            // Snapshot the attributed string on the main thread
-            textDidChange(
-                attributedString: NSAttributedString(attributedString: textStorage),
-                plainText: textView.string)
+            // The storage itself, not a copy of it: the saver reads it once per debounce
+            // window rather than once per keystroke. See `NoteContentSaver.save`.
+            textDidChange(attributedString: textStorage, plainText: textView.string)
         }
     }
 }
