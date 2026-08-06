@@ -69,8 +69,12 @@ extension NoteItem {
     /// Encodes the attributed string as RTF. Whitespace-only content encodes as
     /// empty data; nil means encoding failed and the previous data should be kept.
     static func rtfData(from attributedString: NSAttributedString) -> Data? {
+        // Asking whether any non-whitespace exists, rather than trimming and measuring what is
+        // left: this runs on every debounced save, and the trimmed copy was built only to be
+        // thrown away.
         let isEmpty = attributedString.length == 0
-            || attributedString.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || attributedString.string.rangeOfCharacter(
+                from: .whitespacesAndNewlines.inverted) == nil
         guard !isEmpty else { return Data() }
 
         let range = NSRange(location: 0, length: attributedString.length)
