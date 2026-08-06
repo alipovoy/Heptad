@@ -25,6 +25,33 @@ private let carbonModifierCases: [(NSEvent.ModifierFlags, UInt32)] = [
     (.function, 0)
 ]
 
+/// The two junk shapes a stored keycode/modifier pair can take: a numeric value out of Carbon's
+/// range, or a value that isn't numeric at all. Both have to fall back to the defaults the same
+/// way, which is what lets one parameterized test stand in for what used to be two near-identical
+/// ones.
+enum JunkDefaultsValue: Sendable, CustomTestStringConvertible {
+    case outOfRange
+    case nonNumeric
+
+    var testDescription: String {
+        switch self {
+        case .outOfRange: return "out of range"
+        case .nonNumeric: return "non-numeric"
+        }
+    }
+
+    func apply(to defaults: UserDefaults) {
+        switch self {
+        case .outOfRange:
+            defaults.set(-1, forKey: AppConstants.globalHotKeyKeyCodeKey)
+            defaults.set(-1, forKey: AppConstants.globalHotKeyModifierFlagsKey)
+        case .nonNumeric:
+            defaults.set("not a keycode", forKey: AppConstants.globalHotKeyKeyCodeKey)
+            defaults.set("not a modifier", forKey: AppConstants.globalHotKeyModifierFlagsKey)
+        }
+    }
+}
+
 /// Claims `keyCode` with the spare modifiers and releases it again, so "the manager is broken"
 /// can be told apart from "something else on this machine already owns that combination".
 @MainActor
@@ -63,16 +90,11 @@ extension Trait where Self == ConditionTrait {
 @MainActor
 @Suite(.serialized)
 final class GlobalHotKeyManagerTests {
-    private let suiteName: String
-    private let defaults: UserDefaults
+    private let scratchDefaults: ScratchDefaults
+    private var defaults: UserDefaults { scratchDefaults.defaults }
 
     init() throws {
-        suiteName = "GlobalHotKeyManagerTests.\(UUID().uuidString)"
-        defaults = try #require(UserDefaults(suiteName: suiteName))
-    }
-
-    deinit {
-        defaults.removePersistentDomain(forName: suiteName)
+        scratchDefaults = try ScratchDefaults(name: "GlobalHotKeyManagerTests")
     }
 
     // MARK: - Defaults
@@ -84,19 +106,12 @@ final class GlobalHotKeyManagerTests {
         #expect(manager.modifierFlags == [.control, .option], "Default modifiers should be ⌃⌥")
     }
 
-    @Test func outOfRangeStoredValuesFallBackToDefaults() {
-        defaults.set(-1, forKey: AppConstants.globalHotKeyKeyCodeKey)
-        defaults.set(-1, forKey: AppConstants.globalHotKeyModifierFlagsKey)
-
-        let manager = GlobalHotKeyManager(defaults: defaults)
-
-        #expect(manager.keyCode == GlobalHotKeyManager.defaultKeyCode)
-        #expect(manager.modifierFlags == GlobalHotKeyManager.defaultModifierFlags)
-    }
-
-    @Test func nonNumericStoredValuesFallBackToDefaults() {
-        defaults.set("not a keycode", forKey: AppConstants.globalHotKeyKeyCodeKey)
-        defaults.set("not a modifier", forKey: AppConstants.globalHotKeyModifierFlagsKey)
+    /// Junk in the stored keycode/modifier keys — out of range or not even numeric — has to
+    /// fall back to the defaults rather than propagate, since either would eventually reach
+    /// Carbon as a registration request.
+    @Test(arguments: [JunkDefaultsValue.outOfRange, .nonNumeric])
+    func junkStoredValuesFallBackToDefaults(junk: JunkDefaultsValue) {
+        junk.apply(to: defaults)
 
         let manager = GlobalHotKeyManager(defaults: defaults)
 
@@ -136,25 +151,17 @@ final class GlobalHotKeyManagerTests {
 
     // MARK: - Registration lifecycle
 
-    @Test(.requiresTheSpareCombination)
-    func registerThenUnregister() {
-        let manager = GlobalHotKeyManager(defaults: defaults)
-        manager.setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers)
-
-        #expect(manager.isRegistered == false, "Should start unregistered")
-        #expect(manager.register(), "Registering a free combination should succeed")
-        #expect(manager.isRegistered)
-
-        manager.unregister()
-        #expect(manager.isRegistered == false)
-    }
-
+    /// Registering and unregistering, including calling either twice in a row: a fresh manager
+    /// starts unregistered, `register()` claims the combination, a second `register()` must
+    /// tear the first claim down rather than stack on it, and `unregister()` is safe to call
+    /// more than once.
     @Test(.requiresTheSpareCombination)
     func doubleRegisterAndDoubleUnregisterAreSafe() {
         let manager = GlobalHotKeyManager(defaults: defaults)
         manager.setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers)
 
-        #expect(manager.register())
+        #expect(manager.isRegistered == false, "Should start unregistered")
+        #expect(manager.register(), "Registering a free combination should succeed")
         // The second call must tear the first registration down rather than stack on it.
         #expect(manager.register(), "Re-registering should replace, not fail")
         #expect(manager.isRegistered)

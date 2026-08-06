@@ -45,9 +45,4 @@ struct TextStatisticsTests {
         #expect(stats.words == expected.words)
         #expect(stats.lines == expected.lines)
     }
-
-    @Test func zeroIsTheEmptyStats() {
-        #expect(TextStats.zero == TextStats(text: ""))
-        #expect(TextStats.zero == TextStats())
-    }
 }

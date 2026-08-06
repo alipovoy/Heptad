@@ -58,28 +58,25 @@ private final class SpyUndoManager: UndoManager {
 /// `NSTextView` and friends are main-actor types, and the suite drives them directly.
 @MainActor
 final class EditorShortcutManagerTests {
-    private let suiteName: String
-    private let defaults: UserDefaults
+    private let scratchDefaults: ScratchDefaults
     private let textView: SpyTextView
     private let manager: EditorShortcutManager
+
+    /// Convenience for the many test bodies below that read or write the suite directly, e.g.
+    /// `selectNote`'s written index.
+    private var defaults: UserDefaults { scratchDefaults.defaults }
 
     init() throws {
         // A scratch suite rather than `.standard`: `selectNote` writes the selected note index,
         // and a killed test run would otherwise leave the real app pointing at another note.
-        suiteName = "EditorShortcutManagerTests.\(UUID().uuidString)"
-        defaults = try #require(UserDefaults(suiteName: suiteName))
+        scratchDefaults = try ScratchDefaults(name: "EditorShortcutManagerTests")
 
         textView = SpyTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
         textView.string = "Test Text"
         textView.textStorage?.addAttribute(
             .font, value: NSFont.systemFont(ofSize: 14), range: NSRange(location: 0, length: 9))
 
-        manager = EditorShortcutManager(defaults: defaults)
-    }
-
-    /// `isolated` so the AppKit teardown runs on the main actor wherever the last release lands.
-    isolated deinit {
-        defaults.removePersistentDomain(forName: suiteName)
+        manager = EditorShortcutManager(defaults: scratchDefaults.defaults)
     }
 
     // MARK: - Fixtures
@@ -117,36 +114,26 @@ final class EditorShortcutManagerTests {
 
     // MARK: - Dispatch table
     //
-    // The table is a flat `switch` over characters and shift, and every arm returns nil. Nothing
-    // else in the suite can tell a mis-keyed arm from a correct one, so it is pinned three ways:
-    // which keys are consumed at all, which text-view command each one reaches, and what the
-    // formatting arms do to the selection.
+    // The table is a flat `switch` over characters and shift. A consumed key either runs a
+    // text-view command or applies a format — never both, never neither — so the two tests below
+    // that check *what* ran also pin *that* something ran, through their own `result == nil`
+    // assertion. That leaves only the keys the table declines to claim as this section's own
+    // responsibility to pin: the shifted forms of the single-letter commands, which are not
+    // shortcuts at all, and ⌘K/⌘⇧K, which nothing claims either way.
 
+    /// The keys `handleTextViewShortcut` hands straight back rather than dispatching anywhere.
     @Test(
         arguments: [
-            ("b", false, true), ("b", true, false),
-            ("i", false, true), ("i", true, false),
-            // ⌘+ on a US keyboard arrives as ⌘⇧=, so the size arms accept shift.
-            ("+", false, true), ("=", false, true), ("=", true, true), ("-", false, true),
-            ("z", false, true), ("z", true, true), ("Z", false, true),
-            ("c", false, true), ("c", true, false),
-            ("v", false, true), ("v", true, true), ("V", false, true),
-            // The sharp one: ⌘⇧X is strikethrough, plain ⌘X is cut.
-            ("x", false, true), ("x", true, true), ("X", false, true),
-            ("a", false, true), ("a", true, false),
-            ("k", false, false), ("k", true, false)
+            ("b", true), ("i", true), ("c", true), ("a", true),
+            ("k", false), ("k", true)
         ])
-    func dispatchTableConsumesExactlyTheKeysItHandles(
-        chars: String, hasShift: Bool, isConsumed: Bool
-    ) throws {
+    func dispatchTablePassesThroughUnclaimedKeys(chars: String, hasShift: Bool) throws {
         textView.setSelectedRange(NSRange(location: 0, length: 4))  // "Test"
 
         let result = manager.handleTextViewShortcut(
             chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
 
-        #expect(
-            (result == nil) == isConsumed,
-            "A consumed shortcut returns nil; anything else must hand the event back")
+        #expect(result != nil, "An unclaimed key must be handed back, not consumed")
     }
 
     @Test(
@@ -160,10 +147,11 @@ final class EditorShortcutManagerTests {
     func editingShortcutsReachTheMatchingTextViewCommand(
         chars: String, hasShift: Bool, command: String
     ) throws {
-        _ = manager.handleTextViewShortcut(
+        let result = manager.handleTextViewShortcut(
             chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
 
         #expect(textView.commands == [command])
+        #expect(result == nil, "A command that ran means the key was consumed")
     }
 
     /// The formatting arms land on the manager's own helpers rather than on the text view, so
@@ -180,9 +168,10 @@ final class EditorShortcutManagerTests {
     ) throws {
         textView.setSelectedRange(NSRange(location: 0, length: 4))  // "Test"
 
-        _ = manager.handleTextViewShortcut(
+        let result = manager.handleTextViewShortcut(
             chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
 
+        #expect(result == nil, "A format that applied means the key was consumed")
         let traits = NSFontManager.shared.traits(of: try selectionFont())
         switch format {
         case "bold":
@@ -195,9 +184,11 @@ final class EditorShortcutManagerTests {
                 textView.commands.isEmpty,
                 "⌘⇧X strikes through; cutting here would destroy the selection instead")
         case "larger":
-            #expect(try selectionFont().pointSize == 16)  // the fixture starts at 14
+            // The exact +2pt step, and the floor/ceiling either side of it, are
+            // `EditorFormattingTests`' to pin; here it is enough that this key grew the font.
+            #expect(try selectionFont().pointSize > 14)  // the fixture starts at 14
         case "smaller":
-            #expect(try selectionFont().pointSize == 12)
+            #expect(try selectionFont().pointSize < 14)
         default:
             Issue.record("Unhandled expected format \"\(format)\"")
         }

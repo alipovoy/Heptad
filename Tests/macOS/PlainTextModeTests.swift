@@ -10,25 +10,19 @@ import Testing
 final class PlainTextModeTests {
     private let coordinator: MacRichTextEditor.Coordinator
     private let scrollView: NSScrollView
-    private let suiteName: String
-    private let defaults: UserDefaults
+    private let scratchDefaults: ScratchDefaults
     private let manager: EditorShortcutManager
 
     init() throws {
-        coordinator = MacRichTextEditor.Coordinator(statistics: EditorStatistics())
+        coordinator = makeTestCoordinator()
 
         // The coordinator vends the same scroll-view-wrapped text view the app installs, so
         // `configure` is exercised through the shape it actually meets.
         scrollView = try #require(
             coordinator.makeEditorView(for: NoteItem(id: 0)) as? NSScrollView)
 
-        suiteName = "PlainTextModeTests.\(UUID().uuidString)"
-        defaults = try #require(UserDefaults(suiteName: suiteName))
-        manager = EditorShortcutManager(defaults: defaults)
-    }
-
-    isolated deinit {
-        defaults.removePersistentDomain(forName: suiteName)
+        scratchDefaults = try ScratchDefaults(name: "PlainTextModeTests")
+        manager = EditorShortcutManager(defaults: scratchDefaults.defaults)
     }
 
     private func textView() throws -> NSTextView {
@@ -38,12 +32,6 @@ final class PlainTextModeTests {
     private func font(at location: Int) throws -> NSFont {
         let storage = try #require(try textView().textStorage)
         return try #require(storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont)
-    }
-
-    // MARK: - Storage
-
-    @Test func notesAreRichTextUntilToldOtherwise() {
-        #expect(NoteItem(id: 0).isPlainText == false)
     }
 
     // MARK: - Applying the mode

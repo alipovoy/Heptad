@@ -12,8 +12,7 @@ final class ClearNoteTests {
     /// manager from a window, and there is none here.
     private let textView: IsolatedUndoTextView
     private let coordinator: MacRichTextEditor.Coordinator
-    private let suiteName: String
-    private let defaults: UserDefaults
+    private let scratchDefaults: ScratchDefaults
     private let manager: EditorShortcutManager
 
     init() throws {
@@ -21,16 +20,11 @@ final class ClearNoteTests {
         textView.allowsUndo = true
         textView.string = "user: admin\npass: rotate-me"
 
-        coordinator = MacRichTextEditor.Coordinator(statistics: EditorStatistics())
+        coordinator = makeTestCoordinator()
         textView.delegate = coordinator
 
-        suiteName = "ClearNoteTests.\(UUID().uuidString)"
-        defaults = try #require(UserDefaults(suiteName: suiteName))
-        manager = EditorShortcutManager(defaults: defaults)
-    }
-
-    isolated deinit {
-        defaults.removePersistentDomain(forName: suiteName)
+        scratchDefaults = try ScratchDefaults(name: "ClearNoteTests")
+        manager = EditorShortcutManager(defaults: scratchDefaults.defaults)
     }
 
     private func keyEvent(characters: String, shift: Bool = false) throws -> NSEvent {

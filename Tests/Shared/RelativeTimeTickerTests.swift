@@ -9,10 +9,16 @@ import Testing
 @MainActor
 struct RelativeTimeTickerTests {
 
-    @Test func startsStopped() {
+    /// A fresh ticker has nothing to stop yet, and stopping it anyway — optional chaining on a
+    /// nil task — has to be harmless rather than crash.
+    @Test func startsStoppedAndStoppingBeforeStartingIsHarmless() {
         let ticker = RelativeTimeTicker(interval: .seconds(30))
 
         #expect(ticker.isRunning == false, "Nothing is on screen yet — a fresh ticker must not tick")
+
+        ticker.stop()
+
+        #expect(ticker.isRunning == false)
     }
 
     @Test func tickingMovesNowOn() async throws {
@@ -70,13 +76,5 @@ struct RelativeTimeTickerTests {
         defer { ticker.stop() }
 
         #expect(ticker.now > stale, "The clock must be re-read on start, not one interval later")
-    }
-
-    @Test func stoppingWithoutStartingIsHarmless() {
-        let ticker = RelativeTimeTicker(interval: .milliseconds(20))
-
-        ticker.stop()
-
-        #expect(ticker.isRunning == false)
     }
 }
