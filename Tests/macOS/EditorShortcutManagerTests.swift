@@ -27,7 +27,6 @@ private final class SpyTextView: NSTextView {
     override func copy(_ sender: Any?) { record("copy") }
     override func cut(_ sender: Any?) { record("cut") }
     override func paste(_ sender: Any?) { record("paste") }
-    override func pasteAsPlainText(_ sender: Any?) { record("pasteAsPlainText") }
     override func selectAll(_ sender: Any?) { record("selectAll") }
 }
 
@@ -140,7 +139,7 @@ final class EditorShortcutManagerTests {
         arguments: [
             ("z", false, "undo"), ("z", true, "redo"), ("Z", false, "redo"),
             ("c", false, "copy"),
-            ("v", false, "paste"), ("v", true, "pasteAsPlainText"), ("V", false, "pasteAsPlainText"),
+            ("v", false, "paste"),
             ("x", false, "cut"),
             ("a", false, "selectAll")
         ])
@@ -192,6 +191,48 @@ final class EditorShortcutManagerTests {
         default:
             Issue.record("Unhandled expected format \"\(format)\"")
         }
+    }
+
+    // MARK: - Clean paste
+    //
+    // ⌘⇧V is the one editing shortcut that is not a straight call into `NSTextView`: it reads the
+    // clipboard itself, because `pasteAsPlainText` reads a single flavor and inserted nothing on a
+    // clipboard that only carries HTML, RTFD or a URL (#114). So it is checked by what lands in
+    // the note rather than by which command the spy saw. Which flavors resolve to what text is
+    // `PlainTextPasteboardTests`' to pin; these two cover the wiring and the empty case.
+
+    /// HTML with no plain-text flavor: the clipboard ⌘V pasted and ⌘⇧V did not. Bold is what
+    /// separates the two — landing here still bold would mean the key reached `paste`.
+    @Test(arguments: [("v", true), ("V", false)])
+    func shiftVPastesRichClipboardTextWithoutItsFormatting(chars: String, hasShift: Bool) throws {
+        let scratch = ScratchPasteboard()
+        let html = Data("<b>formatted</b>".utf8)
+        scratch.write { $0.setData(html, forType: .html) }
+        let shortcutManager = EditorShortcutManager(
+            defaults: defaults, pasteboard: scratch.pasteboard)
+        textView.setSelectedRange(NSRange(location: 0, length: 9))  // all of "Test Text"
+
+        let result = shortcutManager.handleTextViewShortcut(
+            chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
+
+        #expect(result == nil, "A paste that ran means the key was consumed")
+        #expect(textView.string == "formatted")
+        #expect(!NSFontManager.shared.traits(of: try selectionFont()).contains(.boldFontMask))
+    }
+
+    /// An image is not text, and the note is left alone. The key is still consumed — handing it
+    /// back would only find nothing else to run it and beep. Same rule as ⌘B in a plain note.
+    @Test func shiftVConsumesTheKeyWithNothingToPaste() throws {
+        let scratch = ScratchPasteboard()
+        try scratch.writeAnImage()
+        let shortcutManager = EditorShortcutManager(
+            defaults: defaults, pasteboard: scratch.pasteboard)
+
+        let result = shortcutManager.handleTextViewShortcut(
+            chars: "V", hasShift: false, on: textView, event: try passThroughEvent())
+
+        #expect(result == nil)
+        #expect(textView.string == "Test Text")
     }
 
     // MARK: - Note switching
