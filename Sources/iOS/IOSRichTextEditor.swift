@@ -31,14 +31,13 @@ struct IOSRichTextEditor: UIViewRepresentable {
         }
 
         override func makeEditorView(for note: NoteItem) -> UIView {
-            let textView = UITextView()
+            let textView = MarkdownTextView()
 
             textView.delegate = self
 
-            // A new text view is a rich one. `configure` is what makes it plain — see the note
-            // in `MacRichTextEditor`.
-            textView.allowsEditingTextAttributes = true
-            textView.font = .editorBody(plainText: false)
+            // The user cannot apply attributes; this view's attributes are derived from its own
+            // text and repainted after every change. See `MarkdownStyling`.
+            textView.allowsEditingTextAttributes = false
             textView.backgroundColor = .clear
 
             // Apply text padding
@@ -47,45 +46,22 @@ struct IOSRichTextEditor: UIViewRepresentable {
             return textView
         }
 
-        override func load(_ content: NSAttributedString?, into editorView: UIView) {
-            guard let content, let textView = editorView as? UITextView else { return }
+        override func load(_ text: String, into editorView: UIView) {
+            guard let textView = editorView as? MarkdownTextView else { return }
 
-            textView.attributedText = content
+            textView.text = text
             textView.undoManager?.removeAllActions()  // clear undo history on load
+
+            textView.restyle()
         }
 
-        /// Switches the visible text view between rich and plain, flattening what is already
-        /// there. `allowsEditingTextAttributes` is the applied state, so this is a no-op until
-        /// the note's mode actually changes.
+        /// Applies the note's mode and the app-wide zoom. Repaints only — the text is not read,
+        /// not rewritten, and the saver is not told anything, because nothing changed.
         override func configure(_ editorView: UIView, for note: NoteItem) {
-            guard let textView = editorView as? UITextView,
-                textView.allowsEditingTextAttributes == note.isPlainText
-            else { return }
+            guard let textView = editorView as? MarkdownTextView else { return }
 
-            textView.allowsEditingTextAttributes = !note.isPlainText
-
-            let attributes = PlainTextMode.attributes(plainText: note.isPlainText)
-            textView.typingAttributes = attributes
-
-            // Nothing to flatten and, more to the point, nothing to report: this also runs on a
-            // view that has just been created and has not been loaded yet, and telling the saver
-            // about an empty view would debounce a write that empties the note. macOS returns
-            // here for the same reason.
-            let flattened = NSMutableAttributedString(attributedString: textView.attributedText)
-            guard flattened.length > 0 else { return }
-
-            flattened.setAttributes(
-                attributes, range: NSRange(location: 0, length: flattened.length))
-
-            // Assigning `attributedText` resets both of these, so they are restored after it.
-            let selection = textView.selectedRange
-            textView.attributedText = flattened
-            textView.selectedRange = selection
-            textView.typingAttributes = attributes
-
-            // Assigning the text does not call the delegate, so the saver is told directly —
-            // otherwise the flattening would sit in the view until the next keystroke.
-            textDidChange(attributedString: flattened, plainText: textView.text ?? "")
+            textView.styling = MarkdownStyling.Appearance(plainText: note.isPlainText)
+            textView.restyle()
         }
 
         override func resignFocus(from editorView: UIView) {
@@ -121,10 +97,37 @@ struct IOSRichTextEditor: UIViewRepresentable {
         }
 
         func textViewDidChange(_ textView: UITextView) {
-            // `attributedText` already hands back a copy, so wrapping it in another one made
-            // two per keystroke where the saver needs none of its own.
-            textDidChange(
-                attributedString: textView.attributedText, plainText: textView.text ?? "")
+            guard let textView = textView as? MarkdownTextView else { return }
+
+            // Before the report, not after: `restyle` is what erases anything a paste brought
+            // with it, and the string handed on below is what gets saved.
+            textView.restyle()
+            textDidChange(text: textView.text ?? "")
+        }
+    }
+}
+
+/// The editor's text view, with markdown styling painted on from its text.
+class MarkdownTextView: UITextView {
+    /// How this view draws. Display only — none of it is ever stored.
+    var styling = MarkdownStyling.Appearance(plainText: false)
+
+    /// Repaints the note's styling from its own text.
+    ///
+    /// See the macOS twin for why this runs after every change rather than only on demand: it
+    /// is what puts both the storage's attributes and `typingAttributes` back under this app's
+    /// control, instead of trusting what a paste or an undo left behind (#117).
+    ///
+    /// The selection is restored around the repaint. Mutating `textStorage` attributes leaves it
+    /// alone on macOS, but UIKit collapses it to the end of the document.
+    func restyle() {
+        let selection = selectedRange
+
+        MarkdownStyling.apply(styling, to: textStorage)
+        typingAttributes = MarkdownStyling.baseAttributes(styling)
+
+        if selectedRange != selection {
+            selectedRange = selection
         }
     }
 }

@@ -72,7 +72,7 @@ private final class SpyEditorCoordinator: NoteEditorCoordinator {
         stepsInOrder.append("configure(showing: \(currentNoteId.map(String.init) ?? "nil"))")
     }
 
-    override func load(_ content: NSAttributedString?, into editorView: PlatformView) {
+    override func load(_ text: String, into editorView: PlatformView) {
         stepsInOrder.append("load")
     }
 
@@ -249,18 +249,18 @@ struct NoteEditorCoordinatorTests {
         coordinator.update(notes: notes, selectedIndex: 1)
 
         let typed = "Belongs to the second note"
-        coordinator.textDidChange(attributedString: NSAttributedString(string: typed), plainText: typed)
+        coordinator.textDidChange(text: typed)
 
         // Poll to a deadline rather than sleeping past the 300 ms debounce: the flat sleep
         // races process warm-up and CPU contention for whatever margin was hardcoded.
-        try await waitUntil("the second note's debounced save to write RTF") {
-            notes[1].rtfData.isEmpty == false
+        try await waitUntil("the second note's debounced save to write the note") {
+            notes[1].text.isEmpty == false
         }
 
         // Reaching here already proves note 1 was written. Note 0 stays empty for the strong
         // reason, not a timing one: its saver was never handed anything to write, and had the
         // text gone there instead this wait would have expired rather than fallen through.
-        #expect(notes[0].rtfData.isEmpty)
+        #expect(notes[0].text.isEmpty)
     }
 
     /// Text arriving before any `setup` is dropped instead of crashing.
@@ -269,11 +269,11 @@ struct NoteEditorCoordinatorTests {
     /// being torn down and rebuilt, when there is no current note and no saver to route to.
     @Test func textDidChangeBeforeSetupIsIgnored() async {
         let typed = "Typed into nothing"
-        coordinator.textDidChange(attributedString: NSAttributedString(string: typed), plainText: typed)
+        coordinator.textDidChange(text: typed)
 
         #expect(coordinator.currentNoteId == nil)
-        #expect(notes[0].rtfData.isEmpty)
-        #expect(notes[1].rtfData.isEmpty)
+        #expect(notes[0].text.isEmpty)
+        #expect(notes[1].text.isEmpty)
 
         // Statistics are the one observable side effect past the guard, and they arrive on a
         // detached task. Draining a task of the same priority gives a missing guard a chance to

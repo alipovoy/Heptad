@@ -117,10 +117,10 @@ class EditorShortcutManager {
     ) -> NSEvent? {
         switch chars {
         case "b" where !hasShift:
-            toggleFontTrait(.boldFontMask, on: textView)
+            toggleEmphasis(.strong, on: textView)
             return nil  // consumed
         case "i" where !hasShift:
-            toggleFontTrait(.italicFontMask, on: textView)
+            toggleEmphasis(.emphasis, on: textView)
             return nil
         case "+", "=":
             // ⌘+ on US keyboard is ⌘⇧=, so we accept shift here
@@ -139,7 +139,7 @@ class EditorShortcutManager {
             textView.copy(nil)
             return nil
         case "v" where !hasShift:
-            textView.paste(nil)
+            pasteAsMarkdown(on: textView)
             return nil
         case "v" where hasShift, "V":
             pasteAsPlainText(on: textView)
@@ -168,15 +168,35 @@ class EditorShortcutManager {
 
     // MARK: - Paste
 
+    /// ⌘V. The clipboard's formatting is converted to markdown on the way in — bold, italic,
+    /// strikethrough and links survive as source — and everything else is dropped.
+    ///
+    /// This replaces `NSTextView.paste`, which inserted the clipboard's own attributes and was
+    /// the direct cause of #117: the run's colour and alignment landed in the storage *and* in
+    /// `typingAttributes`, where no command could reach them and undo would not restore them.
+    /// Nothing that arrives through here is unrepresentable, so nothing can be stranded.
+    func pasteAsMarkdown(on textView: NSTextView) {
+        insert(pasteboard.markdownForPaste(), on: textView)
+    }
+
     /// ⌘⇧V, in place of `NSTextView.pasteAsPlainText` — which reads one flavor and gives up,
     /// leaving the shortcut a silent no-op on clipboards ⌘V pastes fine. See
     /// `plainTextForPaste` for which clipboards those are (#114).
     ///
-    /// The key stays consumed when the clipboard holds no text, for the same reason ⌘B is
-    /// consumed in a plain-text note: it is still the app's key. Handing it back would only
-    /// find nothing else to run it and beep.
+    /// Still distinct from ⌘V now that both insert text: this one takes the clipboard's
+    /// characters and no markup at all, for when the markdown a page's bold would produce is
+    /// exactly what you do not want in the note.
     func pasteAsPlainText(on textView: NSTextView) {
-        guard let text = pasteboard.plainTextForPaste() else { return }
+        insert(pasteboard.plainTextForPaste(), on: textView)
+    }
+
+    /// The insertion both paste commands share.
+    ///
+    /// nil text means the clipboard holds nothing textual. The key stays consumed anyway, for
+    /// the same reason ⌘B is consumed in a plain-text note: it is still the app's key, and
+    /// handing it back would only find nothing else to run it and beep.
+    private func insert(_ text: String?, on textView: NSTextView) {
+        guard let text else { return }
 
         // NSNotFound where the view will take no user edit at all, which is not a range that
         // can be pasted over.
@@ -184,8 +204,7 @@ class EditorShortcutManager {
         guard range.location != NSNotFound else { return }
 
         // `insertText` rather than a text-storage edit of our own: it is the path a keystroke
-        // takes, so the text arrives carrying the note's typing attributes — the whole point of
-        // the shortcut — and as a single undo step, without this method knowing either rule.
+        // takes, so this lands as a single undo step without the method knowing that rule.
         textView.insertText(text, replacementRange: range)
         textView.undoManager?.setActionName("Paste")
     }
@@ -218,101 +237,43 @@ class EditorShortcutManager {
         return false
     }
 
-    // MARK: - Font Formatting
+    // MARK: - Formatting
 
-    /// No-op in a plain-text note: the point of the mode is one uniform font, so ⌘B and ⌘I
-    /// have nothing to apply. The key stays consumed either way — it is still the app's.
-    func toggleFontTrait(_ trait: NSFontTraitMask, on textView: NSTextView) {
-        guard textView.isRichText else { return }
+    /// ⌘B, ⌘I and ⌘⇧X, which now wrap the selection in markdown delimiters rather than mutating
+    /// attributes. Every one of them is its own inverse — see `MarkdownFormatting`.
+    ///
+    /// No-op in a plain-text note. The mode leaves markdown literal, so a `**` inserted there
+    /// would be two characters of noise with nothing to show for them. The key stays consumed
+    /// either way — it is still the app's.
+    func toggleEmphasis(_ emphasis: MarkdownFormatting.Emphasis, on textView: NSTextView) {
+        guard isStyled(textView) else { return }
 
-        let fontManager = NSFontManager.shared
-        applyAttributeChange(Self.fontAttribute, on: textView, actionName: "Formatting") { font in
-            fontManager.traits(of: font).contains(trait)
-                ? fontManager.convert(font, toNotHaveTrait: trait)
-                : fontManager.convert(font, toHaveTrait: trait)
-        }
+        let edit = MarkdownFormatting.toggle(
+            emphasis, in: textView.string as NSString, selectedRange: textView.selectedRange())
+
+        textView.apply(edit)
+        textView.undoManager?.setActionName("Formatting")
     }
 
-    /// Steps the selection by two points, stopping at the bound in the direction of travel.
+    /// Steps the editor's zoom by two points, stopping at the bound in the direction of travel.
     ///
-    /// The outer `max`/`min` are what keep a bound from *dragging* a run back to itself. The
-    /// editor is rich text with paste wired up, so a run pasted from another app can arrive well
-    /// past either bound — and ⌘+ on a 90pt heading pulling it down to 72 would mean ⌘+ and ⌘-
-    /// did the same thing to it. A run already outside the range is left where it is.
+    /// One size for the whole app rather than per run: font size is the one thing the old
+    /// attributed editor could do that has no markdown spelling, so it became a view setting
+    /// when notes became text. See `EditorFontSize`.
     ///
-    /// Deliberately not behind the `isRichText` guard the two commands above carry: one uniform
-    /// font is still a size the user may want to change. `PlainTextModeTests` names ⌘B, ⌘I and
-    /// ⌘⇧X as the commands plain mode silences, and leaves this one out.
+    /// Deliberately not behind the plain-text guard the commands above carry: one uniform font
+    /// is still a size the user may want to change. `PlainTextModeTests` names ⌘B, ⌘I and ⌘⇧X as
+    /// the commands plain mode silences, and leaves this one out.
     func changeFontSize(increase: Bool, on textView: NSTextView) {
-        applyAttributeChange(Self.fontAttribute, on: textView, actionName: "Font Size") { font in
-            let size = font.pointSize
-            let newSize =
-                increase
-                ? max(size, min(size + 2, AppConstants.Layout.maxFontSize))
-                : min(size, max(size - 2, AppConstants.Layout.minFontSize))
-            return NSFontManager.shared.convert(font, toSize: newSize)
-        }
+        EditorFontSize.step(
+            increase: increase, defaults: defaults, notificationCenter: notificationCenter)
     }
 
-    // MARK: - Attribute mutation
-
-    /// An attribute the formatting commands mutate, plus what its *absence* counts as.
-    ///
-    /// The two fallbacks differ per attribute rather than by accident. A run carrying no
-    /// strikethrough is an unstruck run and gets struck like any other, so `inRuns` is `0`; a
-    /// run carrying no font has no font to convert, so `inRuns` is nil and the run is left
-    /// exactly as it was. `whileTyping` has no such split — there is one set of typing
-    /// attributes, and the command has to land somewhere.
-    private struct MutableAttribute<Value> {
-        let key: NSAttributedString.Key
-
-        /// nil leaves a run without the attribute alone.
-        let inRuns: Value?
-        let whileTyping: Value
-    }
-
-    private static let fontAttribute = MutableAttribute<NSFont>(
-        key: .font, inRuns: nil,
-        whileTyping: .systemFont(ofSize: AppConstants.Layout.defaultFontSize))
-
-    private static let strikethroughAttribute = MutableAttribute<Int>(
-        key: .strikethroughStyle, inRuns: 0, whileTyping: 0)
-
-    /// Applies a transform to one attribute across the selection (undoably, via the text view's
-    /// standard should/didChangeText hooks) or to the typing attributes when the selection is
-    /// empty. Every formatting command in this file is a transform over this one path.
-    ///
-    /// Per run rather than reading the first character and painting that answer over everything:
-    /// on a half-formatted selection, flattening discards the state of every run after the first,
-    /// and makes the result depend on which end the selection started at (#50).
-    private func applyAttributeChange<Value>(
-        _ attribute: MutableAttribute<Value>,
-        on textView: NSTextView,
-        actionName: String,
-        transform: (Value) -> Value
-    ) {
-        let key = attribute.key
-        let range = textView.selectedRange()
-
-        guard range.length > 0 else {
-            var attrs = textView.typingAttributes
-            attrs[key] = transform(attrs[key] as? Value ?? attribute.whileTyping)
-            textView.typingAttributes = attrs
-            return
-        }
-
-        guard let textStorage = textView.textStorage,
-            textView.shouldChangeText(in: range, replacementString: nil)
-        else { return }
-
-        textStorage.beginEditing()
-        textStorage.enumerateAttribute(key, in: range, options: []) { value, attrRange, _ in
-            guard let old = value as? Value ?? attribute.inRuns else { return }
-            textStorage.addAttribute(key, value: transform(old), range: attrRange)
-        }
-        textStorage.endEditing()
-        textView.didChangeText()
-        textView.undoManager?.setActionName(actionName)
+    /// Whether the view draws its markdown, which is what the formatting commands need to be
+    /// worth applying. Read off the view rather than the note: the shortcut manager finds a text
+    /// view through the responder chain and never sees the model.
+    private func isStyled(_ textView: NSTextView) -> Bool {
+        (textView as? MarkdownTextView)?.styling.isStyled ?? textView.isRichText
     }
 
     // MARK: - Checkboxes
@@ -332,17 +293,8 @@ class EditorShortcutManager {
 
     // MARK: - Strikethrough
 
-    /// Flips strikethrough on the selection, run by run — the same path, and so the same rule
-    /// about mixed selections, as ⌘B and ⌘I. See `applyAttributeChange`.
-    ///
-    /// No-op in a plain-text note, for the same reason as ⌘B and ⌘I.
+    /// ⌘⇧X, the same path as ⌘B and ⌘I.
     func toggleStrikethrough(on textView: NSTextView) {
-        guard textView.isRichText else { return }
-
-        applyAttributeChange(
-            Self.strikethroughAttribute, on: textView, actionName: "Formatting"
-        ) { style in
-            style == 0 ? NSUnderlineStyle.single.rawValue : 0
-        }
+        toggleEmphasis(.strikethrough, on: textView)
     }
 }

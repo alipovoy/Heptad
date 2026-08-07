@@ -8,7 +8,7 @@ import SwiftUI
     typealias PlatformView = NSView
 #endif
 
-/// Platform-neutral core shared by the macOS and iOS rich text editor coordinators.
+/// Platform-neutral core shared by the macOS and iOS editor coordinators.
 /// Caches one editor view and one saver per note, swaps the visible note's view in
 /// the container, and routes text changes to debounced saves and statistics updates.
 /// Subclasses provide view creation, focus handling, and text access.
@@ -19,6 +19,20 @@ class NoteEditorCoordinator: NSObject {
     private var savers: [Int: NoteContentSaver] = [:]
     private(set) var currentNoteId: Int?
 
+    /// The notes as of the last update, so a font-size change can repaint every cached view
+    /// without waiting for SwiftUI to drive one through.
+    private var notes: [NoteItem] = []
+
+    override init() {
+        super.init()
+
+        // No removeObserver needed: selector-based observers auto-unregister on deinit. Same
+        // pattern, and the same reason, as `NoteContentSaver`.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(editorFontSizeDidChange),
+            name: .editorFontSizeDidChange, object: nil)
+    }
+
     func setup(container: PlatformView, notes: [NoteItem], selectedIndex: Int) {
         self.container = container
         update(notes: notes, selectedIndex: selectedIndex)
@@ -26,6 +40,7 @@ class NoteEditorCoordinator: NSObject {
 
     func update(notes: [NoteItem], selectedIndex: Int) {
         guard notes.indices.contains(selectedIndex) else { return }
+        self.notes = notes
         let note = notes[selectedIndex]
 
         if currentNoteId == note.id {
@@ -45,10 +60,10 @@ class NoteEditorCoordinator: NSObject {
             oldView.removeFromSuperview()
         }
 
-        // Before anything below can build or configure a view: applying a note's mode is a text
-        // edit, and it reports itself back through `textDidChange`, which looks the saver up by
-        // the *current* note. Set at the end of this method instead, that lookup would find the
-        // note being left and write the incoming note's text into it.
+        // Before anything below can build a view: `load` puts text into one, and any report that
+        // reaches `textDidChange` looks the saver up by the *current* note. Set at the end of
+        // this method instead, that lookup would find the note being left and write the incoming
+        // note's text into it.
         currentNoteId = note.id
 
         let editorView: PlatformView
@@ -84,27 +99,41 @@ class NoteEditorCoordinator: NSObject {
 
     /// Builds the note's editor view and its saver, and caches both.
     ///
-    /// The order here is the whole reason this is not three lines inline. The saver has to
-    /// exist before `configure` can route a flattening edit to it. `configure` has to run
-    /// before the content is loaded, because it flattens whatever is already in the view —
-    /// against an empty view it only sets the mode, which leaves the note's own attributes to
-    /// arrive intact with `load`.
+    /// `configure` before `load`: the view has to know how it draws before there is anything in
+    /// it to draw, or the first paint would use the wrong mode until the next keystroke.
     private func makeCachedEditorView(for note: NoteItem) -> PlatformView {
         let editorView = makeEditorView(for: note)
         editorViews[note.id] = editorView
         savers[note.id] = NoteContentSaver(note: note)
 
         configure(editorView, for: note)
-        load(note.attributedContent, into: editorView)
+        load(note.text, into: editorView)
         return editorView
     }
 
-    /// Called by the platform delegate methods when the visible note's text changes.
-    func textDidChange(attributedString: NSAttributedString, plainText: String) {
-        guard let noteId = currentNoteId, let saver = savers[noteId] else { return }
-        saver.save(attributedString: attributedString)
+    /// Repaints every cached note at the new zoom level.
+    ///
+    /// `@objc` selector dispatch (used by `NotificationCenter`) crosses the Swift/ObjC boundary
+    /// without hopping actors, so this can't be `@MainActor`-isolated directly. The poster is
+    /// the key monitor, which is already on the main actor.
+    @objc nonisolated private func editorFontSizeDidChange() {
+        MainActor.assumeIsolated {
+            for (id, editorView) in editorViews {
+                guard let note = notes.first(where: { $0.id == id }) else { continue }
+                configure(editorView, for: note)
+            }
+        }
+    }
 
-        updateStats(plainText: plainText, for: noteId)
+    /// Called by the platform delegate methods when the visible note's text changes.
+    ///
+    /// One string now, where this used to take the attributed storage as well: the note *is* its
+    /// text, so the saver and the counters read the same thing.
+    func textDidChange(text: String) {
+        guard let noteId = currentNoteId, let saver = savers[noteId] else { return }
+        saver.save(text: text)
+
+        updateStats(plainText: text, for: noteId)
     }
 
     /// Counts characters/words/lines off the main actor so large notes don't stall typing,
@@ -135,21 +164,22 @@ class NoteEditorCoordinator: NSObject {
     // MARK: - Platform hooks
 
     /// Creates the view to install for the given note: the editor's chrome, in the state a new
-    /// rich-text view starts in. The note's own mode and content arrive through `configure` and
+    /// text view starts in. The note's own mode and content arrive through `configure` and
     /// `load`, which is what keeps either of them from having a second implementation here.
     func makeEditorView(for note: NoteItem) -> PlatformView {
         fatalError("Subclasses must override makeEditorView(for:)")
     }
 
-    /// Applies a note's own settings — plain-text mode today — to a view.
+    /// Applies a note's mode, and the app-wide zoom, to a view.
     ///
-    /// Runs on every install and on every update of the showing note, so it must be inert when
-    /// the mode has not moved: it reads the applied state back off the view and returns when
-    /// that already matches. Left unguarded it would re-flatten a rich note on every keystroke.
+    /// Runs on every install and on every update of the showing note. It no longer needs to
+    /// guard against running twice: this repaints derived styling and never touches the text,
+    /// so calling it on every keystroke would be wasteful but not wrong. Under attributed
+    /// storage it flattened the note, and an unguarded call was destructive.
     func configure(_ editorView: PlatformView, for note: NoteItem) {}
 
-    /// Puts the note's stored content into a view that has just been created and configured.
-    func load(_ content: NSAttributedString?, into editorView: PlatformView) {}
+    /// Puts the note's markdown into a view that has just been created and configured.
+    func load(_ text: String, into editorView: PlatformView) {}
 
     func resignFocus(from editorView: PlatformView) {}
 

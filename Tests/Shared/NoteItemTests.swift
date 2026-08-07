@@ -3,56 +3,36 @@ import Testing
 
 @testable import Heptad
 
-/// Covers the RTF helpers on `NoteItem` — the single storage format every editor and the
-/// saver go through. They were previously only exercised incidentally, through the tests
-/// for their callers.
+/// Covers the storage helpers on `NoteItem`. A note is markdown source now, so these are about
+/// which text counts as "nothing written here" rather than about encoding.
 @MainActor
 struct NoteItemTests {
 
-    // MARK: - Decoding
+    // MARK: - Stored text
 
-    @Test func attributedContentIsNilForAnEmptyNote() {
-        #expect(NoteItem(id: 0).attributedContent == nil)
-    }
-
-    /// Undecodable data must read as "no content" rather than trapping: the decode is a
-    /// `try?`, and a note whose bytes were corrupted still has to open.
-    @Test func attributedContentIsNilForUndecodableData() {
-        let note = NoteItem(id: 0, rtfData: Data("garbage".utf8))
-
-        #expect(note.attributedContent == nil)
-    }
-
-    @Test func attributedContentDecodesStoredText() throws {
-        let data = try #require(NoteItem.rtfData(from: NSAttributedString(string: "stored")))
-        let note = NoteItem(id: 0, rtfData: data)
-
-        let decoded = try #require(note.attributedContent)
-
-        #expect(decoded.string == "stored")
-    }
-
-    // MARK: - Encoding
-
-    /// Content that is only whitespace encodes to empty data, which is what makes clearing
-    /// a note wipe it instead of storing an RTF document full of spaces.
+    /// Content that is only whitespace stores as the empty string, which is what makes clearing
+    /// a note wipe it instead of leaving a stray newline behind for `⌘0` to trip over.
     @Test(arguments: ["", " ", "   \n  ", "\t\t", "\n"])
-    func rtfDataIsEmptyForBlankContent(text: String) {
-        #expect(NoteItem.rtfData(from: NSAttributedString(string: text)) == Data())
+    func storedTextIsEmptyForBlankContent(text: String) {
+        #expect(NoteItem.storedText(from: text) == "")
     }
 
-    @Test func rtfDataRoundTripsRealContent() throws {
-        let original = NSAttributedString(string: "Round trip me")
+    /// Markdown is stored verbatim: the delimiters are the note's content, not decoration
+    /// applied to it, so nothing here may rewrite them.
+    @Test(arguments: [
+        "Round trip me",
+        "**bold** and *italic* and ~~struck~~",
+        "[label](https://example.com)",
+        "- [x] done\n- [ ] not",
+        "  leading and trailing kept  "
+    ])
+    func storedTextKeepsRealContentExactly(text: String) {
+        #expect(NoteItem.storedText(from: text) == text)
+    }
 
-        let data = try #require(NoteItem.rtfData(from: original))
-        #expect(data.isEmpty == false)
-
-        let restored = try NSAttributedString(
-            data: data,
-            options: [.documentType: NSAttributedString.DocumentType.rtf],
-            documentAttributes: nil
-        )
-        #expect(restored.string == original.string)
+    @Test func anEmptyNoteIsEmpty() {
+        #expect(NoteItem(id: 0).isEmpty)
+        #expect(NoteItem(id: 0, text: "written in").isEmpty == false)
     }
 
     // MARK: - Timestamps
@@ -80,9 +60,9 @@ struct NoteItemTests {
             content: "", stamp: Date(timeIntervalSinceReferenceDate: 800_000_000), expected: nil),
         LastEditedAtCase(content: "content", stamp: .distantPast, expected: nil)
     ])
-    func lastEditedAtReportsTheStampOrNilAtItsEdgeCases(testCase: LastEditedAtCase) throws {
-        let data = try #require(NoteItem.rtfData(from: NSAttributedString(string: testCase.content)))
-        let note = NoteItem(id: 0, rtfData: data, modifiedAt: testCase.stamp)
+    func lastEditedAtReportsTheStampOrNilAtItsEdgeCases(testCase: LastEditedAtCase) {
+        let note = NoteItem(
+            id: 0, text: NoteItem.storedText(from: testCase.content), modifiedAt: testCase.stamp)
 
         #expect(note.lastEditedAt == testCase.expected)
     }

@@ -58,8 +58,13 @@ struct TextStatisticsBar: View {
         #if os(macOS)
             .focusable(false)
         #endif
-        .accessibilityLabel(isPlainText ? "Use rich text" : "Use plain text")
-        .help(isPlainText ? "Rich text for this note" : "Plain monospaced text for this note")
+        // Named for what the toggle does to the note's Markdown, since that is the visible
+        // difference: one mode draws it, the other leaves it as the characters you typed.
+        .accessibilityLabel(isPlainText ? "Show Markdown formatting" : "Show Markdown as plain text")
+        .help(
+            isPlainText
+                ? "Formatted Markdown for this note"
+                : "Plain monospaced Markdown source for this note")
     }
 
     /// One `Text` so the counts read as a single run and wrap and truncate together.

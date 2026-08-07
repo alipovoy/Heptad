@@ -139,7 +139,6 @@ final class EditorShortcutManagerTests {
         arguments: [
             ("z", false, "undo"), ("z", true, "redo"), ("Z", false, "redo"),
             ("c", false, "copy"),
-            ("v", false, "paste"),
             ("x", false, "cut"),
             ("a", false, "selectAll")
         ])
@@ -154,60 +153,67 @@ final class EditorShortcutManagerTests {
     }
 
     /// The formatting arms land on the manager's own helpers rather than on the text view, so
-    /// they are checked by what they did to the selection.
+    /// they are checked by what they did — to the text for the emphasis commands, and to the
+    /// stored zoom for ⌘+/⌘-, which stopped being a text edit when notes became markdown.
     @Test(
         arguments: [
-            ("b", false, "bold"), ("i", false, "italic"),
-            ("x", true, "strikethrough"), ("X", false, "strikethrough"),
-            ("+", false, "larger"), ("=", false, "larger"), ("=", true, "larger"),
-            ("-", false, "smaller")
+            ("b", false, "**Test** Text"), ("i", false, "*Test* Text"),
+            ("x", true, "~~Test~~ Text"), ("X", false, "~~Test~~ Text")
         ])
-    func formattingShortcutsApplyTheMatchingFormat(
-        chars: String, hasShift: Bool, format: String
-    ) throws {
+    func emphasisShortcutsWrapTheSelection(chars: String, hasShift: Bool, expected: String) throws {
         textView.setSelectedRange(NSRange(location: 0, length: 4))  // "Test"
 
         let result = manager.handleTextViewShortcut(
             chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
 
         #expect(result == nil, "A format that applied means the key was consumed")
-        let traits = NSFontManager.shared.traits(of: try selectionFont())
-        switch format {
-        case "bold":
-            #expect(traits.contains(.boldFontMask))
-        case "italic":
-            #expect(traits.contains(.italicFontMask))
-        case "strikethrough":
-            #expect(try selectionStrikethrough() == NSUnderlineStyle.single.rawValue)
-            #expect(
-                textView.commands.isEmpty,
-                "⌘⇧X strikes through; cutting here would destroy the selection instead")
-        case "larger":
-            // The exact +2pt step, and the floor/ceiling either side of it, are
-            // `EditorFormattingTests`' to pin; here it is enough that this key grew the font.
-            #expect(try selectionFont().pointSize > 14)  // the fixture starts at 14
-        case "smaller":
-            #expect(try selectionFont().pointSize < 14)
-        default:
-            Issue.record("Unhandled expected format \"\(format)\"")
-        }
+        #expect(textView.string == expected)
+        #expect(
+            textView.commands.isEmpty,
+            "⌘⇧X strikes through; cutting here would destroy the selection instead")
     }
 
-    // MARK: - Clean paste
-    //
-    // ⌘⇧V is the one editing shortcut that is not a straight call into `NSTextView`: it reads the
-    // clipboard itself, because `pasteAsPlainText` reads a single flavor and inserted nothing on a
-    // clipboard that only carries HTML, RTFD or a URL (#114). So it is checked by what lands in
-    // the note rather than by which command the spy saw. Which flavors resolve to what text is
-    // `PlainTextPasteboardTests`' to pin; these two cover the wiring and the empty case.
+    /// The exact ±2pt step, and the floor and ceiling either side of it, are
+    /// `EditorFormattingTests`' to pin; here it is enough that the key moved the zoom the right
+    /// way and left the note's text alone.
+    @Test(
+        arguments: [
+            ("+", false, true), ("=", false, true), ("=", true, true), ("-", false, false)
+        ])
+    func zoomShortcutsStepTheEditorFontSize(chars: String, hasShift: Bool, larger: Bool) throws {
+        textView.setSelectedRange(NSRange(location: 0, length: 4))
+        let before = EditorFontSize.current(defaults)
 
-    /// HTML with no plain-text flavor: the clipboard ⌘V pasted and ⌘⇧V did not. Bold is what
-    /// separates the two — landing here still bold would mean the key reached `paste`.
-    @Test(arguments: [("v", true), ("V", false)])
-    func shiftVPastesRichClipboardTextWithoutItsFormatting(chars: String, hasShift: Bool) throws {
+        let result = manager.handleTextViewShortcut(
+            chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
+
+        #expect(result == nil, "A zoom that applied means the key was consumed")
+        let after = EditorFontSize.current(defaults)
+        #expect(larger ? after > before : after < before)
+        #expect(textView.string == "Test Text", "The zoom is a view setting, not an edit")
+    }
+
+    // MARK: - Paste
+    //
+    // Neither paste is a straight call into `NSTextView` any more. ⌘V used to be `paste(_:)`,
+    // which inserted the clipboard's own attributes and was the direct cause of #117; it now
+    // converts them to markdown. ⌘⇧V reads the clipboard itself because `pasteAsPlainText` reads
+    // a single flavor and inserted nothing on a clipboard carrying only HTML, RTFD or a URL
+    // (#114). Both are checked by what lands in the note. Which flavors resolve to what text is
+    // `PlainTextPasteboardTests`' to pin; these cover the wiring and the empty case.
+
+    /// HTML with no plain-text flavor. ⌘V keeps the bold as source, ⌘⇧V drops it — which is the
+    /// only difference left between the two, and the reason both shortcuts still exist.
+    @Test(
+        arguments: [
+            ("v", false, "**formatted**"),
+            ("v", true, "formatted"), ("V", false, "formatted")
+        ])
+    func pasteShortcutsInsertTheClipboardAsTextOrMarkdown(
+        chars: String, hasShift: Bool, expected: String
+    ) throws {
         let scratch = ScratchPasteboard()
-        let html = Data("<b>formatted</b>".utf8)
-        scratch.write { $0.setData(html, forType: .html) }
+        scratch.write { $0.setData(Data("<b>formatted</b>".utf8), forType: .html) }
         let shortcutManager = EditorShortcutManager(
             defaults: defaults, pasteboard: scratch.pasteboard)
         textView.setSelectedRange(NSRange(location: 0, length: 9))  // all of "Test Text"
@@ -216,20 +222,51 @@ final class EditorShortcutManagerTests {
             chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
 
         #expect(result == nil, "A paste that ran means the key was consumed")
-        #expect(textView.string == "formatted")
-        #expect(!NSFontManager.shared.traits(of: try selectionFont()).contains(.boldFontMask))
+        #expect(textView.string == expected)
+        #expect(textView.commands.isEmpty, "Neither paste reaches NSTextView.paste any more")
+    }
+
+    /// Nothing a paste inserts may carry attributes into the note — the invariant #117 turns on.
+    /// Checked on ⌘V, the one that reads the clipboard's formatting at all.
+    @Test(.bug(id: 117))
+    func pastingRichTextLeavesNoAttributesInTheNote() throws {
+        let scratch = ScratchPasteboard()
+        let styled = NSAttributedString(
+            string: "formatted",
+            attributes: [
+                .font: NSFont.boldSystemFont(ofSize: 24),
+                .foregroundColor: NSColor.systemRed
+            ])
+        scratch.write {
+            $0.setData(
+                styled.rtf(from: NSRange(location: 0, length: styled.length)) ?? Data(),
+                forType: .rtf)
+        }
+        let shortcutManager = EditorShortcutManager(
+            defaults: defaults, pasteboard: scratch.pasteboard)
+        textView.setSelectedRange(NSRange(location: 0, length: 9))
+
+        shortcutManager.handleTextViewShortcut(
+            chars: "v", hasShift: false, on: textView, event: try passThroughEvent())
+
+        #expect(textView.string == "**formatted**", "The bold arrives as source, not as a font")
+        let storage = try #require(textView.textStorage)
+        #expect(
+            storage.attribute(.foregroundColor, at: 2, effectiveRange: nil) as? NSColor != .systemRed,
+            "The clipboard's colour does not come with it")
     }
 
     /// An image is not text, and the note is left alone. The key is still consumed — handing it
     /// back would only find nothing else to run it and beep. Same rule as ⌘B in a plain note.
-    @Test func shiftVConsumesTheKeyWithNothingToPaste() throws {
+    @Test(arguments: [("v", false), ("V", false)])
+    func pasteConsumesTheKeyWithNothingToPaste(chars: String, hasShift: Bool) throws {
         let scratch = ScratchPasteboard()
         try scratch.writeAnImage()
         let shortcutManager = EditorShortcutManager(
             defaults: defaults, pasteboard: scratch.pasteboard)
 
         let result = shortcutManager.handleTextViewShortcut(
-            chars: "V", hasShift: false, on: textView, event: try passThroughEvent())
+            chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
 
         #expect(result == nil)
         #expect(textView.string == "Test Text")
@@ -260,7 +297,7 @@ final class EditorShortcutManagerTests {
         // Inserted out of order, and the two empty notes are not adjacent, so the `sortBy: \.id`
         // in the fetch is what decides the answer.
         for id in [4, 0, 6, 3, 1, 5, 2] {
-            context.insert(NoteItem(id: id, rtfData: [3, 5].contains(id) ? Data() : Data([1])))
+            context.insert(NoteItem(id: id, text: [3, 5].contains(id) ? "" : "written in"))
         }
         let shortcutManager = EditorShortcutManager(defaults: defaults, modelContext: context)
 
@@ -273,7 +310,7 @@ final class EditorShortcutManagerTests {
     @Test func zeroConsumesTheKeyEvenWhenNoNoteIsEmpty() throws {
         let context = try inMemoryContext()
         for id in 0..<AppConstants.noteCount {
-            context.insert(NoteItem(id: id, rtfData: Data([1])))
+            context.insert(NoteItem(id: id, text: "written in"))
         }
         defaults.set(4, forKey: AppConstants.selectedNoteIndexKey)
         let shortcutManager = EditorShortcutManager(defaults: defaults, modelContext: context)
