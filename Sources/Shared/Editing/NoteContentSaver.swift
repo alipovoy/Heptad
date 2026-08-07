@@ -2,10 +2,6 @@ import Foundation
 
 extension Notification.Name {
     static let flushPendingSaves = Notification.Name("Heptad.flushPendingSaves")
-
-    /// Posted after a snapshot has been written back over the notes, so the editors reload
-    /// text that changed underneath them.
-    static let notesDidRestore = Notification.Name("Heptad.notesDidRestore")
 }
 
 /// A shared utility class to handle debouncing and RTF serialization for rich text editors.
