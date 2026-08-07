@@ -17,11 +17,6 @@ struct ContentView: View {
     /// never ticks against a window nobody can see.
     @State private var ticker = RelativeTimeTicker()
 
-    /// Rotating local backups. Driven off the ticker below rather than a timer of its own:
-    /// notes only change while the window is up, which is exactly when the ticker runs.
-    @State private var snapshots = SnapshotStore()
-    @State private var isShowingSnapshots = false
-
     #if os(macOS)
         private static let willTerminateNotification = NSApplication.willTerminateNotification
     #else
@@ -53,8 +48,7 @@ struct ContentView: View {
                         now: ticker.now,
                         color: NotePalette.colors[clampedNoteIndex],
                         isPlainText: notes[clampedNoteIndex].isPlainText,
-                        togglePlainText: { notes[clampedNoteIndex].isPlainText.toggle() },
-                        showSnapshots: { isShowingSnapshots = true }
+                        togglePlainText: { notes[clampedNoteIndex].isPlainText.toggle() }
                     )
                     .background(backgroundFill)
                 }
@@ -83,13 +77,6 @@ struct ContentView: View {
             }
         }
         .onDisappear { ticker.stop() }
-        .onChange(of: ticker.now) { _, _ in
-            // The store decides whether one is actually due; the ticker only asks.
-            snapshots.writeIfDue(notes: notes)
-        }
-        .sheet(isPresented: $isShowingSnapshots) {
-            SnapshotBrowser(snapshots: snapshots.snapshots(), restore: restore)
-        }
         // iOS backgrounding. Inert on macOS: ContentView is mounted in a bare NSHostingView with
         // no Scene behind it, so scenePhase never changes there — WindowManager posts
         // `.flushPendingSaves` itself when it hides the window, and the notifications below
@@ -124,22 +111,6 @@ struct ContentView: View {
     private func flushPendingSaves() {
         NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
         try? modelContext.save()
-
-        // Termination and backgrounding are the two moments worth a snapshot regardless of
-        // when the last one was taken. The store still skips it when nothing has changed.
-        snapshots.writeIfDue(notes: notes, force: true)
-    }
-
-    /// Puts every note back to `snapshot`.
-    ///
-    /// Order matters. Pending edits are flushed first, so a debounced save landing a moment
-    /// later cannot overwrite what was just restored; the editors are told last, because they
-    /// are showing text that has changed underneath them.
-    private func restore(_ snapshot: NoteSnapshot) {
-        NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
-        snapshots.restore(snapshot, into: notes)
-        try? modelContext.save()
-        NotificationCenter.default.post(name: .notesDidRestore, object: nil)
     }
 
     /// `selectedNoteIndex` brought inside the bounds of `NotePalette.colors` and of `notes`.

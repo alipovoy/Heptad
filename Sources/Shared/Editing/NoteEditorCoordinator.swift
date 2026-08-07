@@ -19,32 +19,6 @@ class NoteEditorCoordinator: NSObject {
     private var savers: [Int: NoteContentSaver] = [:]
     private(set) var currentNoteId: Int?
 
-    override init() {
-        super.init()
-
-        // No removeObserver needed: selector-based observers auto-unregister on deinit.
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(discardEditorViews), name: .notesDidRestore, object: nil)
-    }
-
-    /// Throws the cached views away so the next update rebuilds them from the notes.
-    ///
-    /// A restore rewrites `rtfData` underneath views that are already installed and showing
-    /// the old text; nothing about a model write reaches an AppKit or UIKit text view. The
-    /// savers are kept — they hold the same `NoteItem` objects, which are still current.
-    ///
-    /// `@objc` selector dispatch does not hop actors, so this cannot be isolated directly.
-    /// The only poster is `ContentView`, on the main actor.
-    @objc nonisolated private func discardEditorViews() {
-        MainActor.assumeIsolated {
-            for view in editorViews.values {
-                view.removeFromSuperview()
-            }
-            editorViews.removeAll()
-            currentNoteId = nil
-        }
-    }
-
     func setup(container: PlatformView, notes: [NoteItem], selectedIndex: Int) {
         self.container = container
         update(notes: notes, selectedIndex: selectedIndex)

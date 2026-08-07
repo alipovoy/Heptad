@@ -19,9 +19,6 @@ struct TextStatisticsBar: View {
     let isPlainText: Bool
     let togglePlainText: () -> Void
 
-    /// Opens the snapshot list. The bar is where this app keeps its controls.
-    let showSnapshots: () -> Void
-
     #if os(macOS)
         /// Read-only mirror of the window state WindowManager persists, so the pin button always
         /// shows the truth — including when the state changes by ⌘P or by dragging the panel away.
@@ -36,7 +33,6 @@ struct TextStatisticsBar: View {
             countsText
                 .frame(maxWidth: .infinity, alignment: .leading)
             plainTextToggle
-            snapshotsButton
             #if os(macOS)
                 pinToggle
             #endif
@@ -64,19 +60,6 @@ struct TextStatisticsBar: View {
         #endif
         .accessibilityLabel(isPlainText ? "Use rich text" : "Use plain text")
         .help(isPlainText ? "Rich text for this note" : "Plain monospaced text for this note")
-    }
-
-    private var snapshotsButton: some View {
-        Button(action: showSnapshots) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: AppConstants.Layout.pinToggleIconSize))
-        }
-        .buttonStyle(.plain)
-        #if os(macOS)
-            .focusable(false)
-        #endif
-        .accessibilityLabel("Snapshots")
-        .help("Restore the notes from a snapshot")
     }
 
     /// One `Text` so the counts read as a single run and wrap and truncate together.
@@ -135,24 +118,21 @@ struct TextStatisticsBar: View {
     return VStack(spacing: 12) {
         TextStatisticsBar(
             statistics: EditorStatistics(), lastEditedAt: nil,
-            now: PreviewFixtures.now, color: .yellow, isPlainText: false, togglePlainText: {},
-            showSnapshots: {}
+            now: PreviewFixtures.now, color: .yellow, isPlainText: false, togglePlainText: {}
         )
         .frame(width: 480)
 
         TextStatisticsBar(
             statistics: EditorStatistics(stats: populated),
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-300),
-            now: PreviewFixtures.now, color: .red, isPlainText: true, togglePlainText: {},
-            showSnapshots: {}
+            now: PreviewFixtures.now, color: .red, isPlainText: true, togglePlainText: {}
         )
         .frame(width: 480)
 
         TextStatisticsBar(
             statistics: EditorStatistics(stats: populated),
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-86_400),
-            now: PreviewFixtures.now, color: .blue, isPlainText: true, togglePlainText: {},
-            showSnapshots: {}
+            now: PreviewFixtures.now, color: .blue, isPlainText: true, togglePlainText: {}
         )
         .frame(width: 320)
     }

@@ -16,13 +16,7 @@ On macOS `⌘⌫` clears the selected note, and the editor's context menu carrie
 
 ## Statistics
 
-The bar beneath the editor shows the selected note's line, word and character counts and when it was last edited, on the left; the plain-text, snapshot and pin controls sit on the right. In a narrow window the counts truncate and the controls stay put.
-
-## Snapshots
-
-The app keeps rotating local backups of all seven notes in Application Support: at most one every ten minutes while running, plus one when it quits, keeping the twenty most recent. Restore from the clock button in the statistics bar — restoring replaces all seven notes at once, so it asks first.
-
-Plain JSON, no entitlements, invisible in normal use. It is a safety net for an accidental clear, not a sync folder and not a version browser.
+The bar beneath the editor shows the selected note's line, word and character counts and when it was last edited, on the left; the plain-text and pin controls sit on the right. In a narrow window the counts truncate and the controls stay put.
 
 ## Status
 
