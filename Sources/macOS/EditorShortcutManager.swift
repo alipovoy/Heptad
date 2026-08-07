@@ -16,6 +16,10 @@ class EditorShortcutManager {
     private let notificationCenter: NotificationCenter
     private let defaults: UserDefaults
 
+    /// Where ⌘⇧V reads from. Injected for the same reason as everything else here: a test that
+    /// drove the real clipboard would trample whatever the person running it had copied.
+    private let pasteboard: NSPasteboard
+
     /// Quit and close-window, behind a protocol so the tests can assert the decision without
     /// performing it. See `AppCommanding`.
     private let appCommands: AppCommanding
@@ -33,12 +37,14 @@ class EditorShortcutManager {
         notificationCenter: NotificationCenter = .default,
         defaults: UserDefaults = .standard,
         appCommands: AppCommanding = SystemAppCommander(),
+        pasteboard: NSPasteboard = .general,
         modelContext: @autoclosure @escaping @MainActor () -> ModelContext
             = HeptadApp.sharedModelContainer.mainContext
     ) {
         self.notificationCenter = notificationCenter
         self.defaults = defaults
         self.appCommands = appCommands
+        self.pasteboard = pasteboard
         self.modelContext = modelContext
         setupMonitor()
     }
@@ -136,7 +142,7 @@ class EditorShortcutManager {
             textView.paste(nil)
             return nil
         case "v" where hasShift, "V":
-            textView.pasteAsPlainText(nil)
+            pasteAsPlainText(on: textView)
             return nil
         case "x" where !hasShift:
             textView.cut(nil)
@@ -158,6 +164,30 @@ class EditorShortcutManager {
         default:
             return event  // pass through
         }
+    }
+
+    // MARK: - Paste
+
+    /// ⌘⇧V, in place of `NSTextView.pasteAsPlainText` — which reads one flavor and gives up,
+    /// leaving the shortcut a silent no-op on clipboards ⌘V pastes fine. See
+    /// `plainTextForPaste` for which clipboards those are (#114).
+    ///
+    /// The key stays consumed when the clipboard holds no text, for the same reason ⌘B is
+    /// consumed in a plain-text note: it is still the app's key. Handing it back would only
+    /// find nothing else to run it and beep.
+    func pasteAsPlainText(on textView: NSTextView) {
+        guard let text = pasteboard.plainTextForPaste() else { return }
+
+        // NSNotFound where the view will take no user edit at all, which is not a range that
+        // can be pasted over.
+        let range = textView.rangeForUserTextChange
+        guard range.location != NSNotFound else { return }
+
+        // `insertText` rather than a text-storage edit of our own: it is the path a keystroke
+        // takes, so the text arrives carrying the note's typing attributes — the whole point of
+        // the shortcut — and as a single undo step, without this method knowing either rule.
+        textView.insertText(text, replacementRange: range)
+        textView.undoManager?.setActionName("Paste")
     }
 
     // MARK: - Note Switching
