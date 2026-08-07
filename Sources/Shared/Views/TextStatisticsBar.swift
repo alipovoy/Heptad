@@ -5,9 +5,6 @@ struct TextStatisticsBar: View {
     /// this bar alone instead of `ContentView` and everything under it.
     let statistics: EditorStatistics
 
-    /// The selected note's first line, named here rather than only on hover over its circle.
-    let title: String
-
     /// When the selected note was last edited, or nil for a note with no edit to report.
     let lastEditedAt: Date?
 
@@ -32,30 +29,17 @@ struct TextStatisticsBar: View {
     #endif
 
     var body: some View {
-        // Both when they fit, the counts alone when they do not. Squeezing the two against
-        // each other instead leaves the loser as a one-glyph stub at the window's 320pt
-        // minimum; dropping the title whole is tidier, and it is still on every colour circle.
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                titleText
-                Spacer(minLength: 8)
-                countsText
-                plainTextToggle
-                snapshotsButton
-                #if os(macOS)
-                    pinToggle
-                #endif
-            }
-
-            HStack(spacing: 8) {
-                countsText
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                plainTextToggle
-                snapshotsButton
-                #if os(macOS)
-                    pinToggle
-                #endif
-            }
+        // What the note is on the left, what you can do to it on the right. The counts take
+        // the leftover width and truncate into it, so the buttons keep the same place at every
+        // window size instead of being shunted about by the length of the text beside them.
+        HStack(spacing: 8) {
+            countsText
+                .frame(maxWidth: .infinity, alignment: .leading)
+            plainTextToggle
+            snapshotsButton
+            #if os(macOS)
+                pinToggle
+            #endif
         }
         .font(
             .system(
@@ -93,16 +77,6 @@ struct TextStatisticsBar: View {
         #endif
         .accessibilityLabel("Snapshots")
         .help("Restore the notes from a snapshot")
-    }
-
-    /// Capped so a long first line does not make the whole two-part layout look unfittable
-    /// and drop itself; past the cap it truncates, which is what the tooltip is for.
-    private var titleText: some View {
-        Text(title)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(maxWidth: 160, alignment: .leading)
-            .help(title)  // The untruncated first line
     }
 
     /// One `Text` so the counts read as a single run and wrap and truncate together.
@@ -153,21 +127,21 @@ struct TextStatisticsBar: View {
 }
 
 /// Both halves of the bar's one branch — no edit to report, and a real edit time — both modes
-/// of the plain-text toggle, and both halves of its fit: 320pt is the window minimum, where
-/// the title drops out entirely.
+/// of the plain-text toggle, and the 320pt window minimum, where the counts truncate and the
+/// buttons stay where they are.
 #Preview("Statistics bar") {
     let populated = TextStats(text: "Lab credentials\nuser: admin\npass: rotate-me")
 
     return VStack(spacing: 12) {
         TextStatisticsBar(
-            statistics: EditorStatistics(), title: NoteTitleCache.emptyTitle, lastEditedAt: nil,
+            statistics: EditorStatistics(), lastEditedAt: nil,
             now: PreviewFixtures.now, color: .yellow, isPlainText: false, togglePlainText: {},
             showSnapshots: {}
         )
         .frame(width: 480)
 
         TextStatisticsBar(
-            statistics: EditorStatistics(stats: populated), title: "Lab credentials",
+            statistics: EditorStatistics(stats: populated),
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-300),
             now: PreviewFixtures.now, color: .red, isPlainText: true, togglePlainText: {},
             showSnapshots: {}
@@ -176,7 +150,6 @@ struct TextStatisticsBar: View {
 
         TextStatisticsBar(
             statistics: EditorStatistics(stats: populated),
-            title: "Release checklist for the long-title case, truncated in the bar",
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-86_400),
             now: PreviewFixtures.now, color: .green, isPlainText: false, togglePlainText: {},
             showSnapshots: {}
@@ -184,7 +157,7 @@ struct TextStatisticsBar: View {
         .frame(width: 480)
 
         TextStatisticsBar(
-            statistics: EditorStatistics(stats: populated), title: "Lab credentials",
+            statistics: EditorStatistics(stats: populated),
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-300),
             now: PreviewFixtures.now, color: .blue, isPlainText: true, togglePlainText: {},
             showSnapshots: {}

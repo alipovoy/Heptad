@@ -5,9 +5,6 @@ struct ColorCircle: View {
     let assignedColor: Color
     let isEmpty: Bool
 
-    /// The note's first line, so the circles say which note they are without opening each one.
-    let title: String
-
     @Binding var selectedNoteIndex: Int
 
     private var size: CGFloat {
@@ -69,8 +66,9 @@ struct ColorCircle: View {
         }
         .frame(width: size, height: size)
         .contentShape(Circle())
-        // A tooltip on macOS; an accessibility hint everywhere else.
-        .help(title)
+        // The number is only drawn on the selected circle, so every other one would otherwise
+        // reach assistive technology as an unnamed shape.
+        .accessibilityLabel("Note \(index + 1)")
         .onTapGesture {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                 selectedNoteIndex = index
@@ -83,15 +81,11 @@ struct ColorCircle: View {
 /// unselected with content, and empty.
 #Preview("States") {
     HStack(spacing: AppConstants.Layout.defaultSpacing) {
+        ColorCircle(index: 0, assignedColor: .red, isEmpty: false, selectedNoteIndex: .constant(0))
         ColorCircle(
-            index: 0, assignedColor: .red, isEmpty: false, title: "Lab credentials",
-            selectedNoteIndex: .constant(0))
+            index: 1, assignedColor: .orange, isEmpty: false, selectedNoteIndex: .constant(0))
         ColorCircle(
-            index: 1, assignedColor: .orange, isEmpty: false, title: "Prompt drafts",
-            selectedNoteIndex: .constant(0))
-        ColorCircle(
-            index: 2, assignedColor: .yellow, isEmpty: true, title: NoteTitleCache.emptyTitle,
-            selectedNoteIndex: .constant(0))
+            index: 2, assignedColor: .yellow, isEmpty: true, selectedNoteIndex: .constant(0))
     }
     .padding()
 }

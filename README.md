@@ -14,9 +14,9 @@ Any note can be switched to plain text from the statistics bar. That flattens it
 
 On macOS `⌘⌫` clears the selected note, and the editor's context menu carries the same action. It is a single undo step, so `⌘Z` brings the note back.
 
-## Titles and statistics
+## Statistics
 
-The bar beneath the editor shows the selected note's first line, its line, word and character counts, and when it was last edited. That first line is also the tooltip on each colour circle, so you can tell which note holds what without opening all seven. Empty notes read "Empty". In a narrow window the title gives way to the counts.
+The bar beneath the editor shows the selected note's line, word and character counts and when it was last edited, on the left; the plain-text, snapshot and pin controls sit on the right. In a narrow window the counts truncate and the controls stay put.
 
 ## Snapshots
 
