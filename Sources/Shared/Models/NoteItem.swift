@@ -60,15 +60,6 @@ extension NoteItem {
         decodedContent?.fillingInAdaptiveTextColor()
     }
 
-    /// The note's text with nothing but the characters, for callers that only read those.
-    ///
-    /// Separate from `attributedContent` because filling in the adaptive colour costs an
-    /// attribute enumeration and a whole `NSMutableAttributedString` copy — all of it wasted on
-    /// a caller that is about to take `.string` and throw the rest away.
-    var plainTextContent: String {
-        decodedContent?.string ?? ""
-    }
-
     private var decodedContent: NSAttributedString? {
         guard !rtfData.isEmpty else { return nil }
         return try? NSAttributedString(

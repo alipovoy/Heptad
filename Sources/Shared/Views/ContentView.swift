@@ -49,7 +49,6 @@ struct ContentView: View {
 
                     TextStatisticsBar(
                         statistics: statistics,
-                        title: NoteTitleCache.shared.title(for: notes[clampedNoteIndex]),
                         lastEditedAt: notes[clampedNoteIndex].lastEditedAt,
                         now: ticker.now,
                         color: NotePalette.colors[clampedNoteIndex],
