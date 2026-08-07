@@ -126,8 +126,8 @@ struct TextStatisticsBar: View {
     #endif
 }
 
-/// Both halves of the bar's one branch — no edit to report, and a real edit time — both modes
-/// of the plain-text toggle, and the 320pt window minimum, where the counts truncate and the
+/// Both sides of the bar's one branch — no edit to report, and a real edit time — both modes of
+/// the plain-text toggle, and the 320pt window minimum, where the counts truncate and the
 /// buttons stay where they are.
 #Preview("Statistics bar") {
     let populated = TextStats(text: "Lab credentials\nuser: admin\npass: rotate-me")
@@ -151,14 +151,6 @@ struct TextStatisticsBar: View {
         TextStatisticsBar(
             statistics: EditorStatistics(stats: populated),
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-86_400),
-            now: PreviewFixtures.now, color: .green, isPlainText: false, togglePlainText: {},
-            showSnapshots: {}
-        )
-        .frame(width: 480)
-
-        TextStatisticsBar(
-            statistics: EditorStatistics(stats: populated),
-            lastEditedAt: PreviewFixtures.now.addingTimeInterval(-300),
             now: PreviewFixtures.now, color: .blue, isPlainText: true, togglePlainText: {},
             showSnapshots: {}
         )
