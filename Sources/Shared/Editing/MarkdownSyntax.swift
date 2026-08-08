@@ -116,21 +116,29 @@ enum MarkdownSyntax {
         var cursor = range.location
 
         while cursor < limit {
-            let matched =
-                link(in: text, at: cursor, limit: limit, into: &spans)
-                ?? delimited(
-                    strong, .strong, in: text, at: cursor, lowerBound: range.location,
-                    limit: limit, into: &spans)
-                ?? delimited(
-                    strikethrough, .strikethrough, in: text, at: cursor, lowerBound: range.location,
-                    limit: limit, into: &spans)
-                ?? delimited(
-                    emphasis, .emphasis, in: text, at: cursor, lowerBound: range.location,
-                    limit: limit, into: &spans)
+            var matched = link(in: text, at: cursor, limit: limit, into: &spans)
+
+            for delimiter in inlineDelimiters where matched == nil {
+                matched = delimited(delimiter, in: text, at: cursor, bounds: range, into: &spans)
+            }
 
             cursor = matched ?? cursor + 1
         }
     }
+
+    /// A delimiter and what it means, so the scan passes one thing where it used to pass two.
+    private struct Delimiter {
+        let characters: String
+        let style: Style
+
+        var width: Int { characters.utf16.count }
+    }
+
+    private static let inlineDelimiters = [
+        Delimiter(characters: strong, style: .strong),
+        Delimiter(characters: strikethrough, style: .strikethrough),
+        Delimiter(characters: emphasis, style: .emphasis)
+    ]
 
     /// Matches `<delimiter>content<delimiter>` at `start`, appending its spans and returning the
     /// index just past it. nil means no match, and nothing was appended.
@@ -138,12 +146,15 @@ enum MarkdownSyntax {
     /// The whitespace rules are what keep arithmetic and shell globs out of the parser: in
     /// `2 * 3 * 4` the opening `*` is followed by a space, so it opens nothing.
     private static func delimited(
-        _ delimiter: String, _ style: Style, in text: NSString, at start: Int, lowerBound: Int,
-        limit: Int, into spans: inout [Span]
+        _ delimiter: Delimiter, in text: NSString, at start: Int, bounds: NSRange,
+        into spans: inout [Span]
     ) -> Int? {
-        let width = delimiter.utf16.count
-        guard matches(delimiter, in: text, at: start, limit: limit),
-            canOpen(delimiter, in: text, at: start, lowerBound: lowerBound)
+        let characters = delimiter.characters
+        let width = delimiter.width
+        let limit = NSMaxRange(bounds)
+
+        guard matches(characters, in: text, at: start, limit: limit),
+            canOpen(characters, in: text, at: start, lowerBound: bounds.location)
         else { return nil }
 
         let contentStart = start + width
@@ -153,18 +164,15 @@ enum MarkdownSyntax {
 
         // A doubled one-character delimiter opens nothing: `__` is not this app's spelling of
         // anything, and reading it as an empty run would leave the rest of the line mis-styled.
-        if width == 1, matches(delimiter, in: text, at: contentStart, limit: limit) { return nil }
+        if width == 1, matches(characters, in: text, at: contentStart, limit: limit) { return nil }
 
         var closing = contentStart + 1
         while closing + width <= limit {
-            if matches(delimiter, in: text, at: closing, limit: limit),
-                !isWhitespace(text.character(at: closing - 1)),
-                canClose(delimiter, in: text, at: closing, limit: limit)
-            {
+            if closes(delimiter, in: text, at: closing, limit: limit) {
                 let content = NSRange(location: contentStart, length: closing - contentStart)
 
                 spans.append(Span(range: NSRange(location: start, length: width), style: .marker))
-                spans.append(Span(range: content, style: style))
+                spans.append(Span(range: content, style: delimiter.style))
 
                 // One construct may sit inside another — `**_keys_**` is bold *and* italic — so
                 // the content is parsed in its own right. Later spans are painted over earlier
@@ -180,6 +188,16 @@ enum MarkdownSyntax {
         }
 
         return nil
+    }
+
+    /// Whether a delimiter at `index` closes a run: it is there, it does not close against
+    /// whitespace, and it falls at a word boundary if it is one that must.
+    private static func closes(
+        _ delimiter: Delimiter, in text: NSString, at index: Int, limit: Int
+    ) -> Bool {
+        matches(delimiter.characters, in: text, at: index, limit: limit)
+            && !isWhitespace(text.character(at: index - 1))
+            && canClose(delimiter.characters, in: text, at: index, limit: limit)
     }
 
     // MARK: - Word boundaries
@@ -241,9 +259,9 @@ enum MarkdownSyntax {
 
     // MARK: - Scanning
 
-    private static func matches(_ needle: String, in text: NSString, at index: Int, limit: Int)
-        -> Bool
-    {
+    private static func matches(
+        _ needle: String, in text: NSString, at index: Int, limit: Int
+    ) -> Bool {
         let units = Array(needle.utf16)
         guard index >= 0, index + units.count <= limit else { return false }
         return units.enumerated().allSatisfy { text.character(at: index + $0.offset) == $0.element }

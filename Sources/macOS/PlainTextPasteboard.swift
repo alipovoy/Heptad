@@ -78,8 +78,8 @@ extension NSAttributedString {
         var markdown = ""
         var pending: Run?
 
-        enumerateAttributes(in: NSRange(location: 0, length: length), options: []) {
-            attributes, range, _ in
+        let whole = NSRange(location: 0, length: length)
+        enumerateAttributes(in: whole, options: []) { attributes, range, _ in
             let text = attributedSubstring(from: range).string
             guard !text.isEmpty else { return }
 

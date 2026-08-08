@@ -36,8 +36,9 @@ enum MarkdownFormatting {
     ///
     /// An empty selection inserts an empty pair and puts the caret between the halves, so `⌘B`
     /// then typing is bold — the same thing it did when it moved typing attributes.
-    static func toggle(_ emphasis: Emphasis, in text: NSString, selectedRange: NSRange) -> TextEdit
-    {
+    static func toggle(
+        _ emphasis: Emphasis, in text: NSString, selectedRange: NSRange
+    ) -> TextEdit {
         let core = trimmed(selectedRange, in: text)
 
         guard core.length > 0 else {
@@ -67,9 +68,9 @@ enum MarkdownFormatting {
 
     // MARK: - One line
 
-    private static func toggleOnOneLine(_ emphasis: Emphasis, over core: NSRange, in text: NSString)
-        -> TextEdit
-    {
+    private static func toggleOnOneLine(
+        _ emphasis: Emphasis, over core: NSRange, in text: NSString
+    ) -> TextEdit {
         let run = run(emphasis, around: core, in: text)
 
         // Nothing to take off and no way to put one on that the parser would read back: ⌘I in
@@ -101,21 +102,18 @@ enum MarkdownFormatting {
     /// or it can be the text with the run just outside it (`keys` selected inside `**keys**`,
     /// which is where wrapping leaves the selection). A width of zero means neither — nothing to
     /// take off, so the caller puts one on.
-    private static func run(_ emphasis: Emphasis, around selection: NSRange, in text: NSString)
-        -> (core: NSRange, width: Int)
-    {
+    private static func run(
+        _ emphasis: Emphasis, around selection: NSRange, in text: NSString
+    ) -> (core: NSRange, width: Int) {
         let delimiter = emphasis.delimiter
         let width = delimiter.utf16.count
 
         // Delimiters the selection took in. Only when something is left over to style: `****`
         // selected whole is an empty pair, which is a thing to wrap, not a run to unwrap.
+        let inner = NSRange(location: selection.location, length: width)
+        let innerClose = NSRange(location: NSMaxRange(selection) - width, length: width)
         if selection.length > 2 * width,
-            text.substring(with: NSRange(location: selection.location, length: width)) == delimiter,
-            text.substring(with: NSRange(location: NSMaxRange(selection) - width, length: width))
-                == delimiter,
-            reads(emphasis, opening: selection.location, closing: NSMaxRange(selection) - width,
-                  in: text)
-        {
+            pairs(emphasis, opening: inner, closing: innerClose, in: text) {
             return (
                 NSRange(location: selection.location + width, length: selection.length - 2 * width),
                 width
@@ -125,14 +123,24 @@ enum MarkdownFormatting {
         // Delimiters just outside it.
         let before = NSRange(location: selection.location - width, length: width)
         let after = NSRange(location: NSMaxRange(selection), length: width)
-        if before.location >= 0, NSMaxRange(after) <= text.length,
-            text.substring(with: before) == delimiter, text.substring(with: after) == delimiter,
-            reads(emphasis, opening: before.location, closing: after.location, in: text)
-        {
+        if pairs(emphasis, opening: before, closing: after, in: text) {
             return (selection, width)
         }
 
         return (selection, 0)
+    }
+
+    /// Whether `opening` and `closing` hold this command's delimiters, spelled the way the parser
+    /// would read them.
+    private static func pairs(
+        _ emphasis: Emphasis, opening: NSRange, closing: NSRange, in text: NSString
+    ) -> Bool {
+        guard opening.location >= 0, NSMaxRange(closing) <= text.length else { return false }
+
+        let delimiter = emphasis.delimiter
+        return text.substring(with: opening) == delimiter
+            && text.substring(with: closing) == delimiter
+            && reads(emphasis, opening: opening.location, closing: closing.location, in: text)
     }
 
     private static func width(_ emphasis: Emphasis) -> Int { emphasis.delimiter.utf16.count }
@@ -158,16 +166,13 @@ enum MarkdownFormatting {
 
     /// Whether a pair *written* around `core` is one the parser would read back. The flanks are
     /// the characters already either side of the selection: the delimiters are not there yet.
-    private static func canWrap(_ emphasis: Emphasis, around core: NSRange, in text: NSString)
-        -> Bool
-    {
+    private static func canWrap(
+        _ emphasis: Emphasis, around core: NSRange, in text: NSString
+    ) -> Bool {
         guard MarkdownSyntax.mindsWordBoundaries(emphasis.delimiter) else { return true }
 
-        if core.location > 0,
-            MarkdownSyntax.isWordCharacter(text.character(at: core.location - 1))
-        {
-            return false
-        }
+        let before = core.location - 1
+        if before >= 0, MarkdownSyntax.isWordCharacter(text.character(at: before)) { return false }
 
         let after = NSMaxRange(core)
         if after < text.length, MarkdownSyntax.isWordCharacter(text.character(at: after)) {
