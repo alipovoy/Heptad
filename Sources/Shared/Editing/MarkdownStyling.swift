@@ -5,10 +5,12 @@ import Foundation
     import UIKit
 
     typealias PlatformFont = UIFont
+    typealias PlatformColor = UIColor
 #else
     import AppKit
 
     typealias PlatformFont = NSFont
+    typealias PlatformColor = NSColor
 #endif
 
 /// How a note's markdown is drawn.
@@ -24,16 +26,16 @@ import Foundation
 /// `Appearance`, not a different document.
 enum MarkdownStyling {
     /// The two things that decide how a note looks: its mode, and the app-wide zoom.
-    struct Appearance: Equatable {
+    struct Appearance {
         /// Monospaced, and markdown left as literal text — for credentials and keys, where a
         /// proportional font gets in the way and dimmed markers are just noise.
         let plainText: Bool
-        let fontSize: CGFloat
 
-        init(plainText: Bool, fontSize: CGFloat = EditorFontSize.current()) {
-            self.plainText = plainText
-            self.fontSize = fontSize
-        }
+        /// Passed in rather than read from `EditorFontSize.current()` here. Defaulting it made
+        /// every appearance read `UserDefaults.standard` no matter which suite the caller was
+        /// given, so a test that stepped the zoom in a scratch suite checked a number that never
+        /// reached a repaint.
+        let fontSize: CGFloat
 
         var baseFont: PlatformFont { .editorBody(plainText: plainText, size: fontSize) }
 
@@ -59,15 +61,37 @@ enum MarkdownStyling {
         guard whole.length > 0 else { return }
 
         storage.beginEditing()
-        storage.setAttributes(baseAttributes(appearance), range: whole)
-
-        if appearance.isStyled {
-            for span in MarkdownSyntax.spans(in: storage.string as NSString) {
-                apply(span, to: storage, appearance: appearance)
-            }
-        }
-
+        apply(appearance, to: storage, over: whole)
         storage.endEditing()
+    }
+
+    /// Repaints just the lines `range` touches.
+    ///
+    /// What a line looks like depends on that line alone — constructs never span lines — so an
+    /// edit only ever invalidates the lines it landed on. Repainting the whole note on every
+    /// keystroke was correct but put O(document) attribute setting and a full layout
+    /// invalidation on the main actor for each character typed.
+    ///
+    /// No `beginEditing`/`endEditing` here: the caller may already be inside `processEditing`,
+    /// where opening another editing group is not allowed. The whole-document entry point above
+    /// wraps its own.
+    static func apply(
+        _ appearance: Appearance, to storage: NSMutableAttributedString, over range: NSRange
+    ) {
+        let text = storage.string as NSString
+        guard text.length > 0 else { return }
+
+        let start = min(range.location, text.length)
+        let clamped = NSRange(location: start, length: min(range.length, text.length - start))
+        let lines = text.lineRange(for: clamped)
+        guard lines.length > 0 else { return }
+
+        storage.setAttributes(baseAttributes(appearance), range: lines)
+        guard appearance.isStyled else { return }
+
+        for span in MarkdownSyntax.spans(in: text, over: lines) {
+            apply(span, to: storage, appearance: appearance)
+        }
     }
 
     private static func apply(
@@ -75,9 +99,9 @@ enum MarkdownStyling {
     ) {
         switch span.style {
         case .strong:
-            storage.addAttribute(.font, value: appearance.baseFont.bolded(), range: span.range)
+            restyle(storage, over: span.range) { $0.bolded() }
         case .emphasis:
-            storage.addAttribute(.font, value: appearance.baseFont.italicized(), range: span.range)
+            restyle(storage, over: span.range) { $0.italicized() }
         case .strikethrough:
             storage.addAttribute(
                 .strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: span.range)
@@ -93,12 +117,33 @@ enum MarkdownStyling {
                 .foregroundColor, value: PlatformColor.editorMarker, range: span.range)
         }
     }
+
+    /// Rewrites the font of every run in `range` through `transform`.
+    ///
+    /// Reading each run's *current* font rather than starting again from `baseFont` is what lets
+    /// constructs nest: the italic pass inside `**_keys_**` sees the bold face the strong pass
+    /// left behind and adds to it, where assigning `baseFont.italicized()` would drop the weight.
+    /// The runs are collected before any of them is changed, because mutating an attribute while
+    /// enumerating that same attribute is not defined behaviour.
+    private static func restyle(
+        _ storage: NSMutableAttributedString, over range: NSRange,
+        _ transform: (PlatformFont) -> PlatformFont
+    ) {
+        var updates: [(NSRange, PlatformFont)] = []
+
+        storage.enumerateAttribute(.font, in: range, options: []) { value, subrange, _ in
+            guard let font = value as? PlatformFont else { return }
+            updates.append((subrange, transform(font)))
+        }
+
+        for (subrange, font) in updates {
+            storage.addAttribute(.font, value: font, range: subrange)
+        }
+    }
 }
 
 extension PlatformFont {
-    static func editorBody(plainText: Bool, size: CGFloat = AppConstants.Layout.defaultFontSize)
-        -> PlatformFont
-    {
+    static func editorBody(plainText: Bool, size: CGFloat) -> PlatformFont {
         plainText
             ? .monospacedSystemFont(ofSize: size, weight: .regular)
             : .systemFont(ofSize: size)
@@ -131,6 +176,20 @@ extension PlatformFont {
 }
 
 extension PlatformColor {
+    /// The system's body-text colour: black in light appearance, white in dark.
+    ///
+    /// Applied to the whole note on every repaint, which is what keeps it adaptive. Under RTF
+    /// storage it had to be filled in on load instead — text layout falls back to opaque black
+    /// for runs with no `.foregroundColor`, and RTF stores no colour for such runs, so notes
+    /// went unreadable in dark mode. Nothing is stored now, so there is nothing to fill in.
+    static var adaptiveEditorText: PlatformColor {
+        #if canImport(UIKit)
+            .label
+        #else
+            .textColor
+        #endif
+    }
+
     /// A link's label. The system's own link colour, so it tracks the accent.
     static var editorLink: PlatformColor {
         #if canImport(UIKit)

@@ -28,6 +28,7 @@ struct MacRichTextEditor: NSViewRepresentable {
 
         init(statistics: EditorStatistics) {
             self.statistics = statistics
+            super.init()
         }
 
         override func makeEditorView(for note: NoteItem) -> NSView {
@@ -45,6 +46,11 @@ struct MacRichTextEditor: NSViewRepresentable {
             }
 
             textView.delegate = self
+
+            // The view paints its own styling from its own text, on the one hook that knows
+            // which characters changed. See `MarkdownTextView.textStorage(_:didProcessEditing:…)`.
+            textView.textStorage?.delegate = textView
+
             textView.allowsUndo = true
             textView.importsGraphics = false
             textView.allowsImageEditing = false
@@ -79,10 +85,10 @@ struct MacRichTextEditor: NSViewRepresentable {
 
         /// Applies the note's mode and the app-wide zoom. Repaints only — the text is not read,
         /// not rewritten, and the saver is not told anything, because nothing changed.
-        override func configure(_ editorView: NSView, for note: NoteItem) {
+        override func configure(_ editorView: NSView, appearance: MarkdownStyling.Appearance) {
             guard let textView = textView(in: editorView) else { return }
 
-            textView.styling = MarkdownStyling.Appearance(plainText: note.isPlainText)
+            textView.styling = appearance
             textView.restyle()
         }
 
@@ -156,9 +162,9 @@ struct MacRichTextEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? MarkdownTextView else { return }
 
-            // Before the report, not after: `restyle` is what erases anything a paste brought
-            // with it, and the string handed on below is what gets saved.
-            textView.restyle()
+            // The storage has already repainted itself by now — the text view is its own
+            // storage delegate. Only the typing attributes are left to put back.
+            textView.resetTypingAttributes()
             textDidChange(text: textView.string)
         }
     }
@@ -181,7 +187,7 @@ extension NSTextView {
 }
 
 /// The editor's text view: its own undo stack, and markdown styling painted on from its text.
-class MarkdownTextView: NSTextView {
+class MarkdownTextView: NSTextView, NSTextStorageDelegate {
     private let customUndoManager = UndoManager()
 
     override var undoManager: UndoManager? {
@@ -189,18 +195,62 @@ class MarkdownTextView: NSTextView {
     }
 
     /// How this view draws. Display only — none of it is ever stored.
-    var styling = MarkdownStyling.Appearance(plainText: false)
+    var styling = MarkdownStyling.Appearance(
+        plainText: false, fontSize: AppConstants.Layout.defaultFontSize)
 
-    /// Repaints the note's styling from its own text.
+    /// The note leaves on the clipboard as its own characters, never as rich text.
     ///
-    /// The fix for #117 is that this is called after *every* change and clears the whole storage
-    /// to base attributes first. Undo restores text but not `typingAttributes`, and AppKit sets
-    /// those from whatever was pasted — so both the storage and the typing attributes are put
-    /// back under this app's control here, on every keystroke, rather than being trusted.
+    /// The view is `isRichText` so it can draw derived styling, and AppKit would otherwise write
+    /// that painted-on bold to the pasteboard as RTF. ⌘V reads rich flavors first, so it read the
+    /// paint back and re-derived delimiters from it: copying `**keys**` and pasting it returned
+    /// `****keys****`. The formatting of a note already *is* its characters, so they are the only
+    /// honest thing to write — and it makes the round trip exact rather than merely better.
+    ///
+    /// Filtered from `super`'s list rather than returned as `[.string]`. AppKit answers this with
+    /// its own legacy constants, and `writeSelection(to:type:)` recognises only those — handed
+    /// the modern `public.utf8-plain-text` spelling of the same flavor it writes nothing at all
+    /// and reports failure, which would make ⌘C copy an empty clipboard.
+    override var writablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        super.writablePasteboardTypes.filter { !Self.richTextTypes.contains($0.rawValue) }
+    }
+
+    private static let richTextTypes: Set<String> = [
+        NSPasteboard.PasteboardType.rtf.rawValue,
+        NSPasteboard.PasteboardType.rtfd.rawValue,
+        "NeXT Rich Text Format v1.0 pasteboard type",
+        "NeXT RTFD pasteboard type"
+    ]
+
+    /// Repaints the whole note, for when every line's appearance changes at once — a mode
+    /// switch, a zoom step, or freshly loaded text.
     func restyle() {
         guard let textStorage else { return }
 
         MarkdownStyling.apply(styling, to: textStorage)
+        resetTypingAttributes()
+    }
+
+    /// Repaints the lines an edit landed on.
+    ///
+    /// Half of the fix for #117: whatever colour or alignment a paste brought with it is gone by
+    /// the end of this call, because the lines it landed on are set back to base attributes
+    /// before the markdown is drawn. Doing it here rather than in `textDidChange` is what keeps
+    /// it to the edited lines — this is the one place the edited range is known.
+    func textStorage(
+        _ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
+        range editedRange: NSRange, changeInLength delta: Int
+    ) {
+        guard editedMask.contains(.editedCharacters) else { return }
+
+        MarkdownStyling.apply(styling, to: textStorage, over: editedRange)
+    }
+
+    /// The other half of #117, and the half no repaint of the storage can cover.
+    ///
+    /// `typingAttributes` are not part of the text storage: AppKit sets them from whatever was
+    /// pasted, and undo restores the characters without restoring them — which is how deleting a
+    /// pasted run left its colour on the caret for everything typed next.
+    func resetTypingAttributes() {
         typingAttributes = MarkdownStyling.baseAttributes(styling)
     }
 }

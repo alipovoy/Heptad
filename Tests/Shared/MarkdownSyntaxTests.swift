@@ -8,8 +8,8 @@ import Testing
 ///
 /// Worth pinning closely because it is the app's whole formatting vocabulary. Anything it
 /// recognises, a command can produce and remove; anything it does not is text. The deliberate
-/// limits — no nesting, no spanning lines, no escapes — are tested as limits rather than left to
-/// be discovered as bugs.
+/// limits — one spelling per construct, no spanning lines, no escapes, no parsing inside a
+/// link's label — are tested as limits rather than left to be discovered as bugs.
 struct MarkdownSyntaxTests {
 
     private func spans(_ text: String) -> [MarkdownSyntax.Span] {
@@ -34,7 +34,7 @@ struct MarkdownSyntaxTests {
 
     @Test(arguments: [
         ("**bold**", "bold", MarkdownSyntax.Style.strong),
-        ("*italic*", "italic", .emphasis),
+        ("_italic_", "italic", .emphasis),
         ("~~struck~~", "struck", .strikethrough)
     ])
     func delimitedRunsAreStyled(text: String, content: String, style: MarkdownSyntax.Style) {
@@ -73,9 +73,30 @@ struct MarkdownSyntaxTests {
         #expect(styled(text).isEmpty)
     }
 
-    @Test(arguments: ["**unclosed", "*also unclosed", "[label](no-paren", "[]()", "****"])
+    @Test(arguments: ["**unclosed", "_also unclosed", "[label](no-paren", "[]()", "****"])
     func incompleteConstructsStyleNothing(text: String) {
         #expect(styled(text).isEmpty)
+    }
+
+    /// The rule that makes `_` safe to spell italic with. An underscore inside a word belongs to
+    /// the word — these notes are full of keys and identifiers, and italicising the middle of
+    /// `AWS_SECRET_KEY` would be the app corrupting the one thing it is for.
+    ///
+    /// `__init__` is the case that needs `_` itself to count as a word character: the first
+    /// underscore is refused for being doubled, and without this rule the second one would open
+    /// a run the first was denied.
+    @Test(arguments: [
+        "AWS_SECRET_KEY", "snake_case_name", "some_var", "a_b",
+        "__init__", "__all__", "__", "___"
+    ])
+    func underscoresInsideWordsAreOrdinaryCharacters(text: String) {
+        #expect(styled(text).isEmpty)
+    }
+
+    /// The flanking rule cuts both ways: at a word boundary `_` is a delimiter again.
+    @Test(arguments: ["_keys_", "rotate _keys_", "_keys_ rotate", "(_keys_)", "**_keys_**"])
+    func underscoresAtWordBoundariesStillDelimit(text: String) {
+        #expect(styled(text).map(\.0).contains("keys"))
     }
 
     /// Constructs never span lines, so a stray delimiter spoils at most its own line.
@@ -84,38 +105,72 @@ struct MarkdownSyntaxTests {
     }
 
     @Test func eachLineIsParsedOnItsOwn() {
-        #expect(styled("**one**\nplain\n*two*").map(\.0) == ["one", "two"])
+        #expect(styled("**one**\nplain\n_two_").map(\.0) == ["one", "two"])
     }
 
-    /// `**` is claimed by the longer delimiter, never split into two empty emphasis runs.
-    @Test func boldIsNotReadAsTwoEmphasisRuns() {
+    /// `*` is not a delimiter at all now that italic is `_`, so a bold pair is one construct and
+    /// there is no shorter delimiter for it to be mistaken for.
+    @Test func boldIsOneConstructRatherThanTwo() {
         #expect(styled("**bold**").map(\.1) == [.strong])
+    }
+
+    /// `*` is an ordinary character, which is what makes arithmetic and shell globs safe to type.
+    @Test(arguments: ["*italic*", "2 * 3 * 4", "SELECT * FROM notes", "chmod +x *.sh"])
+    func asterisksOnTheirOwnStyleNothing(text: String) {
+        #expect(styled(text).isEmpty)
     }
 
     /// A documented limit rather than a bug: there are no escapes, so a note that genuinely
     /// contains delimiters renders them. Pinned so the cost of the choice stays visible.
     @Test func thereAreNoEscapes() {
-        #expect(styled("\\*not italic\\*").map(\.0) == ["not italic\\"])
+        #expect(styled("\\_not italic\\_").map(\.0) == ["not italic\\"])
     }
 
-    /// Another documented limit: constructs do not nest, and the outer one wins.
-    @Test func constructsDoNotNest() {
-        #expect(styled("**[docs](https://example.com)**").map(\.1) == [.strong])
+    /// Constructs nest, which is the point of spelling italic `_`: `⌘I` inside `**keys**` has a
+    /// delimiter of its own to add, so bold-italic is reachable and reversible without any
+    /// counting of asterisks. The inner run carries both styles.
+    @Test func constructsNest() {
+        #expect(styled("**_keys_**").map(\.0) == ["_keys_", "keys"])
+        #expect(styled("**_keys_**").map(\.1) == [.strong, .emphasis])
+    }
+
+    /// A link's label is still not parsed — `[**a**](b)` reads literally — but the link itself
+    /// nests inside an emphasis run like anything else.
+    @Test func aLinkNestsButItsLabelIsNotParsed() {
+        #expect(styled("**[docs](https://example.com)**").map(\.1) == [.strong, .link])
     }
 
     // MARK: - Shape
 
-    @Test func spansNeverOverlap() {
-        let text = "- [ ] **a** and *b* and [c](d) and ~~e~~"
-        let ordered = spans(text).sorted { $0.range.location < $1.range.location }
+    /// Spans nest rather than overlap: any two are disjoint, or one contains the other and comes
+    /// first. That order is what `MarkdownStyling` relies on — it merges each span's font into
+    /// what the enclosing span already left behind, so `**_keys_**` ends up bold *and* italic.
+    /// Partial overlap would make the result depend on which span happened to be painted last.
+    @Test(arguments: [
+        "- [ ] **a** and _b_ and [c](d) and ~~e~~",
+        "**_keys_**",
+        "~~**_a_**~~",
+        "**[docs](https://example.com)**"
+    ])
+    func spansAreDisjointOrNested(text: String) {
+        let all = spans(text)
 
-        for (previous, next) in zip(ordered, ordered.dropFirst()) {
-            #expect(NSMaxRange(previous.range) <= next.range.location)
+        for (index, outer) in all.enumerated() {
+            for inner in all[all.index(after: index)...] {
+                let disjoint =
+                    NSMaxRange(outer.range) <= inner.range.location
+                    || NSMaxRange(inner.range) <= outer.range.location
+                let contains =
+                    outer.range.location <= inner.range.location
+                    && NSMaxRange(inner.range) <= NSMaxRange(outer.range)
+
+                #expect(disjoint || contains)
+            }
         }
     }
 
     @Test func spansStayInsideTheText() {
-        let text = "**a**\n- [x] *b*\n[c](d)"
+        let text = "**a**\n- [x] _b_\n[c](d)"
 
         for span in spans(text) {
             #expect(span.range.location >= 0)

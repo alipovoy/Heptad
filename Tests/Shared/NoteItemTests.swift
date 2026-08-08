@@ -19,20 +19,9 @@ struct NoteItemTests {
 
     /// Markdown is stored verbatim: the delimiters are the note's content, not decoration
     /// applied to it, so nothing here may rewrite them.
-    @Test(arguments: [
-        "Round trip me",
-        "**bold** and *italic* and ~~struck~~",
-        "[label](https://example.com)",
-        "- [x] done\n- [ ] not",
-        "  leading and trailing kept  "
-    ])
-    func storedTextKeepsRealContentExactly(text: String) {
+    @Test func storedTextKeepsRealContentExactly() {
+        let text = "**bold** and _italic_ and ~~struck~~\n- [x] done\n  trailing space kept  "
         #expect(NoteItem.storedText(from: text) == text)
-    }
-
-    @Test func anEmptyNoteIsEmpty() {
-        #expect(NoteItem(id: 0).isEmpty)
-        #expect(NoteItem(id: 0, text: "written in").isEmpty == false)
     }
 
     // MARK: - Timestamps

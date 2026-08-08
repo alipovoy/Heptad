@@ -9,8 +9,8 @@ import Foundation
 ///
 /// Deliberately not a general markdown parser:
 ///
-/// * Constructs never span lines, so a stray `*` can spoil at most its own line.
-/// * Constructs never nest. `**[a](b)**` styles the outer pair and leaves the link as text.
+/// * Constructs never span lines, so a stray `**` can spoil at most its own line.
+/// * A link's label is not parsed. `[**a**](b)` is a link whose label reads literally.
 /// * There are no backslash escapes, so text that genuinely contains `**` renders as markers.
 ///   A note is a scratchpad; the cost of that is cosmetic, and the parser stays small enough
 ///   to hold in your head.
@@ -32,15 +32,38 @@ enum MarkdownSyntax {
     }
 
     static let strong = "**"
-    static let emphasis = "*"
+
+    /// Italic is `_`, not `*`. The two spellings are interchangeable in markdown at large, but
+    /// `*` is a prefix of `**`, and a delimiter that is a prefix of another delimiter cannot be
+    /// toggled cleanly: `⌘I` inside `**bold**` either peels the bold pair apart or grows it
+    /// without ever shrinking it again. Disjoint delimiters remove the ambiguity rather than
+    /// manage it, and they leave `*` free to be an ordinary character — `2 * 3` and `SELECT *`
+    /// mean what they say.
+    static let emphasis = "_"
+
     static let strikethrough = "~~"
 
-    /// Every styled run in `text`, in source order, non-overlapping.
+    /// Every styled run in `text`, in source order.
     static func spans(in text: NSString) -> [Span] {
-        var spans: [Span] = []
-        var lineStart = 0
+        spans(in: text, over: NSRange(location: 0, length: text.length))
+    }
 
-        while lineStart < text.length {
+    /// Every styled run on the lines `range` touches.
+    ///
+    /// Line-scoped parsing is what makes this range safe to ask for: a construct never spans
+    /// lines, so a line's styling depends on that line and nothing else, and repainting after an
+    /// edit never has to look further than the lines the edit landed on.
+    ///
+    /// Spans may overlap, because constructs nest — an emphasis run inside a strong one is two
+    /// spans over the same characters, the outer appended first.
+    static func spans(in text: NSString, over range: NSRange) -> [Span] {
+        var spans: [Span] = []
+        var lineStart = range.location
+
+        // An empty range still means the line it sits on, so a deletion repaints something.
+        let limit = min(max(NSMaxRange(range), range.location + 1), text.length)
+
+        while lineStart < limit {
             let lineRange = text.lineRange(for: NSRange(location: lineStart, length: 0))
 
             // `lineRange(for:)` on an in-bounds location always covers at least one character,
@@ -81,8 +104,11 @@ enum MarkdownSyntax {
 
     // MARK: - Inline
 
-    /// Longest delimiter first: `**` has to be tried before `*`, or every bold run would parse
-    /// as two empty emphasis runs.
+    /// Every delimiter here is disjoint from every other, so the order below is only a
+    /// convention — no delimiter can be mistaken for the opening of a longer one.
+    ///
+    /// `range` is also the boundary a `_` measures itself against, so a construct's content can
+    /// be handed straight back here to be parsed in its own right.
     private static func appendInlineSpans(
         in text: NSString, range: NSRange, into spans: inout [Span]
     ) {
@@ -92,10 +118,15 @@ enum MarkdownSyntax {
         while cursor < limit {
             let matched =
                 link(in: text, at: cursor, limit: limit, into: &spans)
-                ?? delimited(strong, .strong, in: text, at: cursor, limit: limit, into: &spans)
                 ?? delimited(
-                    strikethrough, .strikethrough, in: text, at: cursor, limit: limit, into: &spans)
-                ?? delimited(emphasis, .emphasis, in: text, at: cursor, limit: limit, into: &spans)
+                    strong, .strong, in: text, at: cursor, lowerBound: range.location,
+                    limit: limit, into: &spans)
+                ?? delimited(
+                    strikethrough, .strikethrough, in: text, at: cursor, lowerBound: range.location,
+                    limit: limit, into: &spans)
+                ?? delimited(
+                    emphasis, .emphasis, in: text, at: cursor, lowerBound: range.location,
+                    limit: limit, into: &spans)
 
             cursor = matched ?? cursor + 1
         }
@@ -107,31 +138,41 @@ enum MarkdownSyntax {
     /// The whitespace rules are what keep arithmetic and shell globs out of the parser: in
     /// `2 * 3 * 4` the opening `*` is followed by a space, so it opens nothing.
     private static func delimited(
-        _ delimiter: String, _ style: Style, in text: NSString, at start: Int, limit: Int,
-        into spans: inout [Span]
+        _ delimiter: String, _ style: Style, in text: NSString, at start: Int, lowerBound: Int,
+        limit: Int, into spans: inout [Span]
     ) -> Int? {
         let width = delimiter.utf16.count
-        guard matches(delimiter, in: text, at: start, limit: limit) else { return nil }
+        guard matches(delimiter, in: text, at: start, limit: limit),
+            canOpen(delimiter, in: text, at: start, lowerBound: lowerBound)
+        else { return nil }
 
         let contentStart = start + width
         guard contentStart < limit, !isWhitespace(text.character(at: contentStart)) else {
             return nil
         }
 
-        // A `*` that opens a `**` run belongs to the longer delimiter, which was already tried
-        // and declined — so this one has to decline too rather than claim half of it.
+        // A doubled one-character delimiter opens nothing: `__` is not this app's spelling of
+        // anything, and reading it as an empty run would leave the rest of the line mis-styled.
         if width == 1, matches(delimiter, in: text, at: contentStart, limit: limit) { return nil }
 
         var closing = contentStart + 1
         while closing + width <= limit {
             if matches(delimiter, in: text, at: closing, limit: limit),
-                !isWhitespace(text.character(at: closing - 1))
+                !isWhitespace(text.character(at: closing - 1)),
+                canClose(delimiter, in: text, at: closing, limit: limit)
             {
+                let content = NSRange(location: contentStart, length: closing - contentStart)
+
                 spans.append(Span(range: NSRange(location: start, length: width), style: .marker))
-                spans.append(
-                    Span(
-                        range: NSRange(location: contentStart, length: closing - contentStart),
-                        style: style))
+                spans.append(Span(range: content, style: style))
+
+                // One construct may sit inside another — `**_keys_**` is bold *and* italic — so
+                // the content is parsed in its own right. Later spans are painted over earlier
+                // ones, and `MarkdownStyling` merges font traits rather than replacing them, so
+                // the inner run keeps the outer run's weight. Terminates because the content is
+                // strictly shorter than what matched.
+                appendInlineSpans(in: text, range: content, into: &spans)
+
                 spans.append(Span(range: NSRange(location: closing, length: width), style: .marker))
                 return closing + width
             }
@@ -140,6 +181,42 @@ enum MarkdownSyntax {
 
         return nil
     }
+
+    // MARK: - Word boundaries
+    //
+    // `_` is the one delimiter that has to sit at a word boundary. Without this rule the app
+    // would italicise the middle of `AWS_SECRET_KEY` and `snake_case_name` — which is precisely
+    // the sort of thing these notes hold, so the rule is what makes `_` safe to spell italic
+    // with. `**` and `~~` need no such rule: nobody writes them inside an identifier.
+
+    private static func canOpen(
+        _ delimiter: String, in text: NSString, at index: Int, lowerBound: Int
+    ) -> Bool {
+        guard delimiter == emphasis, index > lowerBound else { return true }
+        return !isWordCharacter(text.character(at: index - 1))
+    }
+
+    private static func canClose(
+        _ delimiter: String, in text: NSString, at index: Int, limit: Int
+    ) -> Bool {
+        let after = index + delimiter.utf16.count
+        guard delimiter == emphasis, after < limit else { return true }
+        return !isWordCharacter(text.character(at: after))
+    }
+
+    /// Not private: `MarkdownFormatting` has to apply the same rule, or its commands would
+    /// claim underscores the parser never read as delimiters.
+    ///
+    /// `_` counts as a word character here, which is not what CommonMark says but is what an
+    /// identifier says: without it the second underscore of `__init__` opens a run the first one
+    /// was refused, and the note italicises the middle of a dunder name.
+    static func isWordCharacter(_ character: unichar) -> Bool {
+        guard let scalar = Unicode.Scalar(character) else { return false }
+        return scalar == "_" || CharacterSet.alphanumerics.contains(scalar)
+    }
+
+    /// Whether `delimiter` is one that has to fall at a word boundary. Only `_` is.
+    static func mindsWordBoundaries(_ delimiter: String) -> Bool { delimiter == emphasis }
 
     /// Matches `[label](url)` at `start`. Both halves must be non-empty: `[]()` is text.
     private static func link(
@@ -181,7 +258,10 @@ enum MarkdownSyntax {
         return nil
     }
 
-    private static func isWhitespace(_ character: unichar) -> Bool {
+    /// Not private: `MarkdownFormatting` trims selections to the same idea of whitespace this
+    /// parser refuses to close a delimiter against, so the commands cannot emit markdown their
+    /// own parser would reject.
+    static func isWhitespace(_ character: unichar) -> Bool {
         guard let scalar = Unicode.Scalar(character) else { return false }
         return CharacterSet.whitespacesAndNewlines.contains(scalar)
     }

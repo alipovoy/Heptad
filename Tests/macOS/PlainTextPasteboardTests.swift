@@ -109,4 +109,47 @@ private enum PlainTextPasteboardTestError: Error {
 
         #expect(scratch.pasteboard.plainTextForPaste() == "one\ntwo")
     }
+
+    // MARK: - Converting a paste to Markdown
+
+    /// Runs are split by *any* attribute change, not only the ones with a Markdown spelling. A
+    /// bold phrase with one word in another colour arrived as three runs and came out as three
+    /// delimiter pairs — `**rotate **` `**keys**` `** now**` — which reads back as literal
+    /// asterisks, since a pair cannot close against a space. One phrase is one pair.
+    @Test func adjacentRunsSpellingTheSameMarkdownBecomeOnePair() {
+        let styled = NSMutableAttributedString(
+            string: "rotate keys now", attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
+        styled.addAttribute(
+            .foregroundColor, value: NSColor.systemRed, range: NSRange(location: 7, length: 4))
+
+        #expect(styled.markdownRepresentation() == "**rotate keys now**")
+    }
+
+    /// The delimiters go around the run's content, not around the run: `**bold **` is four
+    /// literal asterisks that no command could then remove.
+    @Test func whitespaceStaysOutsideTheDelimiters() {
+        let styled = NSMutableAttributedString(string: "rotate keys now")
+        styled.addAttribute(
+            .font, value: NSFont.boldSystemFont(ofSize: 13), range: NSRange(location: 6, length: 6))
+
+        #expect(styled.markdownRepresentation() == "rotate **keys** now")
+    }
+
+    /// A construct never spans lines, so a bold run that crosses one is wrapped line by line.
+    @Test func aRunCrossingALineIsWrappedOnEachLine() {
+        let styled = NSAttributedString(
+            string: "one\ntwo", attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
+
+        #expect(styled.markdownRepresentation() == "**one**\n**two**")
+    }
+
+    /// Italic is `_`, so a converted paste has to spell it that way or the note would hold
+    /// asterisks that `⌘I` could never take off again.
+    @Test func italicArrivesAsAnUnderscorePair() {
+        let italic = NSFontManager.shared.convert(
+            NSFont.systemFont(ofSize: 13), toHaveTrait: .italicFontMask)
+        let styled = NSAttributedString(string: "keys", attributes: [.font: italic])
+
+        #expect(styled.markdownRepresentation() == "_keys_")
+    }
 }

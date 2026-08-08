@@ -14,18 +14,22 @@ The vocabulary is small on purpose, and it is exactly what the commands can prod
 
 | Markdown | Command |
 | --- | --- |
-| `**bold**`, `*italic*`, `~~strikethrough~~` | `⌘B`, `⌘I`, `⌘⇧X` |
+| `**bold**`, `_italic_`, `~~strikethrough~~` | `⌘B`, `⌘I`, `⌘⇧X` |
 | `[label](url)` | typed, or carried in by `⌘V` |
 | `- `, `* `, `1. ` | Return continues the list |
 | `- [ ] `, `- [x] ` | `⌘⇧U` flips the box |
 
 Return continues a list, numbering upward and keeping the indent; Return on an empty item removes the marker and ends the list.
 
-Constructs do not nest and do not span lines, and there are no backslash escapes — a note that genuinely contains `**` will show it styled. That is the accepted cost of a parser small enough to hold in your head.
+Italic is `_`, not `*`. Every delimiter is disjoint from every other, which is what makes each command exactly its own inverse: `⌘I` inside `**bold**` has a delimiter of its own to add, so `**_both_**` is reachable and reversible. It also leaves `*` an ordinary character, so `2 * 3` and `SELECT *` mean what they say. An underscore inside a word belongs to the word — `AWS_SECRET_KEY` and `__init__` are never italicised, and `⌘I` declines rather than write a pair it could not read back.
+
+Constructs nest but never span lines, and there are no backslash escapes — a note that genuinely contains `**` will show it styled. That is the accepted cost of a parser small enough to hold in your head.
 
 Any note can be switched to plain text from the statistics bar: monospaced, with its Markdown left as literal text and the formatting shortcuts turned off — useful for credentials, keys and anything else where a proportional font gets in the way. Switching is a rendering choice and never edits the note, so it is reversible as often as you like. The mode is stored per note.
 
-Pasting converts the clipboard's formatting to Markdown, keeping bold, italic, strikethrough and links, and dropping everything Heptad has no spelling for. Nothing can enter a note that its own commands cannot take back out.
+Pasting converts the clipboard's formatting to Markdown, keeping bold, italic, strikethrough and links, and dropping everything Heptad has no spelling for. In a plain-text note it pastes the characters alone, since that mode turns the formatting commands off. Nothing can enter a note that its own commands cannot take back out.
+
+Copying gives back the note's own characters — the delimiters are the formatting, so there is nothing else to carry. That also makes `⌘C` then `⌘V` inside the app exact, rather than converting the styling back into a second set of delimiters.
 
 On macOS `⌘⌫` clears the selected note, and the editor's context menu carries the same action. It is a single undo step, so `⌘Z` brings the note back.
 
@@ -76,7 +80,7 @@ Tests and contribution details are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 | `⌘⌫` | Clear the selected note |
 | `⌘Z` / `⌘⇧Z` | Undo / redo |
 | `⌘C` / `⌘X` | Copy / cut |
-| `⌘V` | Paste, converting the clipboard's formatting to Markdown |
+| `⌘V` | Paste, converting the clipboard's formatting to Markdown (plain-text notes take the characters alone) |
 | `⌘⇧V` | Paste as raw text, dropping the formatting entirely |
 | `⌘A` | Select all |
 | `⌘W` / `⌘Q` | Close window / quit |

@@ -34,7 +34,7 @@ final class EditorFormattingTests {
 
     @Test(arguments: [
         (MarkdownFormatting.Emphasis.strong, "**Test** Text"),
-        (.emphasis, "*Test* Text"),
+        (.emphasis, "_Test_ Text"),
         (.strikethrough, "~~Test~~ Text")
     ])
     func togglingEmphasisWrapsTheSelection(
@@ -132,7 +132,7 @@ final class EditorFormattingTests {
 
     @Test(arguments: [(true, CGFloat(18)), (false, CGFloat(14))])
     func changeFontSizeStepsTheZoomByTwoPoints(increase: Bool, expected: CGFloat) {
-        manager.changeFontSize(increase: increase, on: textView)
+        manager.changeFontSize(increase: increase)
 
         // The fixture starts at the app default, which is what an unset suite reports.
         #expect(EditorFontSize.current(scratchDefaults.defaults) == expected)
@@ -143,7 +143,7 @@ final class EditorFormattingTests {
     @Test func changeFontSizeLeavesTheTextAlone() {
         textView.setSelectedRange(NSRange(location: 0, length: 4))
 
-        manager.changeFontSize(increase: true, on: textView)
+        manager.changeFontSize(increase: true)
 
         #expect(textView.string == "Test Text")
     }
@@ -154,10 +154,10 @@ final class EditorFormattingTests {
         let floor = AppConstants.Layout.minFontSize
         scratchDefaults.defaults.set(Double(floor + 2), forKey: AppConstants.editorFontSizeKey)
 
-        manager.changeFontSize(increase: false, on: textView)
+        manager.changeFontSize(increase: false)
         #expect(EditorFontSize.current(scratchDefaults.defaults) == floor)
 
-        manager.changeFontSize(increase: false, on: textView)
+        manager.changeFontSize(increase: false)
         #expect(
             EditorFontSize.current(scratchDefaults.defaults) == floor,
             "The floor holds on a repeated decrease")
@@ -169,10 +169,10 @@ final class EditorFormattingTests {
         let ceiling = AppConstants.Layout.maxFontSize
         scratchDefaults.defaults.set(Double(ceiling - 2), forKey: AppConstants.editorFontSizeKey)
 
-        manager.changeFontSize(increase: true, on: textView)
+        manager.changeFontSize(increase: true)
         #expect(EditorFontSize.current(scratchDefaults.defaults) == ceiling)
 
-        manager.changeFontSize(increase: true, on: textView)
+        manager.changeFontSize(increase: true)
         #expect(
             EditorFontSize.current(scratchDefaults.defaults) == ceiling,
             "The ceiling holds on a repeated increase")
@@ -201,10 +201,10 @@ final class EditorFormattingTests {
             forName: .editorFontSizeDidChange, object: nil, queue: nil) { _ in posts += 1 }
         defer { notificationCenter.removeObserver(token) }
 
-        manager.changeFontSize(increase: true, on: textView)
+        manager.changeFontSize(increase: true)
         #expect(posts == 0)
 
-        manager.changeFontSize(increase: false, on: textView)
+        manager.changeFontSize(increase: false)
         #expect(posts == 1, "A step that moves the size does post")
     }
 }

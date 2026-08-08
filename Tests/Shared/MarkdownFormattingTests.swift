@@ -18,7 +18,7 @@ struct MarkdownFormattingTests {
 
     @Test(arguments: [
         (MarkdownFormatting.Emphasis.strong, "**keys**"),
-        (.emphasis, "*keys*"),
+        (.emphasis, "_keys_"),
         (.strikethrough, "~~keys~~")
     ])
     func wrappingTheSelection(emphasis: MarkdownFormatting.Emphasis, expected: String) {
@@ -64,30 +64,92 @@ struct MarkdownFormattingTests {
         #expect(result.selection == NSRange(location: 9, length: 0))
     }
 
-    /// A selection at the very start has no room for a delimiter in front of it, which is where
-    /// the "delimiters just outside" check would read past the start of the string.
-    @Test func aSelectionAtTheStartIsWrappedWithoutReadingPastTheText() {
-        #expect(toggle(.strong, "keys", NSRange(location: 0, length: 4)).text == "**keys**")
-    }
-
-    @Test func aSelectionAtTheEndIsWrappedWithoutReadingPastTheText() {
-        #expect(
-            toggle(.strong, "rotate keys", NSRange(location: 7, length: 4)).text
-                == "rotate **keys**")
-    }
-
-    /// `*` is a prefix of `**`, so an unwrap that looks only one delimiter out reads the inner
-    /// half of a bold pair as its own emphasis run — ⌘I inside `**keys**` peeled one asterisk off
-    /// each side and quietly turned the bold into italic. Each command owns its own delimiter.
-    @Test func emphasisDoesNotPeelABoldPairApart() {
+    /// The trap that spelling italic `_` removes. While italic was `*`, a prefix of `**`, ⌘I
+    /// inside `**keys**` had to decide whether the asterisk it found was its own or half of the
+    /// bold pair — it peeled the pair apart, and once guarded, grew it without shrinking it. Now
+    /// there is nothing to decide: ⌘I adds its own delimiter inside the bold one.
+    @Test func emphasisInsideBoldNestsRatherThanDisturbingIt() {
         #expect(toggle(.emphasis, "**keys**", NSRange(location: 2, length: 4)).text
-            == "***keys***")
+            == "**_keys_**")
     }
 
-    /// The same trap from the other side: selecting the whole bold run and pressing ⌘I must not
-    /// unwrap it either.
-    @Test func emphasisOverAWholeBoldRunDoesNotUnwrapIt() {
+    /// And back off again, which is what the old spelling could not do.
+    @Test func emphasisInsideBoldComesBackOff() {
+        #expect(toggle(.emphasis, "**_keys_**", NSRange(location: 3, length: 4)).text
+            == "**keys**")
+    }
+
+    /// Selecting the whole bold run and pressing ⌘I wraps the run rather than disturbing it.
+    @Test func emphasisOverAWholeBoldRunWrapsIt() {
         #expect(toggle(.emphasis, "**keys**", NSRange(location: 0, length: 8)).text
-            == "***keys***")
+            == "_**keys**_")
+    }
+
+    // MARK: - Word boundaries
+
+    /// ⌘I must not mistake an identifier's underscores for its own delimiters. Selecting `SECRET`
+    /// in `AWS_SECRET_KEY` and pressing ⌘I found a `_` either side and "unwrapped" them —
+    /// silently deleting two characters from the note. The parser never read those underscores as
+    /// delimiters, so the command may not either.
+    @Test func emphasisDoesNotEatTheUnderscoresInAnIdentifier() {
+        let result = toggle(.emphasis, "AWS_SECRET_KEY", NSRange(location: 4, length: 6))
+
+        #expect(result.text == "AWS_SECRET_KEY")
+    }
+
+    /// The other half of the same rule: mid-word there is no pair ⌘I could write that its own
+    /// parser would read back, so it declines rather than leaving `_key_store` in the note.
+    @Test(arguments: [
+        NSRange(location: 0, length: 3),  // "key" in "keystore"
+        NSRange(location: 3, length: 5),  // "store"
+        NSRange(location: 3, length: 0)  // a bare caret mid-word
+    ])
+    func emphasisDeclinesWhereItCouldNotBeReadBack(selection: NSRange) {
+        #expect(toggle(.emphasis, "keystore", selection).text == "keystore")
+    }
+
+    /// Bold is unaffected — `**` never turns up inside an identifier, so it needs no such rule.
+    @Test func boldStillWrapsInsideAWord() {
+        #expect(toggle(.strong, "keystore", NSRange(location: 0, length: 3)).text
+            == "**key**store")
+    }
+
+    // MARK: - Selections the parser would refuse
+
+    /// `MarkdownSyntax` will not close a delimiter against whitespace, so a selection that takes
+    /// in a trailing space used to produce `**keys **` — four literal asterisks, and no command
+    /// left that could remove them. The delimiters go around the content, not around the
+    /// selection.
+    @Test(arguments: [
+        NSRange(location: 7, length: 5),  // "keys " — trailing space
+        NSRange(location: 6, length: 5),  // " keys" — leading space
+        NSRange(location: 6, length: 6)  // " keys " — both
+    ])
+    func wrappingLeavesSurroundingWhitespaceOutsideTheDelimiters(selection: NSRange) {
+        #expect(toggle(.strong, "rotate keys now", selection).text == "rotate **keys** now")
+    }
+
+    /// A construct never spans lines, so one pair around a multi-line selection is markdown that
+    /// can never be read back. Each line gets its own pair instead.
+    @Test func wrappingASelectionAcrossLinesWrapsEachLine() {
+        let result = toggle(.strong, "line one\nline two", NSRange(location: 0, length: 17))
+        #expect(result.text == "**line one**\n**line two**")
+    }
+
+    /// And the direction is decided once for the whole selection, so a second press undoes the
+    /// first rather than wrapping the lines a second time.
+    @Test func wrappingAcrossLinesIsStillItsOwnInverse() throws {
+        let first = toggle(.strong, "line one\nline two", NSRange(location: 0, length: 17))
+        let selection = try #require(first.selection)
+
+        #expect(toggle(.strong, first.text, selection).text == "line one\nline two")
+    }
+
+    /// Blank lines carry no content to wrap, and the newlines and indentation between lines are
+    /// carried over untouched.
+    @Test func wrappingAcrossLinesSkipsBlankOnesAndKeepsIndentation() {
+        let text = "one\n\n  two"
+        #expect(toggle(.strong, text, NSRange(location: 0, length: 10)).text
+            == "**one**\n\n  **two**")
     }
 }

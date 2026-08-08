@@ -14,7 +14,7 @@ import Testing
 struct ListContinuationTests {
 
     /// Return at the end of `line`, which is the whole text.
-    private func returnEdit(atEndOf line: String) -> ListContinuation.Edit? {
+    private func returnEdit(atEndOf line: String) -> TextEdit? {
         let text = line as NSString
         return ListContinuation.returnEdit(
             in: text, selectedRange: NSRange(location: text.length, length: 0))
@@ -141,7 +141,7 @@ struct ListEditApplyTests {
         let textView = makeTextView(text: "- item")
 
         textView.apply(
-            ListContinuation.Edit(range: NSRange(location: 6, length: 0), replacement: "\n- "))
+            TextEdit(range: NSRange(location: 6, length: 0), replacement: "\n- "))
 
         #expect(currentText(of: textView) == "- item\n- ")
     }
@@ -150,7 +150,7 @@ struct ListEditApplyTests {
         let textView = makeTextView(text: "- item\n- ")
 
         textView.apply(
-            ListContinuation.Edit(range: NSRange(location: 7, length: 2), replacement: ""))
+            TextEdit(range: NSRange(location: 7, length: 2), replacement: ""))
 
         #expect(currentText(of: textView) == "- item\n")
     }

@@ -14,7 +14,12 @@ import Testing
 ///
 /// Commands are recorded as plain strings so the enum doesn't have to leak into the signature of
 /// a parameterized test — a private type there would force the test itself to be private.
-private final class SpyTextView: NSTextView {
+///
+/// A `MarkdownTextView` rather than a bare `NSTextView`, because the formatting and paste
+/// commands ask the view which mode it is in. Standing in for a view the app never installs
+/// would put every one of them on the plain-text branch, and the suite would pass while
+/// asserting nothing.
+private final class SpyTextView: MarkdownTextView {
     private(set) var commands: [String] = []
     private lazy var spyUndoManager = SpyUndoManager { [weak self] in self?.record($0) }
 
@@ -157,7 +162,7 @@ final class EditorShortcutManagerTests {
     /// stored zoom for ⌘+/⌘-, which stopped being a text edit when notes became markdown.
     @Test(
         arguments: [
-            ("b", false, "**Test** Text"), ("i", false, "*Test* Text"),
+            ("b", false, "**Test** Text"), ("i", false, "_Test_ Text"),
             ("x", true, "~~Test~~ Text"), ("X", false, "~~Test~~ Text")
         ])
     func emphasisShortcutsWrapTheSelection(chars: String, hasShift: Bool, expected: String) throws {

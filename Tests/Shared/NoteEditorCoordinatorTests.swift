@@ -46,6 +46,9 @@ private final class SpyEditorCoordinator: NoteEditorCoordinator {
     /// Note ids passed to `configure`, in call order.
     private(set) var configuredNoteIds: [Int] = []
 
+    /// The appearances `configure` was handed, in call order.
+    private(set) var configuredAppearances: [MarkdownStyling.Appearance] = []
+
     /// What the coordinator had done by the time each hook ran, so the ordering
     /// `makeCachedEditorView` keeps can be asserted rather than assumed.
     private(set) var stepsInOrder: [String] = []
@@ -67,8 +70,11 @@ private final class SpyEditorCoordinator: NoteEditorCoordinator {
         return view
     }
 
-    override func configure(_ editorView: PlatformView, for note: NoteItem) {
-        configuredNoteIds.append(note.id)
+    override func configure(_ editorView: PlatformView, appearance: MarkdownStyling.Appearance) {
+        // The hook is handed an appearance rather than a note, so the id comes from the view it
+        // was built for — the same map `plainText(of:)` reads.
+        configuredNoteIds.append(noteIdsByView[ObjectIdentifier(editorView)] ?? -1)
+        configuredAppearances.append(appearance)
         stepsInOrder.append("configure(showing: \(currentNoteId.map(String.init) ?? "nil"))")
     }
 

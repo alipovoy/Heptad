@@ -124,10 +124,10 @@ class EditorShortcutManager {
             return nil
         case "+", "=":
             // ⌘+ on US keyboard is ⌘⇧=, so we accept shift here
-            changeFontSize(increase: true, on: textView)
+            changeFontSize(increase: true)
             return nil
         case "-":
-            changeFontSize(increase: false, on: textView)
+            changeFontSize(increase: false)
             return nil
         case "z" where !hasShift:
             textView.undoManager?.undo()
@@ -175,8 +175,17 @@ class EditorShortcutManager {
     /// the direct cause of #117: the run's colour and alignment landed in the storage *and* in
     /// `typingAttributes`, where no command could reach them and undo would not restore them.
     /// Nothing that arrives through here is unrepresentable, so nothing can be stranded.
+    ///
+    /// A plain-text note takes the characters and no markup, because that mode silences `⌘B`,
+    /// `⌘I` and `⌘⇧X`: converting a pasted bold run to `**secret**` there would put delimiters
+    /// in the note that none of its own commands could take back out — the very thing this is
+    /// supposed to prevent.
     func pasteAsMarkdown(on textView: NSTextView) {
-        insert(pasteboard.markdownForPaste(), on: textView)
+        let clipboard = isStyled(textView)
+            ? pasteboard.markdownForPaste()
+            : pasteboard.plainTextForPaste()
+
+        insert(clipboard, on: textView)
     }
 
     /// ⌘⇧V, in place of `NSTextView.pasteAsPlainText` — which reads one flavor and gives up,
@@ -264,16 +273,22 @@ class EditorShortcutManager {
     /// Deliberately not behind the plain-text guard the commands above carry: one uniform font
     /// is still a size the user may want to change. `PlainTextModeTests` names ⌘B, ⌘I and ⌘⇧X as
     /// the commands plain mode silences, and leaves this one out.
-    func changeFontSize(increase: Bool, on textView: NSTextView) {
+    ///
+    /// Takes no text view. The zoom is an app-wide setting that every editor picks up through
+    /// `.editorFontSizeDidChange`, so there is no view for this to act on.
+    func changeFontSize(increase: Bool) {
         EditorFontSize.step(
             increase: increase, defaults: defaults, notificationCenter: notificationCenter)
     }
 
-    /// Whether the view draws its markdown, which is what the formatting commands need to be
-    /// worth applying. Read off the view rather than the note: the shortcut manager finds a text
-    /// view through the responder chain and never sees the model.
+    /// Whether the view draws its markdown, which is what the formatting and paste commands need
+    /// to know. Read off the view rather than the note: the shortcut manager finds a text view
+    /// through the responder chain and never sees the model.
+    ///
+    /// A view that is not a `MarkdownTextView` is not one of this app's editors and gets the
+    /// plain reading — `MacRichTextEditor` will not build any other kind.
     private func isStyled(_ textView: NSTextView) -> Bool {
-        (textView as? MarkdownTextView)?.styling.isStyled ?? textView.isRichText
+        (textView as? MarkdownTextView)?.styling.isStyled ?? false
     }
 
     // MARK: - Checkboxes

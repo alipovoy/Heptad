@@ -38,8 +38,14 @@ final class PlainTextModeTests {
         return try #require(storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont)
     }
 
+    /// The appearance the coordinator would build for a note in this mode, at the default zoom.
+    private func appearance(plainText: Bool) -> MarkdownStyling.Appearance {
+        MarkdownStyling.Appearance(
+            plainText: plainText, fontSize: AppConstants.Layout.defaultFontSize)
+    }
+
     private func baseFont(plainText: Bool) -> NSFont {
-        MarkdownStyling.Appearance(plainText: plainText).baseFont
+        appearance(plainText: plainText).baseFont
     }
 
     // MARK: - Applying the mode
@@ -126,16 +132,16 @@ final class PlainTextModeTests {
     func switchingModesAndBackRestoresTheStyling() throws {
         let textView = try textView()
         textView.string = "pass: **rotate-me**"
-        coordinator.configure(scrollView, for: NoteItem(id: 0))
+        coordinator.configure(scrollView, appearance: appearance(plainText: false))
 
         let styled = try font(at: 8)
         try #require(NSFontManager.shared.traits(of: styled).contains(.boldFontMask))
 
-        coordinator.configure(scrollView, for: NoteItem(id: 0, isPlainText: true))
+        coordinator.configure(scrollView, appearance: appearance(plainText: true))
         #expect(try font(at: 8) == baseFont(plainText: true), "Plain mode stops styling it")
         #expect(textView.string == "pass: **rotate-me**", "and changes not one character")
 
-        coordinator.configure(scrollView, for: NoteItem(id: 0))
+        coordinator.configure(scrollView, appearance: appearance(plainText: false))
         #expect(try font(at: 8) == styled, "Switching back brings the styling back")
     }
 
@@ -147,8 +153,8 @@ final class PlainTextModeTests {
         textView.string = "- [ ] rotate ~~the~~ *keys*"
 
         for _ in 0..<5 {
-            coordinator.configure(scrollView, for: NoteItem(id: 0, isPlainText: true))
-            coordinator.configure(scrollView, for: NoteItem(id: 0))
+            coordinator.configure(scrollView, appearance: appearance(plainText: true))
+            coordinator.configure(scrollView, appearance: appearance(plainText: false))
         }
 
         #expect(textView.string == "- [ ] rotate ~~the~~ *keys*")
@@ -165,9 +171,9 @@ final class PlainTextModeTests {
         let textView = try textView()
         textView.string = "**bold**"
 
-        coordinator.configure(scrollView, for: NoteItem(id: 0))
+        coordinator.configure(scrollView, appearance: appearance(plainText: false))
         let once = try font(at: 2)
-        coordinator.configure(scrollView, for: NoteItem(id: 0))
+        coordinator.configure(scrollView, appearance: appearance(plainText: false))
 
         #expect(try font(at: 2) == once)
         #expect(textView.string == "**bold**")
@@ -182,7 +188,7 @@ final class PlainTextModeTests {
     /// to leave attributes behind — so it proves the repaint erases them wherever they enter.
     @Test func pastingStyledTextIntoAPlainNoteDropsTheStyling() throws {
         let textView = try textView()
-        coordinator.configure(scrollView, for: NoteItem(id: 0, isPlainText: true))
+        coordinator.configure(scrollView, appearance: appearance(plainText: true))
 
         let styled = NSAttributedString(
             string: "rotate-me",
@@ -276,7 +282,7 @@ final class PlainTextModeTests {
     @Test func formattingShortcutsDoNothingInAPlainNote() throws {
         let textView = try textView()
         textView.string = "user: admin"
-        coordinator.configure(scrollView, for: NoteItem(id: 0, isPlainText: true))
+        coordinator.configure(scrollView, appearance: appearance(plainText: true))
         textView.setSelectedRange(NSRange(location: 0, length: 4))
 
         manager.toggleEmphasis(.strong, on: textView)
@@ -291,11 +297,96 @@ final class PlainTextModeTests {
     @Test func formattingShortcutsStillWorkInARichNote() throws {
         let textView = try textView()
         textView.string = "user: admin"
-        coordinator.configure(scrollView, for: NoteItem(id: 0))
+        coordinator.configure(scrollView, appearance: appearance(plainText: false))
         textView.setSelectedRange(NSRange(location: 0, length: 4))
 
         manager.toggleEmphasis(.strong, on: textView)
 
         #expect(textView.string == "**user**: admin")
+    }
+
+    // MARK: - Pasting
+
+    /// ⌘V follows the same guard the formatting commands do. Converting a pasted bold run to
+    /// `**secret**` in a note where ⌘B is silenced would put delimiters in it that none of its
+    /// own commands could take back out — the one thing the whole Markdown swap exists to stop.
+    @Test func pastingIntoAPlainNoteBringsNoDelimiters() throws {
+        let textView = try textView()
+        textView.string = ""
+        coordinator.configure(scrollView, appearance: appearance(plainText: true))
+
+        let scratch = ScratchPasteboard()
+        scratch.write { $0.setData(Data("<b>secret</b>".utf8), forType: .html) }
+        let shortcutManager = EditorShortcutManager(
+            defaults: scratchDefaults.defaults, pasteboard: scratch.pasteboard)
+
+        shortcutManager.pasteAsMarkdown(on: textView)
+
+        #expect(textView.string == "secret")
+    }
+
+    /// The same clipboard in a rich note does keep the bold, as source.
+    @Test func pastingIntoARichNoteConvertsTheFormatting() throws {
+        let textView = try textView()
+        textView.string = ""
+        coordinator.configure(scrollView, appearance: appearance(plainText: false))
+
+        let scratch = ScratchPasteboard()
+        scratch.write { $0.setData(Data("<b>secret</b>".utf8), forType: .html) }
+        let shortcutManager = EditorShortcutManager(
+            defaults: scratchDefaults.defaults, pasteboard: scratch.pasteboard)
+
+        shortcutManager.pasteAsMarkdown(on: textView)
+
+        #expect(textView.string == "**secret**")
+    }
+
+    // MARK: - Repainting
+
+    /// An edit repaints the lines it landed on, not the whole note — a construct never spans
+    /// lines, so nothing further can have changed. The result has to be indistinguishable from
+    /// repainting everything, which is what this compares it against.
+    @Test func editingOneLineRepaintsItToTheSameResultAsRepaintingAll() throws {
+        let textView = try textView()
+        coordinator.configure(scrollView, appearance: appearance(plainText: false))
+        textView.string = "**one**\nplain here\n_three_"
+        textView.restyle()
+
+        let storage = try #require(textView.textStorage)
+        storage.replaceCharacters(in: NSRange(location: 8, length: 10), with: "~~struck~~")
+
+        let afterEdit = NSAttributedString(attributedString: storage)
+        textView.restyle()
+
+        #expect(afterEdit.isEqual(to: storage), "The line-scoped repaint left the note as a full one would")
+    }
+
+    // MARK: - Copying
+
+    /// A note leaves on the clipboard as its own characters.
+    ///
+    /// The view is `isRichText` so it can draw its derived styling, and AppKit would otherwise
+    /// write that painted-on bold as RTF — which ⌘V reads back in preference to the plain
+    /// flavor, re-deriving delimiters from the paint. Copying `**keys**` and pasting it returned
+    /// `****keys****`, corrupting the note it came from.
+    @Test(.bug(id: 117))
+    func copyingAStyledNoteRoundTripsExactly() throws {
+        let textView = try textView()
+        textView.string = "**keys** and _more_"
+        coordinator.configure(scrollView, appearance: appearance(plainText: false))
+        textView.setSelectedRange(NSRange(location: 0, length: 19))
+
+        // No rich flavor offered, and the plain one still spelled the way AppKit's own writer
+        // recognises — returning `[.string]` here makes `writeSelection` fail and copy nothing.
+        #expect(textView.writablePasteboardTypes.isEmpty == false)
+        #expect(textView.writablePasteboardTypes.allSatisfy { $0 != .rtf && $0 != .rtfd })
+
+        // `writeSelection(to:types:)` writes into types the caller has already declared, which
+        // is what `copy(_:)` does for it.
+        let scratch = ScratchPasteboard()
+        scratch.pasteboard.declareTypes(textView.writablePasteboardTypes, owner: nil)
+        #expect(textView.writeSelection(to: scratch.pasteboard, types: textView.writablePasteboardTypes))
+
+        #expect(scratch.pasteboard.markdownForPaste() == "**keys** and _more_")
     }
 }

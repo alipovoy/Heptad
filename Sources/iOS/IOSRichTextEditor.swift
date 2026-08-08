@@ -28,12 +28,17 @@ struct IOSRichTextEditor: UIViewRepresentable {
 
         init(statistics: EditorStatistics) {
             self.statistics = statistics
+            super.init()
         }
 
         override func makeEditorView(for note: NoteItem) -> UIView {
             let textView = MarkdownTextView()
 
             textView.delegate = self
+
+            // The view paints its own styling from its own text, on the one hook that knows
+            // which characters changed. See `MarkdownTextView.textStorage(_:didProcessEditing:…)`.
+            textView.textStorage.delegate = textView
 
             // The user cannot apply attributes; this view's attributes are derived from its own
             // text and repainted after every change. See `MarkdownStyling`.
@@ -57,10 +62,10 @@ struct IOSRichTextEditor: UIViewRepresentable {
 
         /// Applies the note's mode and the app-wide zoom. Repaints only — the text is not read,
         /// not rewritten, and the saver is not told anything, because nothing changed.
-        override func configure(_ editorView: UIView, for note: NoteItem) {
+        override func configure(_ editorView: UIView, appearance: MarkdownStyling.Appearance) {
             guard let textView = editorView as? MarkdownTextView else { return }
 
-            textView.styling = MarkdownStyling.Appearance(plainText: note.isPlainText)
+            textView.styling = appearance
             textView.restyle()
         }
 
@@ -99,35 +104,53 @@ struct IOSRichTextEditor: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             guard let textView = textView as? MarkdownTextView else { return }
 
-            // Before the report, not after: `restyle` is what erases anything a paste brought
-            // with it, and the string handed on below is what gets saved.
-            textView.restyle()
+            // The storage has already repainted itself by now — the text view is its own
+            // storage delegate. Only the typing attributes are left to put back.
+            textView.resetTypingAttributes()
             textDidChange(text: textView.text ?? "")
         }
     }
 }
 
 /// The editor's text view, with markdown styling painted on from its text.
-class MarkdownTextView: UITextView {
+class MarkdownTextView: UITextView, NSTextStorageDelegate {
     /// How this view draws. Display only — none of it is ever stored.
-    var styling = MarkdownStyling.Appearance(plainText: false)
+    var styling = MarkdownStyling.Appearance(
+        plainText: false, fontSize: AppConstants.Layout.defaultFontSize)
 
-    /// Repaints the note's styling from its own text.
+    /// Repaints the whole note, for when every line's appearance changes at once — a mode
+    /// switch, a zoom step, or freshly loaded text.
     ///
-    /// See the macOS twin for why this runs after every change rather than only on demand: it
-    /// is what puts both the storage's attributes and `typingAttributes` back under this app's
-    /// control, instead of trusting what a paste or an undo left behind (#117).
-    ///
-    /// The selection is restored around the repaint. Mutating `textStorage` attributes leaves it
-    /// alone on macOS, but UIKit collapses it to the end of the document.
+    /// The selection is restored around the repaint. Setting attributes across the whole
+    /// document leaves it alone on macOS, but UIKit collapses it to the end. The line-scoped
+    /// repaint below does not need this: it never touches the whole document.
     func restyle() {
         let selection = selectedRange
 
         MarkdownStyling.apply(styling, to: textStorage)
-        typingAttributes = MarkdownStyling.baseAttributes(styling)
+        resetTypingAttributes()
 
         if selectedRange != selection {
             selectedRange = selection
         }
+    }
+
+    /// Repaints the lines an edit landed on. See the macOS twin.
+    ///
+    /// `NSTextStorage.EditActions` here where AppKit spells the same type
+    /// `NSTextStorageEditActions` — the one place the two editors cannot share a signature.
+    func textStorage(
+        _ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorage.EditActions,
+        range editedRange: NSRange, changeInLength delta: Int
+    ) {
+        guard editedMask.contains(.editedCharacters) else { return }
+
+        MarkdownStyling.apply(styling, to: textStorage, over: editedRange)
+    }
+
+    /// Typing attributes are not part of the storage, so no repaint of it can cover them —
+    /// they are the half of #117 that undo does not restore.
+    func resetTypingAttributes() {
+        typingAttributes = MarkdownStyling.baseAttributes(styling)
     }
 }

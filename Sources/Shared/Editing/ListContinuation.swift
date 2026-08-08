@@ -17,10 +17,8 @@ import Foundation
 /// which characters at the head of a line are a marker, rather than restating the same forms,
 /// so what Return continues and what the editor draws dimmed can never disagree.
 enum ListContinuation {
-    typealias Edit = TextEdit
-
     /// What Return should do instead of inserting a newline, or nil to let it through.
-    static func returnEdit(in text: NSString, selectedRange: NSRange) -> Edit? {
+    static func returnEdit(in text: NSString, selectedRange: NSRange) -> TextEdit? {
         // A selection means Return replaces something; only a bare caret continues a list.
         guard selectedRange.length == 0 else { return nil }
 
@@ -29,22 +27,22 @@ enum ListContinuation {
 
         // Return on a marker with nothing after it ends the list rather than growing it.
         guard !marker.contentIsEmpty else {
-            return Edit(
+            return TextEdit(
                 range: NSRange(location: lineRange.location, length: marker.length),
                 replacement: "")
         }
 
-        return Edit(range: selectedRange, replacement: "\n" + marker.next)
+        return TextEdit(range: selectedRange, replacement: "\n" + marker.next)
     }
 
     /// The flip of the checkbox on the line holding `selectedRange`, or nil when it has none.
-    static func checkboxEdit(in text: NSString, selectedRange: NSRange) -> Edit? {
+    static func checkboxEdit(in text: NSString, selectedRange: NSRange) -> TextEdit? {
         let lineRange = text.lineRange(for: selectedRange)
         guard let marker = marker(on: text.substring(with: lineRange)),
             let offset = marker.checkboxOffset
         else { return nil }
 
-        return Edit(
+        return TextEdit(
             range: NSRange(location: lineRange.location + offset, length: 1),
             replacement: marker.isChecked ? " " : "x")
     }

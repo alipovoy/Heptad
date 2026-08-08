@@ -19,18 +19,34 @@ class NoteEditorCoordinator: NSObject {
     private var savers: [Int: NoteContentSaver] = [:]
     private(set) var currentNoteId: Int?
 
-    /// The notes as of the last update, so a font-size change can repaint every cached view
-    /// without waiting for SwiftUI to drive one through.
-    private var notes: [NoteItem] = []
+    /// Each note's mode, by id, so a font-size change can repaint every cached view without
+    /// waiting for SwiftUI to drive one through.
+    ///
+    /// Modes rather than the notes themselves: `configure` asks a note for `isPlainText` and
+    /// nothing else, so keeping the models alive only to look one flag up would retain seven
+    /// managed objects for the coordinator's lifetime as a lookup table.
+    private var modes: [Int: Bool] = [:]
 
-    override init() {
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard, notificationCenter: NotificationCenter = .default) {
+        self.defaults = defaults
         super.init()
 
         // No removeObserver needed: selector-based observers auto-unregister on deinit. Same
         // pattern, and the same reason, as `NoteContentSaver`.
-        NotificationCenter.default.addObserver(
+        //
+        // The same centre the zoom is posted on, and the same defaults it is read from: half an
+        // injection seam is worse than none, because it reads as tested when it is not.
+        notificationCenter.addObserver(
             self, selector: #selector(editorFontSizeDidChange),
             name: .editorFontSizeDidChange, object: nil)
+    }
+
+    /// How a note should be drawn right now: its own mode, at the app-wide zoom.
+    func appearance(forNoteId id: Int) -> MarkdownStyling.Appearance {
+        MarkdownStyling.Appearance(
+            plainText: modes[id] ?? false, fontSize: EditorFontSize.current(defaults))
     }
 
     func setup(container: PlatformView, notes: [NoteItem], selectedIndex: Int) {
@@ -40,14 +56,14 @@ class NoteEditorCoordinator: NSObject {
 
     func update(notes: [NoteItem], selectedIndex: Int) {
         guard notes.indices.contains(selectedIndex) else { return }
-        self.notes = notes
+        for note in notes { modes[note.id] = note.isPlainText }
         let note = notes[selectedIndex]
 
         if currentNoteId == note.id {
             // Already showing, but its settings may have just changed — the plain-text toggle
             // acts on the note, not on the view, and the view is cached across updates.
             if let editorView = editorViews[note.id] {
-                configure(editorView, for: note)
+                configure(editorView, appearance: appearance(forNoteId: note.id))
             }
             return
         }
@@ -74,7 +90,7 @@ class NoteEditorCoordinator: NSObject {
             // changed mode while it was off screen would otherwise come back in the old one.
             // A new view is configured inside `makeCachedEditorView`, which has to do it at a
             // particular point in the build.
-            configure(editorView, for: note)
+            configure(editorView, appearance: appearance(forNoteId: note.id))
         } else {
             editorView = makeCachedEditorView(for: note)
         }
@@ -106,7 +122,7 @@ class NoteEditorCoordinator: NSObject {
         editorViews[note.id] = editorView
         savers[note.id] = NoteContentSaver(note: note)
 
-        configure(editorView, for: note)
+        configure(editorView, appearance: appearance(forNoteId: note.id))
         load(note.text, into: editorView)
         return editorView
     }
@@ -119,8 +135,7 @@ class NoteEditorCoordinator: NSObject {
     @objc nonisolated private func editorFontSizeDidChange() {
         MainActor.assumeIsolated {
             for (id, editorView) in editorViews {
-                guard let note = notes.first(where: { $0.id == id }) else { continue }
-                configure(editorView, for: note)
+                configure(editorView, appearance: appearance(forNoteId: id))
             }
         }
     }
@@ -176,7 +191,11 @@ class NoteEditorCoordinator: NSObject {
     /// guard against running twice: this repaints derived styling and never touches the text,
     /// so calling it on every keystroke would be wasteful but not wrong. Under attributed
     /// storage it flattened the note, and an unguarded call was destructive.
-    func configure(_ editorView: PlatformView, for note: NoteItem) {}
+    ///
+    /// Takes the appearance rather than the note: how a view draws is all this decides, and
+    /// asking for the model would put a `NoteItem` on the zoom-notification path, which has no
+    /// note in hand.
+    func configure(_ editorView: PlatformView, appearance: MarkdownStyling.Appearance) {}
 
     /// Puts the note's markdown into a view that has just been created and configured.
     func load(_ text: String, into editorView: PlatformView) {}

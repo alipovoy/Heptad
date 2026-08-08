@@ -115,7 +115,6 @@ struct NoteContentSaverTests {
         center.post(name: .flushPendingSaves, object: nil)
 
         // The save should have happened synchronously on the main thread now
-        #expect(note.text.isEmpty == false)
         #expect(note.text == "Flushed Text")
     }
 }
