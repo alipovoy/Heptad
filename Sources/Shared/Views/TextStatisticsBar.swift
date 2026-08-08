@@ -46,25 +46,41 @@ struct TextStatisticsBar: View {
         .foregroundStyle(.secondary)  // Vivid text color relying on the background
     }
 
-    /// The per-note plain-text switch. It sits here rather than in the macOS title bar the
-    /// issue suggested: the two icons are different widths, and anything of variable width up
-    /// there pushes the colour circles off centre — the same reason the pin toggle is here.
-    private var plainTextToggle: some View {
-        Button(action: togglePlainText) {
-            Image(systemName: isPlainText ? "curlybraces" : "textformat")
+    /// The chrome every control in the bar shares: an icon sized against the statistics text it
+    /// sits beside, no button decoration of its own, and out of the focus ring on macOS — the
+    /// bar is a readout, and tabbing through it should not stop on its buttons.
+    ///
+    /// Written once so a third control is one call rather than another copy of five modifiers
+    /// that have to stay in step with the two above it.
+    private func barButton(
+        systemImage: String, label: String, help: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
                 .font(.system(size: AppConstants.Layout.pinToggleIconSize))
         }
         .buttonStyle(.plain)
         #if os(macOS)
             .focusable(false)
         #endif
-        // Named for what the toggle does to the note's Markdown, since that is the visible
-        // difference: one mode draws it, the other leaves it as the characters you typed.
-        .accessibilityLabel(isPlainText ? "Show Markdown formatting" : "Show Markdown as plain text")
-        .help(
-            isPlainText
+        .accessibilityLabel(label)
+        .help(help)
+    }
+
+    /// The per-note plain-text switch. It sits here rather than in the macOS title bar the
+    /// issue suggested: the two icons are different widths, and anything of variable width up
+    /// there pushes the colour circles off centre — the same reason the pin toggle is here.
+    ///
+    /// Labelled for what the toggle does to the note's Markdown, since that is the visible
+    /// difference: one mode draws it, the other leaves it as the characters you typed.
+    private var plainTextToggle: some View {
+        barButton(
+            systemImage: isPlainText ? "curlybraces" : "textformat",
+            label: isPlainText ? "Show Markdown formatting" : "Show Markdown as plain text",
+            help: isPlainText
                 ? "Formatted Markdown for this note"
-                : "Plain monospaced Markdown source for this note")
+                : "Plain monospaced Markdown source for this note",
+            action: togglePlainText)
     }
 
     /// One `Text` so the counts read as a single run and wrap and truncate together.
@@ -96,20 +112,17 @@ struct TextStatisticsBar: View {
     }
 
     #if os(macOS)
-        /// Sized against the 11pt statistics text it sits beside, and left to inherit the bar's
-        /// secondary foreground style in both states — outlined vs filled carries the meaning.
+        /// Left to inherit the bar's secondary foreground style in both states — outlined vs
+        /// filled carries the meaning.
         private var pinToggle: some View {
-            Button {
+            barButton(
+                systemImage: isWindowPinned ? "pin.fill" : "pin.slash",
+                label: isWindowPinned ? "Unpin window" : "Pin window",
+                help: isWindowPinned ? "Unpin window (⌘P)" : "Keep window open (⌘P)"
+            ) {
                 // WindowManager owns and persists the state; this only asks it to flip.
                 NotificationCenter.default.post(name: .toggleWindowPin, object: nil)
-            } label: {
-                Image(systemName: isWindowPinned ? "pin.fill" : "pin.slash")
-                    .font(.system(size: AppConstants.Layout.pinToggleIconSize))
             }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .accessibilityLabel(isWindowPinned ? "Unpin window" : "Pin window")
-            .help(isWindowPinned ? "Unpin window (⌘P)" : "Keep window open (⌘P)")
         }
     #endif
 }
