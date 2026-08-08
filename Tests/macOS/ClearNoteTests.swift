@@ -10,13 +10,13 @@ import Testing
 final class ClearNoteTests {
     /// The app's text view rather than a bare one — a plain `NSTextView` takes its undo
     /// manager from a window, and there is none here.
-    private let textView: IsolatedUndoTextView
+    private let textView: MarkdownTextView
     private let coordinator: MacRichTextEditor.Coordinator
     private let scratchDefaults: ScratchDefaults
     private let manager: EditorShortcutManager
 
     init() throws {
-        textView = IsolatedUndoTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
+        textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
         textView.allowsUndo = true
         textView.string = "user: admin\npass: rotate-me"
 

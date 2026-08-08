@@ -12,15 +12,15 @@ import Testing
 @MainActor
 final class ListEditingTests {
     /// The app's own text view, not a bare `NSTextView`: a plain one takes its undo manager
-    /// from the window it is in, and there is no window here. `IsolatedUndoTextView` carries
+    /// from the window it is in, and there is no window here. `MarkdownTextView` carries
     /// the per-note manager the undo assertions below are about.
-    private let textView: IsolatedUndoTextView
+    private let textView: MarkdownTextView
     private let coordinator: MacRichTextEditor.Coordinator
     private let scratchDefaults: ScratchDefaults
     private let manager: EditorShortcutManager
 
     init() throws {
-        textView = IsolatedUndoTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
+        textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
         textView.isRichText = true
         textView.allowsUndo = true
 

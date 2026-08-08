@@ -22,6 +22,10 @@ enum AppConstants {
     /// toggle reads it through @AppStorage to render the current state.
     static let windowPinnedKey = "windowPinned"
 
+    /// UserDefaults key backing the editor's zoom level, which `⌘+` and `⌘-` step. One size for
+    /// every note: see `EditorFontSize`.
+    static let editorFontSizeKey = "editorFontSize"
+
     enum Layout {
         /// Padding and spacing within the UI
         static let defaultSpacing: CGFloat = 12

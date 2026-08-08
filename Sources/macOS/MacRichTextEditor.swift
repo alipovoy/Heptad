@@ -28,10 +28,11 @@ struct MacRichTextEditor: NSViewRepresentable {
 
         init(statistics: EditorStatistics) {
             self.statistics = statistics
+            super.init()
         }
 
         override func makeEditorView(for note: NoteItem) -> NSView {
-            let scrollView = IsolatedUndoTextView.scrollableTextView()
+            let scrollView = MarkdownTextView.scrollableTextView()
             scrollView.borderType = .noBorder
             scrollView.drawsBackground = false
 
@@ -40,19 +41,24 @@ struct MacRichTextEditor: NSViewRepresentable {
             // blank, with nothing logged anywhere to say why. `scrollableTextView()` is
             // documented to vend this class, so a miss is a broken invariant, not a state to
             // degrade into.
-            guard let textView = scrollView.documentView as? IsolatedUndoTextView else {
-                preconditionFailure("scrollableTextView() must vend an IsolatedUndoTextView")
+            guard let textView = scrollView.documentView as? MarkdownTextView else {
+                preconditionFailure("scrollableTextView() must vend a MarkdownTextView")
             }
 
             textView.delegate = self
+
+            // The view paints its own styling from its own text, on the one hook that knows
+            // which characters changed. See `MarkdownTextView.textStorage(_:didProcessEditing:…)`.
+            textView.textStorage?.delegate = textView
+
             textView.allowsUndo = true
             textView.importsGraphics = false
             textView.allowsImageEditing = false
 
-            // A new text view is a rich one. `configure` is what makes it plain, so the note's
-            // mode is applied in exactly one place rather than once here and once there.
+            // Rich in what it can *draw*, never in what it stores: the styling is recomputed
+            // from the text after every change and only `string` is saved. A plain-text view
+            // would refuse the derived attributes outright. See `MarkdownStyling`.
             textView.isRichText = true
-            textView.font = .editorBody(plainText: false)
 
             textView.usesInspectorBar = false
             textView.allowsDocumentBackgroundColorChange = false
@@ -65,36 +71,25 @@ struct MacRichTextEditor: NSViewRepresentable {
             return scrollView
         }
 
-        override func load(_ content: NSAttributedString?, into editorView: NSView) {
-            guard let content, let textView = textView(in: editorView) else { return }
+        override func load(_ text: String, into editorView: NSView) {
+            guard let textView = textView(in: editorView) else { return }
 
             textView.undoManager?.disableUndoRegistration()
-            textView.textStorage?.setAttributedString(content)
+            textView.textStorage?.replaceCharacters(
+                in: NSRange(location: 0, length: textView.textStorage?.length ?? 0), with: text)
             textView.undoManager?.enableUndoRegistration()
             textView.undoManager?.removeAllActions()
+
+            textView.restyle()
         }
 
-        /// Switches the visible text view between rich and plain, flattening what is already
-        /// there. `isRichText` is the applied state, so this is a no-op until the note's mode
-        /// actually changes.
-        override func configure(_ editorView: NSView, for note: NoteItem) {
-            guard let textView = textView(in: editorView),
-                textView.isRichText == note.isPlainText
-            else { return }
+        /// Applies the note's mode and the app-wide zoom. Repaints only — the text is not read,
+        /// not rewritten, and the saver is not told anything, because nothing changed.
+        override func configure(_ editorView: NSView, appearance: MarkdownStyling.Appearance) {
+            guard let textView = textView(in: editorView) else { return }
 
-            textView.isRichText = !note.isPlainText
-
-            let attributes = PlainTextMode.attributes(plainText: note.isPlainText)
-            textView.typingAttributes = attributes
-
-            // Through the change hooks, so the flattening is one undo step and reaches the
-            // saver — the note keeps its text and loses only how it looked.
-            guard let textStorage = textView.textStorage, textStorage.length > 0 else { return }
-            let range = NSRange(location: 0, length: textStorage.length)
-            guard textView.shouldChangeText(in: range, replacementString: nil) else { return }
-
-            textStorage.setAttributes(attributes, range: range)
-            textView.didChangeText()
+            textView.styling = appearance
+            textView.restyle()
         }
 
         override func resignFocus(from editorView: NSView) {
@@ -120,8 +115,8 @@ struct MacRichTextEditor: NSViewRepresentable {
             statistics.stats = stats
         }
 
-        private func textView(in editorView: NSView) -> NSTextView? {
-            (editorView as? NSScrollView)?.documentView as? NSTextView
+        private func textView(in editorView: NSView) -> MarkdownTextView? {
+            (editorView as? NSScrollView)?.documentView as? MarkdownTextView
         }
 
         /// Continues or ends a list when Return is pressed on one, by making the edit here and
@@ -165,13 +160,12 @@ struct MacRichTextEditor: NSViewRepresentable {
         }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView,
-                let textStorage = textView.textStorage
-            else { return }
+            guard let textView = notification.object as? MarkdownTextView else { return }
 
-            // The storage itself, not a copy of it: the saver reads it once per debounce
-            // window rather than once per keystroke. See `NoteContentSaver.save`.
-            textDidChange(attributedString: textStorage, plainText: textView.string)
+            // The storage has already repainted itself by now — the text view is its own
+            // storage delegate. Only the typing attributes are left to put back.
+            textView.resetTypingAttributes()
+            textDidChange(text: textView.string)
         }
     }
 }
@@ -192,10 +186,71 @@ extension NSTextView {
     }
 }
 
-class IsolatedUndoTextView: NSTextView {
+/// The editor's text view: its own undo stack, and markdown styling painted on from its text.
+class MarkdownTextView: NSTextView, NSTextStorageDelegate {
     private let customUndoManager = UndoManager()
 
     override var undoManager: UndoManager? {
         return customUndoManager
+    }
+
+    /// How this view draws. Display only — none of it is ever stored.
+    var styling = MarkdownStyling.Appearance(
+        plainText: false, fontSize: AppConstants.Layout.defaultFontSize)
+
+    /// The note leaves on the clipboard as its own characters, never as rich text.
+    ///
+    /// The view is `isRichText` so it can draw derived styling, and AppKit would otherwise write
+    /// that painted-on bold to the pasteboard as RTF. ⌘V reads rich flavors first, so it read the
+    /// paint back and re-derived delimiters from it: copying `**keys**` and pasting it returned
+    /// `****keys****`. The formatting of a note already *is* its characters, so they are the only
+    /// honest thing to write — and it makes the round trip exact rather than merely better.
+    ///
+    /// Filtered from `super`'s list rather than returned as `[.string]`. AppKit answers this with
+    /// its own legacy constants, and `writeSelection(to:type:)` recognises only those — handed
+    /// the modern `public.utf8-plain-text` spelling of the same flavor it writes nothing at all
+    /// and reports failure, which would make ⌘C copy an empty clipboard.
+    override var writablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        super.writablePasteboardTypes.filter { !Self.richTextTypes.contains($0.rawValue) }
+    }
+
+    private static let richTextTypes: Set<String> = [
+        NSPasteboard.PasteboardType.rtf.rawValue,
+        NSPasteboard.PasteboardType.rtfd.rawValue,
+        "NeXT Rich Text Format v1.0 pasteboard type",
+        "NeXT RTFD pasteboard type"
+    ]
+
+    /// Repaints the whole note, for when every line's appearance changes at once — a mode
+    /// switch, a zoom step, or freshly loaded text.
+    func restyle() {
+        guard let textStorage else { return }
+
+        MarkdownStyling.apply(styling, to: textStorage)
+        resetTypingAttributes()
+    }
+
+    /// Repaints the lines an edit landed on.
+    ///
+    /// Half of the fix for #117: whatever colour or alignment a paste brought with it is gone by
+    /// the end of this call, because the lines it landed on are set back to base attributes
+    /// before the markdown is drawn. Doing it here rather than in `textDidChange` is what keeps
+    /// it to the edited lines — this is the one place the edited range is known.
+    func textStorage(
+        _ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
+        range editedRange: NSRange, changeInLength delta: Int
+    ) {
+        guard editedMask.contains(.editedCharacters) else { return }
+
+        MarkdownStyling.apply(styling, to: textStorage, over: editedRange)
+    }
+
+    /// The other half of #117, and the half no repaint of the storage can cover.
+    ///
+    /// `typingAttributes` are not part of the text storage: AppKit sets them from whatever was
+    /// pasted, and undo restores the characters without restoring them — which is how deleting a
+    /// pasted run left its colour on the caret for everything typed next.
+    func resetTypingAttributes() {
+        typingAttributes = MarkdownStyling.baseAttributes(styling)
     }
 }

@@ -13,17 +13,12 @@ import Foundation
 /// Pure string work on purpose. The rule is the part worth testing, and the text mutation
 /// belongs to the platform text views, which are what put it on the per-note undo stack.
 ///
-/// Explicitly not a Markdown parser: these markers are recognised where a list continuation
-/// needs them and nowhere else, and nothing about how notes are stored changes.
+/// This file owns the list grammar. `MarkdownSyntax` asks it — through `markerLength(on:)` —
+/// which characters at the head of a line are a marker, rather than restating the same forms,
+/// so what Return continues and what the editor draws dimmed can never disagree.
 enum ListContinuation {
-    /// A replacement to make in the text view, in the view's own UTF-16 coordinates.
-    struct Edit: Equatable {
-        let range: NSRange
-        let replacement: String
-    }
-
     /// What Return should do instead of inserting a newline, or nil to let it through.
-    static func returnEdit(in text: NSString, selectedRange: NSRange) -> Edit? {
+    static func returnEdit(in text: NSString, selectedRange: NSRange) -> TextEdit? {
         // A selection means Return replaces something; only a bare caret continues a list.
         guard selectedRange.length == 0 else { return nil }
 
@@ -32,24 +27,30 @@ enum ListContinuation {
 
         // Return on a marker with nothing after it ends the list rather than growing it.
         guard !marker.contentIsEmpty else {
-            return Edit(
+            return TextEdit(
                 range: NSRange(location: lineRange.location, length: marker.length),
                 replacement: "")
         }
 
-        return Edit(range: selectedRange, replacement: "\n" + marker.next)
+        return TextEdit(range: selectedRange, replacement: "\n" + marker.next)
     }
 
     /// The flip of the checkbox on the line holding `selectedRange`, or nil when it has none.
-    static func checkboxEdit(in text: NSString, selectedRange: NSRange) -> Edit? {
+    static func checkboxEdit(in text: NSString, selectedRange: NSRange) -> TextEdit? {
         let lineRange = text.lineRange(for: selectedRange)
         guard let marker = marker(on: text.substring(with: lineRange)),
             let offset = marker.checkboxOffset
         else { return nil }
 
-        return Edit(
+        return TextEdit(
             range: NSRange(location: lineRange.location + offset, length: 1),
             replacement: marker.isChecked ? " " : "x")
+    }
+
+    /// UTF-16 units of list marker at the head of `line`, indent included, or nil when it has
+    /// none. What `MarkdownSyntax` dims.
+    static func markerLength(on line: String) -> Int? {
+        marker(on: line)?.length
     }
 
     // MARK: - Parsing
@@ -109,34 +110,3 @@ enum ListContinuation {
         return nil
     }
 }
-
-#if canImport(UIKit)
-    extension UITextView {
-        /// Applies `edit` through the text input system, which is what registers it for undo.
-        /// Mutating `textStorage` directly would leave the step un-undoable.
-        func apply(_ edit: ListContinuation.Edit) {
-            guard let start = position(from: beginningOfDocument, offset: edit.range.location),
-                let end = position(from: start, offset: edit.range.length),
-                let range = textRange(from: start, to: end)
-            else { return }
-
-            replace(range, withText: edit.replacement)
-        }
-    }
-#else
-    extension NSTextView {
-        /// Applies `edit` through the view's own change hooks, so the per-note undo manager
-        /// records it as one step. The inserted text takes the typing attributes rather than
-        /// whatever happened to sit at the replacement point.
-        func apply(_ edit: ListContinuation.Edit) {
-            guard let textStorage,
-                shouldChangeText(in: edit.range, replacementString: edit.replacement)
-            else { return }
-
-            textStorage.replaceCharacters(
-                in: edit.range,
-                with: NSAttributedString(string: edit.replacement, attributes: typingAttributes))
-            didChangeText()
-        }
-    }
-#endif

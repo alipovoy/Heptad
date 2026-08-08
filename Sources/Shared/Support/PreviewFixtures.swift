@@ -21,17 +21,15 @@ enum PreviewFixtures {
     /// Seven notes with a realistic mix: two with content, the rest never written to.
     static func notes() -> [NoteItem] {
         let content = [
-            0: "Lab credentials\nuser: admin\npass: rotate-me",
+            0: "Lab credentials\nuser: admin\npass: **rotate-me**",
             3: "Release checklist for the long-title case, truncated in the bar"
         ]
         return (0..<AppConstants.noteCount).map { id in
-            let rtf = content[id].flatMap {
-                NoteItem.rtfData(from: NSAttributedString(string: $0))
-            }
+            let text = content[id]
             return NoteItem(
                 id: id,
-                rtfData: rtf ?? Data(),
-                modifiedAt: rtf == nil ? .distantPast : .now.addingTimeInterval(-300)
+                text: text ?? "",
+                modifiedAt: text == nil ? .distantPast : .now.addingTimeInterval(-300)
             )
         }
     }

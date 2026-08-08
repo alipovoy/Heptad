@@ -4,13 +4,13 @@ extension Notification.Name {
     static let flushPendingSaves = Notification.Name("Heptad.flushPendingSaves")
 }
 
-/// A shared utility class to handle debouncing and RTF serialization for rich text editors.
+/// Debounces writes of a note's markdown back to the store.
 @MainActor
 class NoteContentSaver {
     private var saveTask: Task<Void, Never>?
     private let note: NoteItem
     private let debounce: Duration
-    private var pendingAttributedString: NSAttributedString?
+    private var pendingText: String?
 
     init(
         note: NoteItem,
@@ -29,18 +29,10 @@ class NoteContentSaver {
         )
     }
 
-    /// Debounces serialization and saving of `attributedString`.
-    ///
-    /// The argument may be the text view's own storage rather than a copy of it. Copying every
-    /// character and every attribute run on each keystroke, only for all but the last copy in a
-    /// 300 ms window to be thrown away by the next `save`, is the cost this avoids.
-    ///
-    /// What that changes: the RTF written is the text as of the *flush*, not as of this call.
-    /// Both run on the main actor, and any keystroke in between would have replaced the copy
-    /// anyway, so what lands in the note is the same either way.
-    func save(attributedString: NSAttributedString) {
+    /// Debounces the write of `text` to the note.
+    func save(text: String) {
         saveTask?.cancel()
-        pendingAttributedString = attributedString
+        pendingText = text
 
         saveTask = Task {
             try? await Task.sleep(for: debounce)
@@ -64,17 +56,17 @@ class NoteContentSaver {
     }
 
     private func flushPending() {
-        guard let pending = pendingAttributedString else { return }
-        performSave(attributedString: pending)
-        pendingAttributedString = nil
+        guard let pending = pendingText else { return }
+        performSave(text: pending)
+        pendingText = nil
     }
 
-    private func performSave(attributedString: NSAttributedString) {
-        // Keep the previous data when encoding fails; skip the SwiftData write when unchanged.
-        guard let data = NoteItem.rtfData(from: attributedString), data != note.rtfData else {
-            return
-        }
-        note.rtfData = data
+    private func performSave(text: String) {
+        // Skip the SwiftData write when unchanged.
+        let stored = NoteItem.storedText(from: text)
+        guard stored != note.text else { return }
+
+        note.text = stored
         // Only reached when the content actually changed, so the guard above keeps
         // `modifiedAt` from drifting on no-op saves (flushes, reopening a note).
         note.modifiedAt = .now
