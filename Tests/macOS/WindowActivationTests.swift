@@ -16,7 +16,7 @@ struct WindowActivationTests {
     private var activation: SpyActivationCoordinator { fixture.activation }
 
     init() throws {
-        fixture = try WindowManagerFixture(name: "WindowActivationTests")
+        fixture = try WindowManagerFixture()
     }
 
     @Test(.requiresAnotherRunningApp)

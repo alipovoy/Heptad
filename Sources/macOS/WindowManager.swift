@@ -21,17 +21,16 @@ extension Notification.Name {
 
 /// Owns the single app window and the two modes it can be in.
 ///
-/// Terminology — the code used to overload the word "pinned", so it is spelled out here:
+/// Terminology, since "pinned" reads as the opposite of what it means to the code:
 ///
 /// - **Panel mode**: the window is the menubar-attached floating `NSPanel`. It is re-anchored
 ///   under the status item on every show, floats above other apps, and a click anywhere outside
-///   it dismisses it. This is what the old `isPinnedToMenubar == true` meant.
+///   it dismisses it.
 /// - **Pinned**: the user-facing state behind the title-bar pin toggle and ⌘P. An ordinary
-///   movable window that stays put when the user clicks into another app — what
-///   `isPinnedToMenubar == false` used to produce.
+///   movable window that stays put when the user clicks into another app.
 ///
-/// The two are exact opposites (`isPanelMode == !isPinned`). Inside this file "pinned" only
-/// ever means the user-facing sense; the ambiguous `isPinnedToMenubar` is gone.
+/// They are exact opposites (`isPanelMode == !isPinned`), and pinning lasts only as long as the
+/// window is on screen: `hide(_:)` puts it back. It is state, not a preference — see #123.
 ///
 /// Pinning does not touch `NSApp.setActivationPolicy`: the app ships with `LSUIElement: true`
 /// and stays an accessory app in both modes, so a pinned window has no Dock icon or app menu.
@@ -39,7 +38,7 @@ extension Notification.Name {
 class WindowManager: NSObject, NSWindowDelegate {
     private(set) var window: NSPanel?
 
-    /// Guard flag to prevent windowDidMove from triggering during initial positioning.
+    /// Guard flag: `windowDidMove` ignores the moves an initial positioning makes.
     private var isPositioningPanel = false
 
     /// The anchor point the drag-away gesture is measured from — where the panel was placed
@@ -60,8 +59,9 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// where every guard in `windowDidMove` shows up.
     var isAwaitingDragToPinRelease: Bool { pendingPinMonitor != nil }
 
-    /// Backing store for the persisted pinned state.
-    private let defaults: UserDefaults
+    /// The pinned state, and the only copy of it — see `WindowState`. This class is its only
+    /// writer; the hosting view below is handed this very object.
+    let state = WindowState()
 
     /// Where `.flushPendingSaves` is posted when the window hides. Held so the injected centre
     /// used in tests is the one that hears it.
@@ -74,21 +74,19 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// hand focus straight back to it. See `yieldActivation()` for why that is not automatic.
     private var previouslyActiveApp: NSRunningApplication?
 
-    /// Weak reference to the status bar button to prevent dismissal when the user clicks the button itself
+    /// The status item, weakly, so a click on it is not read as a click outside the panel.
     weak var statusBarButton: NSStatusBarButton?
 
-    /// What AppKit persists the panel's frame under; "" persists nothing. Injected because the
-    /// autosave bypasses `defaults` above — see the call in `WindowManagerTests`.
+    /// What AppKit persists the panel's frame under; "" persists nothing. Injected so the tests
+    /// can turn it off — the autosave writes to standard defaults, see `WindowManagerFixture`.
     private let frameAutosaveName: NSWindow.FrameAutosaveName
 
     init(
-        defaults: UserDefaults = .standard,
         notificationCenter: NotificationCenter = .default,
         workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
         activation: ActivationCoordinating = SystemActivationCoordinator(),
         frameAutosaveName: NSWindow.FrameAutosaveName = "HeptadPanel"
     ) {
-        self.defaults = defaults
         self.notificationCenter = notificationCenter
         self.activation = activation
         self.frameAutosaveName = frameAutosaveName
@@ -138,13 +136,14 @@ class WindowManager: NSObject, NSWindowDelegate {
     // MARK: - Hiding
 
     /// The one way the window leaves the screen — the menubar icon, ⌘W/close, and a click
-    /// outside the panel all land here, and all three want the same four steps.
+    /// outside the panel all land here, and all four want the same steps.
     private func hide(_ window: NSWindow) {
         flushPendingSaves()
         window.orderOut(nil)
 
-        // Nothing left to dismiss, so the click-outside monitor has no work to do.
-        globalClickMonitor?.stop()
+        // Every show starts as the menubar panel. After `orderOut`, so the panel styling this
+        // restores stops the click-outside monitor rather than installing one.
+        setPinned(false)
         yieldActivation()
         notificationCenter.post(name: .windowDidHide, object: nil)
     }
@@ -209,15 +208,15 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     // MARK: - Pinning
 
-    /// The user-facing pinned state, persisted so it survives closing the window and relaunching.
-    var isPinned: Bool { defaults.bool(forKey: AppConstants.windowPinnedKey) }
+    /// The user-facing pinned state. Lives only as long as the window is on screen.
+    var isPinned: Bool { state.isPinned }
 
     /// True while the window behaves as the menubar panel — the inverse of `isPinned`.
     var isPanelMode: Bool { !isPinned }
 
-    /// Persists the pinned state and applies it to the live window, if there is one.
+    /// Records the pinned state and applies it to the live window, if there is one.
     func setPinned(_ pinned: Bool) {
-        defaults.set(pinned, forKey: AppConstants.windowPinnedKey)
+        state.isPinned = pinned
         guard let window else { return }
         applyPinnedState(to: window)
     }
@@ -267,8 +266,7 @@ class WindowManager: NSObject, NSWindowDelegate {
     // MARK: - Window Delegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        // The pinned state is deliberately left untouched: it is persisted, and the next show
-        // restores it.
+        // Closing reattaches, like every other way off the screen: `hide` owns that.
         hide(sender)
         return false
     }
@@ -303,9 +301,11 @@ class WindowManager: NSObject, NSWindowDelegate {
     }
 
     // MARK: - Hosting View
-
+    /// The pin toggle reads `state` out of the environment, so ⌘P and a drag-to-pin redraw it
+    /// without either of them knowing a view exists.
     private lazy var mainHostingView: NSView = {
-        NSHostingView(rootView: ContentView().modelContainer(HeptadApp.sharedModelContainer))
+        let content = ContentView().environment(state)
+        return NSHostingView(rootView: content.modelContainer(HeptadApp.sharedModelContainer))
     }()
 
     // MARK: - Showing the Window

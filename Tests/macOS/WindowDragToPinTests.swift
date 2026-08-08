@@ -13,7 +13,7 @@ struct WindowDragToPinTests {
     private var manager: WindowManager { fixture.manager }
 
     init() throws {
-        fixture = try WindowManagerFixture(name: "WindowDragToPinTests")
+        fixture = try WindowManagerFixture()
     }
 
     /// A panel show anchors on where the panel *landed*, so it cannot arm the pin gesture.

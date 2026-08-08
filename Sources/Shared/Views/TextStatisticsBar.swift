@@ -20,9 +20,10 @@ struct TextStatisticsBar: View {
     let togglePlainText: () -> Void
 
     #if os(macOS)
-        /// Read-only mirror of the window state WindowManager persists, so the pin button always
-        /// shows the truth — including when the state changes by ⌘P or by dragging the panel away.
-        @AppStorage(AppConstants.windowPinnedKey) private var isWindowPinned = false
+        /// The live window state `WindowManager` owns, so the pin button always shows the truth —
+        /// including when the state changes by ⌘P, by dragging the panel away, or by the window
+        /// hiding, which reattaches it.
+        @Environment(WindowState.self) private var windowState
     #endif
 
     var body: some View {
@@ -103,13 +104,13 @@ struct TextStatisticsBar: View {
                 // WindowManager owns and persists the state; this only asks it to flip.
                 NotificationCenter.default.post(name: .toggleWindowPin, object: nil)
             } label: {
-                Image(systemName: isWindowPinned ? "pin.fill" : "pin.slash")
+                Image(systemName: windowState.isPinned ? "pin.fill" : "pin.slash")
                     .font(.system(size: AppConstants.Layout.pinToggleIconSize))
             }
             .buttonStyle(.plain)
             .focusable(false)
-            .accessibilityLabel(isWindowPinned ? "Unpin window" : "Pin window")
-            .help(isWindowPinned ? "Unpin window (⌘P)" : "Keep window open (⌘P)")
+            .accessibilityLabel(windowState.isPinned ? "Unpin window" : "Pin window")
+            .help(windowState.isPinned ? "Unpin window (⌘P)" : "Keep window open (⌘P)")
         }
     #endif
 }
@@ -142,4 +143,9 @@ struct TextStatisticsBar: View {
         .frame(width: 320)
     }
     .padding()
+    #if os(macOS)
+        // The pin toggle reads this out of the environment, so a preview without it would trap
+        // rather than draw.
+        .environment(WindowState())
+    #endif
 }

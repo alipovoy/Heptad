@@ -172,6 +172,9 @@ struct ContentView: View {
     ContentView()
         .modelContainer(PreviewFixtures.container())
         .frame(width: 420, height: 320)
+        #if os(macOS)
+            .environment(WindowState())
+        #endif
 }
 
 /// The branch that shows until the seven notes exist — an empty store stands in for the
@@ -180,4 +183,7 @@ struct ContentView: View {
     ContentView()
         .modelContainer(PreviewFixtures.container(seeded: false))
         .frame(width: 420, height: 320)
+        #if os(macOS)
+            .environment(WindowState())
+        #endif
 }
