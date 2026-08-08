@@ -1,6 +1,4 @@
 import Cocoa
-import SwiftData
-import SwiftUI
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
