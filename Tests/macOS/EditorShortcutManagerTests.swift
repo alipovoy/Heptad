@@ -61,7 +61,7 @@ private final class SpyUndoManager: UndoManager {
 
 /// `NSTextView` and friends are main-actor types, and the suite drives them directly.
 @MainActor
-final class EditorShortcutManagerTests {
+struct EditorShortcutManagerTests {
     private let scratchDefaults: ScratchDefaults
     private let textView: SpyTextView
     private let manager: EditorShortcutManager

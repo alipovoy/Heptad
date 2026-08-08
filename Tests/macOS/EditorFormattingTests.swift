@@ -12,7 +12,7 @@ import Testing
 ///
 /// `NSTextView` is a main-actor type, and the suite drives it directly.
 @MainActor
-final class EditorFormattingTests {
+struct EditorFormattingTests {
     private let scratchDefaults: ScratchDefaults
     private let notificationCenter = NotificationCenter()
     private let textView: MarkdownTextView

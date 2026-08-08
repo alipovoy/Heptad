@@ -10,7 +10,7 @@ import Testing
 ///
 /// `ListContinuationTests` covers which edit each rule produces.
 @MainActor
-final class ListEditingTests {
+struct ListEditingTests {
     /// The app's own text view, not a bare `NSTextView`: a plain one takes its undo manager
     /// from the window it is in, and there is no window here. `MarkdownTextView` carries
     /// the per-note manager the undo assertions below are about.

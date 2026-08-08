@@ -89,7 +89,7 @@ extension Trait where Self == ConditionTrait {
 /// for it. `@MainActor` on top: Carbon's event dispatcher target is the main run loop's.
 @MainActor
 @Suite(.serialized, .tags(.systemResource))
-final class GlobalHotKeyManagerTests {
+struct GlobalHotKeyManagerTests {
     private let scratchDefaults: ScratchDefaults
     private var defaults: UserDefaults { scratchDefaults.defaults }
 
