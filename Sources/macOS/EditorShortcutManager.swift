@@ -230,11 +230,11 @@ class EditorShortcutManager {
             // ⌘0 is handled either way: with every note full there is nothing to switch to,
             // but the key still belongs to us and must not fall through to the text view.
             if let firstEmptyId {
-                defaults.set(firstEmptyId, forKey: AppConstants.selectedNoteIndexKey)
+                NoteSelection.store(firstEmptyId, in: defaults)
             }
             return true
         } else if (1...AppConstants.noteCount).contains(noteIndex) {
-            defaults.set(noteIndex - 1, forKey: AppConstants.selectedNoteIndexKey)
+            NoteSelection.store(noteIndex - 1, in: defaults)
             return true
         }
         return false

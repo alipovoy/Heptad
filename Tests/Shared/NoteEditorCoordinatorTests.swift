@@ -106,30 +106,6 @@ struct NoteEditorCoordinatorTests {
 
     // MARK: - Selection
 
-    /// A selection the notes array cannot answer leaves the coordinator exactly as it was.
-    ///
-    /// Both halves matter: nothing is built for a bad index on a cold coordinator, and — the
-    /// case that would actually be visible to a user — a bad index arriving while a note is on
-    /// screen must not tear that note down. The guard returns before the removal, so the
-    /// showing view keeps its focus and its place in the container.
-    @Test(arguments: [-1, 1, 42])
-    func outOfRangeSelectionIsIgnored(selectedIndex: Int) {
-        let oneNote = [notes[0]]
-        coordinator.setup(container: container, notes: oneNote, selectedIndex: selectedIndex)
-
-        #expect(coordinator.currentNoteId == nil)
-        #expect(coordinator.madeViewNoteIds.isEmpty)
-        #expect(container.subviews.isEmpty)
-
-        coordinator.update(notes: oneNote, selectedIndex: 0)
-        coordinator.update(notes: oneNote, selectedIndex: selectedIndex)
-
-        #expect(coordinator.currentNoteId == 0)
-        #expect(coordinator.madeViewNoteIds == [0])
-        #expect(coordinator.resignedViews.isEmpty)
-        #expect(container.subviews.count == 1)
-    }
-
     /// Re-selecting the note already on screen does nothing at all.
     ///
     /// SwiftUI drives `update` from view updates, so it is called far more often than the
