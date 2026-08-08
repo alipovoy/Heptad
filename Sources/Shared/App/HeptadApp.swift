@@ -11,23 +11,35 @@ struct HeptadApp: App {
 
         do {
             let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-
-            // Seed database
-            let context = container.mainContext
-            let fetchDescriptor = FetchDescriptor<NoteItem>()
-            if try context.fetchCount(fetchDescriptor) < AppConstants.noteCount {
-                let existingIds = Set(try context.fetch(fetchDescriptor).map(\.id))
-                for noteId in 0..<AppConstants.noteCount where !existingIds.contains(noteId) {
-                    context.insert(NoteItem(id: noteId, modifiedAt: .now))
-                }
-                try context.save()
-            }
-
+            try Self.seed(container.mainContext)
             return container
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
     }()
+
+    /// Fills in whichever of the seven notes the store does not already hold.
+    ///
+    /// A top-up rather than a create, and by id rather than by count. The notes are addressed by
+    /// id everywhere — ⌘1–⌘7, the palette, the stored selection — so a store missing note 3 needs
+    /// note 3 back, not a seventh note appended under whatever id came next. `id` is `.unique`,
+    /// so getting this wrong does not merely add rows: re-inserting an id that is already there
+    /// upserts, and the note's text goes with it.
+    ///
+    /// Runs on every launch, so leaving what is already there untouched is the whole contract.
+    ///
+    /// Lifted out of the container above purely so it can be tested: the partial-store case is
+    /// the one that matters and it cannot be arranged against the app's own on-disk store.
+    static func seed(_ context: ModelContext) throws {
+        let fetchDescriptor = FetchDescriptor<NoteItem>()
+        guard try context.fetchCount(fetchDescriptor) < AppConstants.noteCount else { return }
+
+        let existingIds = Set(try context.fetch(fetchDescriptor).map(\.id))
+        for noteId in 0..<AppConstants.noteCount where !existingIds.contains(noteId) {
+            context.insert(NoteItem(id: noteId, modifiedAt: .now))
+        }
+        try context.save()
+    }
 
     /// Creates `Library/Application Support` before the store beneath it is opened.
     ///
