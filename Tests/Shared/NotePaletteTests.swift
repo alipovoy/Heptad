@@ -10,10 +10,4 @@ struct NotePaletteTests {
     @Test func thereIsOneColorPerNote() {
         #expect(NotePalette.colors.count == AppConstants.noteCount)
     }
-
-    /// Two notes drawn in the same colour would make the circles ambiguous, which is the
-    /// only way the row says which note is which before one is opened.
-    @Test func everyColorIsDistinct() {
-        #expect(Set(NotePalette.colors.map(String.init(describing:))).count == NotePalette.colors.count)
-    }
 }

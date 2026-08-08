@@ -12,7 +12,7 @@ import Testing
 ///
 /// `NSTextView` is a main-actor type, and the suite drives it directly.
 @MainActor
-final class EditorFormattingTests {
+struct EditorFormattingTests {
     private let scratchDefaults: ScratchDefaults
     private let notificationCenter = NotificationCenter()
     private let textView: MarkdownTextView
@@ -96,7 +96,8 @@ final class EditorFormattingTests {
     }
 
     /// Driven through a real undo manager, which an `NSTextView` only has once it is in a window.
-    @Test func formattingIsUndoable() {
+    @Test(.tags(.windowServer))
+    func formattingIsUndoable() {
         // `isReleasedWhenClosed` off before anything else: AppKit's default of releasing the
         // window on close over-releases it under ARC and takes the test process down with it.
         let window = NSWindow(

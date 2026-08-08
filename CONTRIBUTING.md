@@ -31,9 +31,13 @@ brew install xcodegen swiftlint
 * `Sources/iOS/` — iOS-only code
 * `Tests/Shared/` — tests compiled into both test targets
 * `Tests/macOS/` — macOS-only tests
+* `Tests/iOS/` — iOS-only tests
 * `project.yml` — XcodeGen project definition
 
-There is no `Tests/iOS/`; the `Heptad-iOSTests` target compiles `Tests/Shared` only.
+`Heptad-macOSTests` compiles `Tests/Shared` and `Tests/macOS`; `Heptad-iOSTests` compiles
+`Tests/Shared` and `Tests/iOS`. Put a test in `Tests/Shared` unless it names a type that
+exists on only one platform — a platform-only file keeps the other target from listing a
+test it can never run.
 
 The subfolders under `Sources/Shared/` are grouping only. Everything is one module, so
 nothing imports anything else, and moving a file between them changes no code. `project.yml`

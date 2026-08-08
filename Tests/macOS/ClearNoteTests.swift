@@ -7,7 +7,7 @@ import Testing
 /// Clearing a note: the ⌘⌫ shortcut, the context-menu item beside it, and the undo that makes
 /// an accidental clear cheap again.
 @MainActor
-final class ClearNoteTests {
+struct ClearNoteTests {
     /// The app's text view rather than a bare one — a plain `NSTextView` takes its undo
     /// manager from a window, and there is none here.
     private let textView: MarkdownTextView

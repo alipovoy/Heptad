@@ -75,6 +75,7 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: Tests/Shared
+      - path: Tests/iOS
     dependencies:
       - target: Heptad-iOS
     settings:

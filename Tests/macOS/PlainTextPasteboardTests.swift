@@ -152,4 +152,70 @@ private enum PlainTextPasteboardTestError: Error {
 
         #expect(styled.markdownRepresentation() == "_keys_")
     }
+
+    // MARK: - Links
+    //
+    // The common rich paste: anything copied out of a browser carries one. Nothing else in the
+    // conversion reaches `url(in:)`, so without these the whole link arm is unexercised.
+
+    @Test func aLinkArrivesAsAMarkdownLink() throws {
+        let url = try #require(URL(string: "https://example.com"))
+        let styled = NSAttributedString(string: "docs", attributes: [.link: url])
+
+        #expect(styled.markdownRepresentation() == "[docs](https://example.com)")
+    }
+
+    /// AppKit hands `.link` back as a `URL` from some sources and as a plain `String` from
+    /// others, depending on which flavor decoded it — so both spellings have to read.
+    @Test func aLinkStoredAsAStringReadsTheSameWay() {
+        let styled = NSAttributedString(
+            string: "docs", attributes: [.link: "https://example.com"])
+
+        #expect(styled.markdownRepresentation() == "[docs](https://example.com)")
+    }
+
+    /// `MarkdownSyntax` does not parse inside a link's label, so emphasis written there could
+    /// never be read back — it would sit in the note as literal asterisks with no command able to
+    /// remove them. The link wins and the traits are dropped, which is the rule the whole
+    /// conversion exists to hold.
+    @Test func aBoldLinkKeepsTheLinkAndDropsTheBold() throws {
+        let url = try #require(URL(string: "https://example.com"))
+        let styled = NSAttributedString(
+            string: "docs",
+            attributes: [.link: url, .font: NSFont.boldSystemFont(ofSize: 13)])
+
+        #expect(styled.markdownRepresentation() == "[docs](https://example.com)")
+    }
+
+    /// The other half of that rule, and the one a spelling change would break silently: what the
+    /// conversion writes has to be what the parser reads back as a link.
+    @Test func aConvertedLinkParsesBackAsALink() throws {
+        let url = try #require(URL(string: "https://example.com"))
+        let markdown = NSAttributedString(string: "docs", attributes: [.link: url])
+            .markdownRepresentation()
+
+        let spans = MarkdownSyntax.spans(in: markdown as NSString)
+
+        #expect(spans.contains { $0.style == .link })
+    }
+
+    // MARK: - What ⌘V reads
+
+    /// With nothing rich on the clipboard the markdown reading falls through to the plain one,
+    /// which is what makes ⌘V work on an ordinary copy out of a terminal.
+    @Test func markdownForPasteFallsBackToThePlainReading() {
+        let scratch = ScratchPasteboard()
+        scratch.write { $0.setString("rotate keys", forType: .string) }
+
+        #expect(scratch.pasteboard.markdownForPaste() == "rotate keys")
+    }
+
+    /// nil rather than "", for the same reason as the plain reading: the caller leaves the note
+    /// alone instead of pasting nothing over the selection.
+    @Test func markdownForPasteIsNilForAClipboardHoldingNoText() throws {
+        let scratch = ScratchPasteboard()
+        try scratch.writeAnImage()
+
+        #expect(scratch.pasteboard.markdownForPaste() == nil)
+    }
 }
