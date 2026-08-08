@@ -82,7 +82,7 @@ final class ListEditingTests {
         #expect(textView.string == "- item")
     }
 
-    /// ⌘⇧U reaches the toggle only with shift held; plain ⌘U belongs to the text view.
+    /// ⌘⇧U reaches the toggle only with shift held; the plain form is checked below.
     @Test func shiftCommandUReachesTheToggle() throws {
         type("- [ ] task")
         let event = try #require(
@@ -96,6 +96,24 @@ final class ListEditingTests {
 
         #expect(consumed == nil, "The shortcut is handled here, not passed on")
         #expect(textView.string == "- [x] task")
+    }
+
+    /// The other side of that `where hasShift`: losing it would make plain ⌘U flip checkboxes.
+    /// Nothing else claims the key either — a markdown note has no underline to give — so it
+    /// reaches no command at all, which only a test of the unshifted form can pin.
+    @Test func plainCommandUIsHandedBack() throws {
+        type("- [ ] task")
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                windowNumber: 0, context: nil, characters: "u", charactersIgnoringModifiers: "u",
+                isARepeat: false, keyCode: 32))
+
+        let consumed = manager.handleTextViewShortcut(
+            chars: "u", hasShift: false, on: textView, event: event)
+
+        #expect(consumed != nil, "Plain ⌘U is not the app's key and must be handed back")
+        #expect(textView.string == "- [ ] task", "The box is left as it was")
     }
 
     // MARK: - Undo
