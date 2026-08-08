@@ -56,14 +56,7 @@ class EditorShortcutManager {
     private func setupMonitor() {
         localKeyMonitor = EventMonitor(local: true, mask: .keyDown) { [weak self] event in
             guard let self = self else { return event }
-
-            // Only handle ⌘ without option/control
-            guard event.modifierFlags.contains(.command),
-                !event.modifierFlags.contains(.option),
-                !event.modifierFlags.contains(.control)
-            else {
-                return event
-            }
+            guard Self.handlesModifiers(event.modifierFlags) else { return event }
 
             let chars = event.charactersIgnoringModifiers ?? ""
             let hasShift = event.modifierFlags.contains(.shift)
@@ -80,6 +73,17 @@ class EditorShortcutManager {
             return self.handleTextViewShortcut(
                 chars: chars, hasShift: hasShift, on: textView, event: event)
         }
+    }
+
+    /// The gate both dispatch tables sit behind: ⌘ held, option and control not.
+    ///
+    /// The exclusions carry the weight. `charactersIgnoringModifiers` reports "b" for ⌥⌘B just
+    /// as it does for ⌘B, so without them the tables would claim every ⌥⌘ and ⌃⌘ combination
+    /// the system and NSTextView own. Shift is left to the tables, which read it themselves.
+    static func handlesModifiers(_ flags: NSEvent.ModifierFlags) -> Bool {
+        flags.contains(.command)
+            && !flags.contains(.option)
+            && !flags.contains(.control)
     }
 
     /// Applies the ⌘ shortcuts that aren't scoped to the text view, so they work no matter what
