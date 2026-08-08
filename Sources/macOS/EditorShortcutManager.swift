@@ -1,6 +1,5 @@
 import Cocoa
 import SwiftData
-import SwiftUI
 
 /// Manages editor-specific keyboard shortcuts (formatting, font size, note switching) via a
 /// local event monitor, intercepting events before they reach the standard menu or text views.
@@ -49,14 +48,10 @@ class EditorShortcutManager {
         setupMonitor()
     }
 
-    /// Starts the shortcut interceptor.
+    /// Starts the shortcut interceptor. There is no matching stop: the monitor lives as long as
+    /// the app does, and a local monitor goes away with the process.
     func start() {
         localKeyMonitor?.start()
-    }
-
-    /// Stops the shortcut interceptor.
-    func stop() {
-        localKeyMonitor?.stop()
     }
 
     private func setupMonitor() {

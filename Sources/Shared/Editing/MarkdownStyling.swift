@@ -3,14 +3,8 @@ import Foundation
 
 #if canImport(UIKit)
     import UIKit
-
-    typealias PlatformFont = UIFont
-    typealias PlatformColor = UIColor
 #else
     import AppKit
-
-    typealias PlatformFont = NSFont
-    typealias PlatformColor = NSColor
 #endif
 
 /// How a note's markdown is drawn.
