@@ -9,7 +9,7 @@ import Testing
 /// `.serialized` because each test puts a real window on screen and the AppKit state behind that
 /// is process-wide; the fixture itself is per-test.
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .tags(.windowServer))
 struct WindowModeTests {
     private let fixture: WindowManagerFixture
     private var manager: WindowManager { fixture.manager }

@@ -9,7 +9,7 @@ import Testing
 /// *active* application with nothing on screen, and the app underneath is drawn frontmost without
 /// ever being told to restore its first responder. Every test here is about naming the successor.
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .tags(.windowServer))
 struct WindowActivationTests {
     private let fixture: WindowManagerFixture
     private var manager: WindowManager { fixture.manager }

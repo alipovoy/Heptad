@@ -88,7 +88,7 @@ extension Trait where Self == ConditionTrait {
 /// claim the same spare combination — so they run one at a time rather than racing each other
 /// for it. `@MainActor` on top: Carbon's event dispatcher target is the main run loop's.
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .tags(.systemResource))
 final class GlobalHotKeyManagerTests {
     private let scratchDefaults: ScratchDefaults
     private var defaults: UserDefaults { scratchDefaults.defaults }

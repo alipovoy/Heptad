@@ -17,7 +17,7 @@ import Testing
 /// Both tests that depend on real key-window status live here rather than being spread across
 /// suites: `.serialized` then guarantees they cannot race each other for it.
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .tags(.windowServer))
 struct WindowShowHideTests {
     private let fixture: WindowManagerFixture
     private var manager: WindowManager { fixture.manager }

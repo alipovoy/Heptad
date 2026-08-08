@@ -7,7 +7,7 @@ import Testing
 /// gesture arms: the distance it is measured over, the threshold, and the three states that must
 /// not arm it at all.
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .tags(.windowServer))
 struct WindowDragToPinTests {
     private let fixture: WindowManagerFixture
     private var manager: WindowManager { fixture.manager }

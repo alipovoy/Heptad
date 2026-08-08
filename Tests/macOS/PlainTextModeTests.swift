@@ -226,7 +226,7 @@ final class PlainTextModeTests {
     /// Driven through the raw AppKit read rather than ⌘V, which no longer goes anywhere near
     /// `paste(_:)`. That is deliberate: this pins the *repair*, not the avoidance, so the note
     /// stays clean even if something else ever puts attributes into the view.
-    @Test(.bug(id: 117))
+    @Test(.bug(id: 117), .tags(.windowServer))
     func undoingAPasteLeavesNoFormattingBehind() throws {
         // `isReleasedWhenClosed` off before anything else: AppKit's default of releasing the
         // window on close over-releases it under ARC and takes the test process down with it.
