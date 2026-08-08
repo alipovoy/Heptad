@@ -48,8 +48,7 @@ class EditorShortcutManager {
         setupMonitor()
     }
 
-    /// Starts the shortcut interceptor. There is no matching stop: the monitor lives as long as
-    /// the app does, and a local monitor goes away with the process.
+    /// Starts the shortcut interceptor. No matching stop: it goes away with the process.
     func start() {
         localKeyMonitor?.start()
     }

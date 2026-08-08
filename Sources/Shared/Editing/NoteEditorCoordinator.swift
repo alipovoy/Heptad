@@ -1,7 +1,9 @@
 #if canImport(UIKit)
     import UIKit
+    typealias PlatformView = UIView
 #else
     import AppKit
+    typealias PlatformView = NSView
 #endif
 
 /// Platform-neutral core shared by the macOS and iOS editor coordinators.
