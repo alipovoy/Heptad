@@ -251,9 +251,10 @@ final class EditorShortcutManagerTests {
             defaults: defaults, pasteboard: scratch.pasteboard)
         textView.setSelectedRange(NSRange(location: 0, length: 9))
 
-        shortcutManager.handleTextViewShortcut(
+        let result = shortcutManager.handleTextViewShortcut(
             chars: "v", hasShift: false, on: textView, event: try passThroughEvent())
 
+        #expect(result == nil, "A paste that ran means the key was consumed")
         #expect(textView.string == "**formatted**", "The bold arrives as source, not as a font")
         let storage = try #require(textView.textStorage)
         #expect(
