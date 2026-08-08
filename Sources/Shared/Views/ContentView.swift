@@ -6,7 +6,9 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \NoteItem.id) private var notes: [NoteItem]
-    @AppStorage(AppConstants.selectedNoteIndexKey) private var selectedNoteIndex = 0
+    /// The raw stored selection. Read through `selectedNoteIndex` and written through
+    /// `selection`, both below — never indexed with directly. See `NoteSelection`.
+    @AppStorage(AppConstants.selectedNoteIndexKey) private var storedNoteIndex = 0
     /// Deliberately not read in this body: the editors write to it and `TextStatisticsBar`
     /// reads it, so a keystroke invalidates the bar and nothing else. Held here as plain
     /// `TextStats` it re-evaluated this whole view — title bar, seven colour circles,
@@ -30,25 +32,25 @@ struct ContentView: View {
                     #if os(macOS)
                         macOSTitleBar
 
-                        MacRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex, statistics: statistics)
+                        MacRichTextEditor(notes: notes, selectedNoteIndex: selection, statistics: statistics)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(backgroundFill)
                     #else
-                        ColorPickerRow(selectedNoteIndex: $selectedNoteIndex, notes: notes)
+                        ColorPickerRow(selectedNoteIndex: selection, notes: notes)
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
 
-                        IOSRichTextEditor(notes: notes, selectedNoteIndex: $selectedNoteIndex, statistics: statistics)
+                        IOSRichTextEditor(notes: notes, selectedNoteIndex: selection, statistics: statistics)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     #endif
 
                     TextStatisticsBar(
                         statistics: statistics,
-                        lastEditedAt: notes[clampedNoteIndex].lastEditedAt,
+                        lastEditedAt: selectedNote.lastEditedAt,
                         now: ticker.now,
-                        color: NotePalette.colors[clampedNoteIndex],
-                        isPlainText: notes[clampedNoteIndex].isPlainText,
-                        togglePlainText: { notes[clampedNoteIndex].isPlainText.toggle() }
+                        color: NotePalette.colors[selectedNoteIndex],
+                        isPlainText: selectedNote.isPlainText,
+                        togglePlainText: { selectedNote.isPlainText.toggle() }
                     )
                     .background(backgroundFill)
                 }
@@ -63,19 +65,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .onAppear {
-            ticker.start()
-
-            // Writes the clamp back, so every reader of the selection agrees on it. The editors
-            // and the colour circles take the stored value as a binding rather than through
-            // `clampedNoteIndex`, and left at a junk index `NoteEditorCoordinator.update` would
-            // decline to install any editor view at all: a blank, untypable note beside a
-            // statistics bar describing a different one. Reading it clamped above keeps the
-            // first frame — which renders before this runs — from indexing out of bounds.
-            if selectedNoteIndex != clampedNoteIndex {
-                selectedNoteIndex = clampedNoteIndex
-            }
-        }
+        .onAppear { ticker.start() }
         .onDisappear { ticker.stop() }
         // iOS backgrounding. Inert on macOS: ContentView is mounted in a bare NSHostingView with
         // no Scene behind it, so scenePhase never changes there — WindowManager posts
@@ -113,23 +103,33 @@ struct ContentView: View {
         try? modelContext.save()
     }
 
-    /// `selectedNoteIndex` brought inside the bounds of `NotePalette.colors` and of `notes`.
-    ///
-    /// The stored value is plain `UserDefaults` — writable from outside the app, and carried
-    /// across versions that may not have had seven notes — and nothing sanity-checks it on read.
-    /// Indexing either array with it raw turns a junk default into a crash at launch, in a
-    /// menubar app with no window and no Dock icon: clicking the icon would simply do nothing,
-    /// with no visible explanation. `NoteEditorCoordinator.update` already guards its own
-    /// indexing; this is the same defensiveness on the views that read the selection directly.
-    ///
-    /// Bounded by the shorter of the two arrays it indexes: the palette, and `notes`, whose
-    /// count this is only ever read after checking against `AppConstants.noteCount`.
-    private var clampedNoteIndex: Int {
-        min(max(selectedNoteIndex, 0), min(NotePalette.colors.count, AppConstants.noteCount) - 1)
+    /// The selection, brought inside the bounds of `notes` — see `NoteSelection`. Only read
+    /// where the count check above has passed, so it always names a note that exists.
+    private var selectedNoteIndex: Int {
+        NoteSelection.clamped(storedNoteIndex, noteCount: notes.count)
     }
 
+    /// What the colour circles and the editors bind to: clamped on the way out, stored as given
+    /// on the way in. Handing them this rather than `$storedNoteIndex` is what keeps a junk
+    /// stored value from reaching `NoteEditorCoordinator`, which indexes `notes` with it.
+    ///
+    /// Built from the projected binding and the count rather than by reading the properties
+    /// inside the closures: a `Binding` outlives the `body` pass that made it — the circles
+    /// write through it from a tap — and closures that read them would capture a copy of the
+    /// view whose dynamic properties are only guaranteed live during that pass.
+    /// `$storedNoteIndex` addresses the store itself, so reading it later is still correct.
+    private var selection: Binding<Int> {
+        let stored = $storedNoteIndex
+        let noteCount = notes.count
+        return Binding(
+            get: { NoteSelection.clamped(stored.wrappedValue, noteCount: noteCount) },
+            set: { stored.wrappedValue = $0 })
+    }
+
+    private var selectedNote: NoteItem { notes[selectedNoteIndex] }
+
     private var backgroundFill: some View {
-        NotePalette.colors[clampedNoteIndex].opacity(0.1)
+        NotePalette.colors[selectedNoteIndex].opacity(0.1)
             .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
     }
 
@@ -150,7 +150,7 @@ struct ContentView: View {
 
                 Spacer()
 
-                ColorPickerRow(selectedNoteIndex: $selectedNoteIndex, notes: notes)
+                ColorPickerRow(selectedNoteIndex: selection, notes: notes)
 
                 Spacer()
 

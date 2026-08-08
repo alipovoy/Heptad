@@ -52,8 +52,12 @@ class NoteEditorCoordinator: NSObject {
         update(notes: notes, selectedIndex: selectedIndex)
     }
 
+    /// `selectedIndex` must be a valid index into `notes`. Both representables take the two from
+    /// the same `ContentView` body, where the selection is clamped against that very array — see
+    /// `NoteSelection`. Guarding again here would be a second answer to the same question, and
+    /// the answer it used to give was to install no editor at all: a blank, untypable note
+    /// beside a statistics bar describing a different one.
     func update(notes: [NoteItem], selectedIndex: Int) {
-        guard notes.indices.contains(selectedIndex) else { return }
         for note in notes { modes[note.id] = note.isPlainText }
         let note = notes[selectedIndex]
 
