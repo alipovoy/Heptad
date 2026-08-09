@@ -238,8 +238,10 @@ class WindowManager: NSObject, NSWindowDelegate {
     }
 
     /// Pinned styling: an ordinary movable window that other apps may cover and that never
-    /// dismisses itself. `.nonactivatingPanel` deliberately stays in the mask — it only governs
-    /// activation on click, and the panel has always kept it in this mode.
+    /// dismisses itself.
+    ///
+    /// What makes a click on it activate the app is not here — `.nonactivatingPanel` is off the
+    /// window from construction and is never toggled per mode. See `showWindow` and #127.
     private func applyPinnedStyling(to window: NSPanel) {
         window.styleMask.insert(.miniaturizable)
         window.isFloatingPanel = false
@@ -248,7 +250,6 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     /// Panel styling: floats above other apps, no miniaturize button, click-outside dismisses.
     private func applyPanelStyling(to window: NSPanel) {
-        window.styleMask.insert(.nonactivatingPanel)
         window.styleMask.remove(.miniaturizable)
         window.isFloatingPanel = true
 
@@ -312,11 +313,20 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     private func showWindow(sender: NSStatusBarButton) {
         if window == nil {
+            // No `.nonactivatingPanel`, and it is never inserted later either (#127). That mask
+            // means "take key focus without activating the app", which is what left a detached
+            // window unable to bring Heptad forward when it was clicked or picked in Mission
+            // Control. Toggling it per mode does not work: the flag is read when the window is
+            // created, so a later `styleMask` edit changes what the mask reports without changing
+            // how the window behaves — and rewriting the mask of a window already on screen
+            // rebuilds its frame view and drops the first responder, which is a live window that
+            // takes no typing.
+            //
+            // Panel mode loses nothing by its absence: `showWindow` calls `takeActivation()` on
+            // every show, so the panel was already activating the app on purpose.
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
-                styleMask: [
-                    .titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel
-                ],
+                styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
                 backing: .buffered, defer: false)
 
             // AppKit persists and restores the frame; panel mode re-anchors the origin on every show.
@@ -331,7 +341,11 @@ class WindowManager: NSObject, NSWindowDelegate {
             panel.isReleasedWhenClosed = false
             panel.isFloatingPanel = true
             panel.hidesOnDeactivate = false
-            panel.becomesKeyOnlyIfNeeded = true
+
+            // A click anywhere in the window makes it key, not only one that lands on something
+            // wanting keystrokes. The window is an editor; there is nothing in it to click that
+            // does not want the caret.
+            panel.becomesKeyOnlyIfNeeded = false
             panel.delegate = self
             panel.contentView = mainHostingView
 
