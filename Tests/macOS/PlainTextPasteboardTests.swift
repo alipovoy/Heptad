@@ -125,6 +125,35 @@ private enum PlainTextPasteboardTestError: Error {
         #expect(styled.markdownRepresentation() == "**rotate keys now**")
     }
 
+    /// A snippet that contains delimiters of its own arrives as those characters, not as
+    /// formatting nobody applied — the paste is written through the same escaping writer a save
+    /// goes through.
+    @Test(.bug(id: 124)) func delimitersInsideAPastedRunAreEscaped() throws {
+        let styled = NSAttributedString(
+            string: "run **build** now", attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
+
+        // Asserted by reading it back rather than by its spelling: what matters is that the note
+        // ends up holding the snippet, bold, with its asterisks still asterisks.
+        let read = RichTextRendering.attributed(
+            from: styled.markdownRepresentation(),
+            appearance: MarkdownStyling.Appearance(
+                plainText: false, fontSize: AppConstants.Layout.defaultFontSize))
+
+        #expect(read.string == "run **build** now")
+        let font = try #require(read.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        #expect(font.isBold)
+    }
+
+    /// A clipboard of bare characters is text already — markdown someone wrote by hand, or a
+    /// note copied out of this app — so ⌘V reads it as the source it looks like rather than
+    /// escaping the delimiters it meant.
+    @Test(.bug(id: 124)) func anUnformattedClipboardIsNotRewritten() {
+        let scratch = ScratchPasteboard()
+        scratch.write { $0.setString("**keys** and _more_", forType: .string) }
+
+        #expect(scratch.pasteboard.markdownForPaste() == "**keys** and _more_")
+    }
+
     /// The delimiters go around the run's content, not around the run: `**bold **` is four
     /// literal asterisks that no command could then remove.
     @Test func whitespaceStaysOutsideTheDelimiters() {

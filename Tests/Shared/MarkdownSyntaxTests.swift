@@ -133,10 +133,44 @@ struct MarkdownSyntaxTests {
         #expect(styled(text).isEmpty)
     }
 
-    /// A documented limit rather than a bug: there are no escapes, so a note that genuinely
-    /// contains delimiters renders them. Pinned so the cost of the choice stays visible.
-    @Test func thereAreNoEscapes() {
-        #expect(styled("\\_not italic\\_").map(\.0) == ["not italic\\"])
+    // MARK: - Escapes
+
+    /// A backslash says what the character after it is not, so a note can hold the markdown it
+    /// is talking about. `MarkdownWriting` is what puts them in.
+    @Test(arguments: [
+        "\\_not italic\\_",
+        "\\*\\*not bold\\*\\*",
+        "\\~\\~not struck\\~\\~",
+        "\\[not a link](https://example.com)"
+    ])
+    func anEscapedDelimiterStylesNothing(text: String) {
+        #expect(styled(text).isEmpty)
+    }
+
+    /// The backslash itself is a marker: it has said its piece by the time the note is drawn, so
+    /// what is left on screen is the character it was protecting.
+    @Test func theBackslashIsAMarkerAndTheCharacterAfterItIsText() {
+        #expect(markers("\\*keys\\*") == ["\\", "\\"])
+    }
+
+    /// An escaped delimiter cannot close a run either — otherwise `**a \** b**` would end at the
+    /// half the note meant literally.
+    @Test func anEscapedDelimiterDoesNotCloseARun() {
+        #expect(styled("**bold \\** still**").map(\.0) == ["bold \\** still"])
+    }
+
+    /// `\\` is an escaped backslash, which leaves the character after it free to mean what it
+    /// says. Counting them is what tells the two cases apart.
+    @Test func anEscapedBackslashDoesNotEscapeWhatFollowsIt() {
+        #expect(styled("\\\\**bold**").map(\.0) == ["bold"])
+    }
+
+    /// A backslash in front of anything this parser cannot act on is an ordinary backslash —
+    /// these notes are full of paths and regexes, and doubling every one would be its own noise.
+    @Test(arguments: ["C:\\Users\\admin", "\\d+ digits", "back\\slash"])
+    func aBackslashBeforeAnOrdinaryCharacterIsItselfOrdinary(text: String) {
+        #expect(markers(text).isEmpty)
+        #expect(styled(text).isEmpty)
     }
 
     /// Constructs nest, which is the point of spelling italic `_`: `⌘I` inside `**keys**` has a

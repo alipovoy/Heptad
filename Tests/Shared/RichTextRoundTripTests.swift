@@ -44,7 +44,11 @@ struct RichTextRoundTripTests {
             "AWS_SECRET_KEY=abc",
             "2 * 3 * 4",
             "chmod +x *.sh here",
-            "trailing spaces   \nand a tab\tinside"
+            "trailing spaces   \nand a tab\tinside",
+            "\\*\\*not bold\\*\\*",
+            "\\_not italic\\_ but **this is**",
+            "C:\\Users\\admin",
+            "a \\ b"
         ])
     func markdownSurvivesTheRoundTrip(source: String) {
         #expect(roundTrip(source) == source)
@@ -106,6 +110,67 @@ struct RichTextRoundTripTests {
 
         #expect(text.string == "**keys**")
         #expect(text.attribute(.font, at: 0, effectiveRange: nil) as? PlatformFont == plain.baseFont)
+    }
+
+    // MARK: - Escapes
+
+    /// The reason escapes exist: a user types the asterisks *as* asterisks in formatted mode, and
+    /// a save that turned them into a bold run would be the app rewriting the note behind them.
+    @Test(.bug(id: 124), arguments: [
+        "**bold**", "_italic_", "~~struck~~", "[docs](https://example.com)", "a \\* b"
+    ])
+    func markdownTypedAsTextComesBackAsText(typed: String) {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: typed)
+
+        let written = MarkdownWriting.markdown(from: text)
+
+        #expect(written != typed, "The delimiters are escaped on the way out")
+        #expect(rendered(written).string == typed, "and come back as the characters they were")
+    }
+
+    /// Only the lines that need escaping get them. A note is read in plain mode too, and a
+    /// backslash in front of every glob would be its own kind of damage.
+    @Test(.bug(id: 124), arguments: [
+        "2 * 3 * 4", "chmod +x *.sh", "AWS_SECRET_KEY=abc", "C:\\Users\\admin", "50% * 2"
+    ])
+    func textThatReadsBackAsItselfIsLeftAlone(typed: String) {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: typed)
+
+        #expect(MarkdownWriting.markdown(from: text) == typed)
+    }
+
+    /// A backslash that protects nothing is dropped on the way out, because the parser reads
+    /// `\\\\` and `\\` as the same one character. The note is unchanged; only its spelling is.
+    @Test func aRedundantEscapeIsWrittenInItsShorterSpelling() {
+        #expect(rendered("escaped \\\\ backslash").string == "escaped \\ backslash")
+        #expect(roundTrip("escaped \\\\ backslash") == "escaped \\ backslash")
+    }
+
+    /// Escaping is decided per line, so one awkward line does not put backslashes through the
+    /// whole note.
+    @Test(.bug(id: 124)) func onlyTheLineThatNeedsEscapingGetsIt() {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "2 * 3\n**not bold**")
+
+        #expect(MarkdownWriting.markdown(from: text) == "2 * 3\n\\*\\*not bold\\*\\*")
+    }
+
+    /// The case no rule about the plain text alone would have caught: text ending in `*` next to
+    /// a bold run writes `a***b**`, which reads back as a bold `*b`. Only writing it and reading
+    /// it again finds that, which is what the writer does.
+    @Test(.bug(id: 124)) func aRunBesideALooseDelimiterIsEscaped() throws {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "a*b")
+        MarkdownStyling.restyle(text, over: NSRange(location: 2, length: 1)) { $0.bolded() }
+
+        let written = MarkdownWriting.markdown(from: text)
+        let read = rendered(written)
+
+        #expect(read.string == "a*b")
+        let font = try #require(read.attribute(.font, at: 1, effectiveRange: nil) as? PlatformFont)
+        #expect(font.isBold == false, "The loose asterisk is not swallowed into the bold run")
     }
 
     // MARK: - What the writer refuses to spell
