@@ -15,15 +15,23 @@ import Foundation
 ///   A note is a scratchpad; the cost of that is cosmetic, and the parser stays small enough
 ///   to hold in your head.
 enum MarkdownSyntax {
-    /// What a run of text is, once parsed. `marker` is the syntax itself — the `**`, the
-    /// `- [x] `, the `](https://…)` — which is drawn dimmed rather than hidden, because the
-    /// buffer holds the source and the caret has to be able to move through it.
+    /// What a run of text is, once parsed.
+    ///
+    /// The two kinds of syntax are deliberately separate, because formatted mode does opposite
+    /// things with them:
+    ///
+    /// * `marker` is the delimiter the user never meant to look at — the `**`, the `_`, the
+    ///   `](https://…)`. It describes the run beside it and does not survive into rich text.
+    /// * `listMarker` is the `- `, `1. ` or `- [x] ` at the head of a line. It is content: the
+    ///   user typed it, or pressed Return and had it typed for them, and a list whose bullets
+    ///   went missing is not a list. It survives as the characters it is.
     enum Style: Equatable {
         case strong
         case emphasis
         case strikethrough
         case link
         case marker
+        case listMarker
     }
 
     struct Span: Equatable {
@@ -94,7 +102,7 @@ enum MarkdownSyntax {
         // on Return — rather than being restated here, so the two can never disagree about what
         // a marker is.
         if let length = ListContinuation.markerLength(on: text.substring(with: content)) {
-            spans.append(Span(range: NSRange(location: cursor, length: length), style: .marker))
+            spans.append(Span(range: NSRange(location: cursor, length: length), style: .listMarker))
             cursor += length
         }
 
@@ -222,8 +230,8 @@ enum MarkdownSyntax {
         return !isWordCharacter(text.character(at: after))
     }
 
-    /// Not private: `MarkdownFormatting` has to apply the same rule, or its commands would
-    /// claim underscores the parser never read as delimiters.
+    /// Not private: `AttributedFormatting` and `MarkdownWriting` apply the same rule, or a
+    /// command would claim underscores the parser never read as delimiters.
     ///
     /// `_` counts as a word character here, which is not what CommonMark says but is what an
     /// identifier says: without it the second underscore of `__init__` opens a run the first one
@@ -276,9 +284,8 @@ enum MarkdownSyntax {
         return nil
     }
 
-    /// Not private: `MarkdownFormatting` trims selections to the same idea of whitespace this
-    /// parser refuses to close a delimiter against, so the commands cannot emit markdown their
-    /// own parser would reject.
+    /// Not private: the commands and the writer trim to the same idea of whitespace this parser
+    /// refuses to close a delimiter against, so neither can emit markdown it would reject.
     static func isWhitespace(_ character: unichar) -> Bool {
         guard let scalar = Unicode.Scalar(character) else { return false }
         return CharacterSet.whitespacesAndNewlines.contains(scalar)

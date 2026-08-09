@@ -3,64 +3,61 @@ import UIKit
 
 @testable import Heptad
 
-/// The selection restore around the iOS repaint — the one piece of editor behaviour the two
-/// platforms do not share, and so the one piece the macOS suites cannot cover.
+/// The caret across a load — the one piece of editor behaviour the two platforms do not share,
+/// and so the one piece the macOS suites cannot cover.
 ///
-/// `restyle()` sets attributes across the whole document. AppKit leaves the selection alone when
-/// that happens; UIKit collapses it to the end. Without the save and restore around the call,
-/// every mode switch and every zoom step would drop the caret at the bottom of the note while the
-/// user was typing in the middle of it.
-///
-/// The line-scoped repaint deliberately has no such dance, because it never touches the whole
-/// document — which is why this is about `restyle()` specifically rather than about painting.
+/// `load(markdown:)` replaces the whole buffer, which happens on every mode switch and every zoom
+/// that follows one. AppKit leaves the selection alone when that happens; UIKit collapses it to
+/// the end. Without the save and restore around the call, every switch would drop the caret at
+/// the bottom of the note while the user was typing in the middle of it.
 @MainActor
 struct MarkdownTextViewSelectionTests {
 
-    private func textView(_ text: String) -> MarkdownTextView {
+    private func textView(_ markdown: String) -> MarkdownTextView {
         let textView = MarkdownTextView()
-        textView.text = text
+        textView.load(markdown: markdown)
         return textView
     }
 
-    @Test func repaintingKeepsTheCaretWhereItWas() {
-        let view = textView("**keys** and more")
+    @Test func loadingKeepsTheCaretWhereItWas() {
+        let view = textView("keys and more")
         let caret = NSRange(location: 4, length: 0)
         view.selectedRange = caret
 
-        view.restyle()
+        view.load(markdown: "keys and more")
 
-        #expect(view.selectedRange == caret, "A repaint must not move the caret")
+        #expect(view.selectedRange == caret, "A load must not move the caret")
     }
 
-    @Test func repaintingKeepsASelection() {
-        let view = textView("**keys** and more")
-        let selection = NSRange(location: 2, length: 4)
-        view.selectedRange = selection
-
-        view.restyle()
-
-        #expect(view.selectedRange == selection)
-    }
-
-    /// A repaint still has to leave the note styled — the restore must not be undoing the paint
-    /// along with the collapse.
-    @Test func theTextIsStillStyledAfterTheSelectionIsRestored() throws {
+    /// A mode switch is a load, so the caret survives it — clamped, because the two shapes of the
+    /// note are different lengths and an offset into one may be past the end of the other.
+    @Test(.bug(id: 124)) func switchingModesKeepsTheCaretInsideTheNote() {
         let view = textView("**keys**")
         view.selectedRange = NSRange(location: 4, length: 0)
 
-        view.restyle()
+        view.apply(MarkdownStyling.Appearance(plainText: true, fontSize: 16))
+
+        #expect(view.text == "**keys**", "Plain mode shows the source")
+        #expect(view.selectedRange.location <= (view.text as NSString).length)
+    }
+
+    /// A load still has to leave the note drawn — the caret restore must not be undoing the
+    /// parse along with the collapse.
+    @Test func theTextIsStillStyledAfterTheCaretIsPutBack() throws {
+        let view = textView("**keys**")
+        view.selectedRange = NSRange(location: 2, length: 0)
+
+        view.load(markdown: "**keys**")
 
         let font = try #require(
             view.textStorage.attribute(.font, at: 2, effectiveRange: nil) as? UIFont)
-        #expect(font.fontDescriptor.symbolicTraits.contains(.traitBold))
+        #expect(font.isBold)
     }
 
-    /// An empty note takes the early return in `MarkdownStyling.apply` before any attribute is
-    /// set, so there is nothing to collapse and nothing to put back.
-    @Test func repaintingAnEmptyNoteLeavesTheCaretAtTheStart() {
+    @Test func loadingAnEmptyNoteLeavesTheCaretAtTheStart() {
         let view = textView("")
 
-        view.restyle()
+        view.load(markdown: "")
 
         #expect(view.selectedRange == NSRange(location: 0, length: 0))
     }

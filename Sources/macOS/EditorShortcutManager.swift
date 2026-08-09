@@ -179,11 +179,12 @@ class EditorShortcutManager {
     /// in the note that none of its own commands could take back out — the very thing this is
     /// supposed to prevent.
     func pasteAsMarkdown(on textView: NSTextView) {
-        let clipboard = isStyled(textView)
-            ? pasteboard.markdownForPaste()
-            : pasteboard.plainTextForPaste()
+        guard isStyled(textView) else {
+            insert(pasteboard.plainTextForPaste(), on: textView)
+            return
+        }
 
-        insert(clipboard, on: textView)
+        insert(pasteboard.markdownForPaste(), on: textView, rendering: true)
     }
 
     /// ⌘⇧V, in place of `NSTextView.pasteAsPlainText` — which reads one flavor and gives up,
@@ -202,7 +203,10 @@ class EditorShortcutManager {
     /// nil text means the clipboard holds nothing textual. The key stays consumed anyway, for
     /// the same reason ⌘B is consumed in a plain-text note: it is still the app's key, and
     /// handing it back would only find nothing else to run it and beep.
-    private func insert(_ text: String?, on textView: NSTextView) {
+    /// `rendering` turns the markdown into what it describes on the way in, which is what ⌘V
+    /// wants in a formatted note: the clipboard's bold arrives as bold, not as two asterisks in
+    /// a buffer that holds none. ⌘⇧V leaves it off — plain means literal, `**` included.
+    private func insert(_ text: String?, on textView: NSTextView, rendering: Bool = false) {
         guard let text else { return }
 
         // NSNotFound where the view will take no user edit at all, which is not a range that
@@ -212,7 +216,14 @@ class EditorShortcutManager {
 
         // `insertText` rather than a text-storage edit of our own: it is the path a keystroke
         // takes, so this lands as a single undo step without the method knowing that rule.
-        textView.insertText(text, replacementRange: range)
+        if rendering, let markdownView = textView as? MarkdownTextView {
+            textView.insertText(
+                RichTextRendering.attributed(from: text, appearance: markdownView.styling),
+                replacementRange: range)
+        } else {
+            textView.insertText(text, replacementRange: range)
+        }
+
         textView.undoManager?.setActionName("Paste")
     }
 
@@ -246,20 +257,33 @@ class EditorShortcutManager {
 
     // MARK: - Formatting
 
-    /// ⌘B, ⌘I and ⌘⇧X, which now wrap the selection in markdown delimiters rather than mutating
-    /// attributes. Every one of them is its own inverse — see `MarkdownFormatting`.
+    /// ⌘B, ⌘I and ⌘⇧X, which turn a trait on over the selection or off again — see
+    /// `AttributedFormatting`, and #124 for what they did before that.
     ///
-    /// No-op in a plain-text note. The mode leaves markdown literal, so a `**` inserted there
-    /// would be two characters of noise with nothing to show for them. The key stays consumed
-    /// either way — it is still the app's.
-    func toggleEmphasis(_ emphasis: MarkdownFormatting.Emphasis, on textView: NSTextView) {
-        guard isStyled(textView) else { return }
+    /// No-op in a plain-text note. That mode holds the source, where the only thing these could
+    /// do is type delimiters the user is already free to type. The key stays consumed either way
+    /// — it is still the app's.
+    func toggleEmphasis(_ emphasis: Emphasis, on textView: NSTextView) {
+        guard isStyled(textView), let markdownView = textView as? MarkdownTextView,
+            let storage = textView.textStorage
+        else { return }
 
-        let edit = MarkdownFormatting.toggle(
-            emphasis, in: textView.string as NSString, selectedRange: textView.selectedRange())
+        let selection = textView.selectedRange()
 
-        textView.apply(edit)
-        textView.undoManager?.setActionName("Formatting")
+        // Through the change hooks, so the toggle lands on the per-note undo stack as one step.
+        // An empty selection changes no characters and so registers nothing: it moves the caret's
+        // typing attributes instead, and ⌘Z has nothing to put back.
+        guard selection.length == 0
+            || textView.shouldChangeText(in: selection, replacementString: nil)
+        else { return }
+
+        textView.typingAttributes = AttributedFormatting.toggle(
+            emphasis, over: selection, in: storage, appearance: markdownView.styling)
+
+        if selection.length > 0 {
+            textView.didChangeText()
+            textView.undoManager?.setActionName("Formatting")
+        }
     }
 
     /// Steps the editor's zoom by two points, stopping at the bound in the direction of travel.

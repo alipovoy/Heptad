@@ -193,7 +193,8 @@ struct NoteEditorCoordinatorTests {
         coordinator.update(notes: notes, selectedIndex: 1)
 
         let typed = "Belongs to the second note"
-        coordinator.textDidChange(text: typed)
+        coordinator.plainTextByNoteId[notes[1].id] = typed
+        coordinator.noteDidChange()
 
         // Poll to a deadline rather than sleeping past the 300 ms debounce: the flat sleep
         // races process warm-up and CPU contention for whatever margin was hardcoded.
@@ -212,8 +213,8 @@ struct NoteEditorCoordinatorTests {
     /// Not hypothetical on macOS: `NSTextView` delegate callbacks can fire while the editor is
     /// being torn down and rebuilt, when there is no current note and no saver to route to.
     @Test func textDidChangeBeforeSetupIsIgnored() async {
-        let typed = "Typed into nothing"
-        coordinator.textDidChange(text: typed)
+        coordinator.plainTextByNoteId[0] = "Typed into nothing"
+        coordinator.noteDidChange()
 
         #expect(coordinator.currentNoteId == nil)
         #expect(notes[0].text.isEmpty)

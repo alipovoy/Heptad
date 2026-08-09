@@ -10,7 +10,11 @@ class NoteContentSaver {
     private var saveTask: Task<Void, Never>?
     private let note: NoteItem
     private let debounce: Duration
-    private var pendingText: String?
+
+    /// How to read the text when the debounce is up, rather than the text itself. In formatted
+    /// mode producing it means writing the whole buffer out as markdown, and a keystroke should
+    /// not pay for a save that has not happened yet — most of them are overtaken by the next one.
+    private var pendingText: (@MainActor () -> String?)?
 
     init(
         note: NoteItem,
@@ -31,6 +35,11 @@ class NoteContentSaver {
 
     /// Debounces the write of `text` to the note.
     func save(text: String) {
+        save { text }
+    }
+
+    /// Debounces a write, reading the text when the write actually happens.
+    func save(_ text: @escaping @MainActor () -> String?) {
         saveTask?.cancel()
         pendingText = text
 
@@ -57,8 +66,12 @@ class NoteContentSaver {
 
     private func flushPending() {
         guard let pending = pendingText else { return }
-        performSave(text: pending)
         pendingText = nil
+
+        // nil means the editor the text would have come from is gone. Skipped rather than
+        // treated as empty: writing "" here would clear the note it was supposed to save.
+        guard let text = pending() else { return }
+        performSave(text: text)
     }
 
     private func performSave(text: String) {

@@ -15,7 +15,7 @@ import Foundation
 ///
 /// This file owns the list grammar. `MarkdownSyntax` asks it — through `markerLength(on:)` —
 /// which characters at the head of a line are a marker, rather than restating the same forms,
-/// so what Return continues and what the editor draws dimmed can never disagree.
+/// so what Return continues and what the editor reads as a list can never disagree.
 enum ListContinuation {
     /// What Return should do instead of inserting a newline, or nil to let it through.
     static func returnEdit(in text: NSString, selectedRange: NSRange) -> TextEdit? {
@@ -48,7 +48,7 @@ enum ListContinuation {
     }
 
     /// UTF-16 units of list marker at the head of `line`, indent included, or nil when it has
-    /// none. What `MarkdownSyntax` dims.
+    /// none. What `MarkdownSyntax` reports as `.listMarker`.
     static func markerLength(on line: String) -> Int? {
         marker(on: line)?.length
     }

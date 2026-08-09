@@ -17,16 +17,25 @@ struct MarkdownSyntaxTests {
     }
 
     /// The styled ranges, as the substrings they cover — the readable form of an assertion that
-    /// would otherwise be a list of offsets.
+    /// would otherwise be a list of offsets. Syntax of either kind is left out; the two helpers
+    /// below are what pin that.
     private func styled(_ text: String) -> [(String, MarkdownSyntax.Style)] {
         spans(text)
-            .filter { $0.style != .marker }
+            .filter { $0.style != .marker && $0.style != .listMarker }
             .map { ((text as NSString).substring(with: $0.range), $0.style) }
     }
 
     private func markers(_ text: String) -> [String] {
+        substrings(of: .marker, in: text)
+    }
+
+    private func listMarkers(_ text: String) -> [String] {
+        substrings(of: .listMarker, in: text)
+    }
+
+    private func substrings(of style: MarkdownSyntax.Style, in text: String) -> [String] {
         spans(text)
-            .filter { $0.style == .marker }
+            .filter { $0.style == style }
             .map { (text as NSString).substring(with: $0.range) }
     }
 
@@ -42,8 +51,8 @@ struct MarkdownSyntaxTests {
         #expect(styled(text).map(\.1) == [style])
     }
 
-    /// The delimiters are spans of their own, drawn dimmed. They stay in the buffer — the note is
-    /// its source — so the caret can move through them.
+    /// The delimiters are spans of their own, which is what formatted mode drops: they describe
+    /// the run beside them, and rich text carries that description in its attributes instead.
     @Test func delimitersAreReportedAsMarkers() {
         #expect(markers("**bold**") == ["**", "**"])
     }
@@ -55,10 +64,14 @@ struct MarkdownSyntaxTests {
     }
 
     /// The list grammar comes from `ListContinuation`, so what Return continues and what the
-    /// editor dims are the same set by construction.
-    @Test(arguments: ["- ", "* ", "1. ", "- [ ] ", "- [x] ", "  - "])
-    func listMarkersAreMarked(marker: String) {
-        #expect(markers(marker + "item").first == marker)
+    /// editor reads as a bullet are the same set by construction.
+    ///
+    /// A bullet is its own style rather than a `marker`, and #124 is the difference: markers are
+    /// dropped when a note is rendered, and a list whose bullets went with them is not a list.
+    @Test(.bug(id: 124), arguments: ["- ", "* ", "1. ", "- [ ] ", "- [x] ", "  - "])
+    func listMarkersAreTheirOwnStyleRatherThanDroppableSyntax(marker: String) {
+        #expect(listMarkers(marker + "item") == [marker])
+        #expect(markers(marker + "item").isEmpty, "A bullet is content, not a delimiter")
     }
 
     @Test func aRunInsideAListItemIsStillStyled() {
