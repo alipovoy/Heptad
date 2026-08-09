@@ -36,6 +36,14 @@ struct WindowShowHideTests {
         let window = try fixture.showWindow()
         manager.setPinned(true)
 
+        // The test host has to be the active app first (#127). The window used to carry
+        // `.nonactivatingPanel`, which is what let it take key status in a background process;
+        // without it the window server grants key only to the active application, and
+        // `makeKeyAndOrderFront` alone waits forever. The real app has the same dependency —
+        // `showWindow` calls `takeActivation()` — but that goes through the spy here, which
+        // records the call rather than performing it.
+        NSApp.activate(ignoringOtherApps: true)
+
         // Key status is granted by the window server rather than set, so it is waited for.
         window.makeKeyAndOrderFront(nil)
         try await waitUntil("the pinned window to become key") { window.isKeyWindow }

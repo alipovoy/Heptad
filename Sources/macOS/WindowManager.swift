@@ -31,9 +31,8 @@ extension Notification.Name {
 ///
 /// They are exact opposites (`isPanelMode == !isPinned`), and pinning lasts only as long as the
 /// window is on screen: `hide(_:)` puts it back. It is state, not a preference — see #123.
-///
-/// Pinning does not touch `NSApp.setActivationPolicy`: the app ships with `LSUIElement: true`
-/// and stays an accessory app in both modes, so a pinned window has no Dock icon or app menu.
+/// Neither mode touches `NSApp.setActivationPolicy`: `LSUIElement: true` keeps the app an
+/// accessory in both, so even a pinned window has no Dock icon and no app menu.
 @MainActor
 class WindowManager: NSObject, NSWindowDelegate {
     private(set) var window: NSPanel?
@@ -238,8 +237,7 @@ class WindowManager: NSObject, NSWindowDelegate {
     }
 
     /// Pinned styling: an ordinary movable window that other apps may cover and that never
-    /// dismisses itself. `.nonactivatingPanel` deliberately stays in the mask — it only governs
-    /// activation on click, and the panel has always kept it in this mode.
+    /// dismisses itself. What makes a click on it activate the app is not here — see `showWindow`.
     private func applyPinnedStyling(to window: NSPanel) {
         window.styleMask.insert(.miniaturizable)
         window.isFloatingPanel = false
@@ -248,7 +246,6 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     /// Panel styling: floats above other apps, no miniaturize button, click-outside dismisses.
     private func applyPanelStyling(to window: NSPanel) {
-        window.styleMask.insert(.nonactivatingPanel)
         window.styleMask.remove(.miniaturizable)
         window.isFloatingPanel = true
 
@@ -312,11 +309,12 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     private func showWindow(sender: NSStatusBarButton) {
         if window == nil {
+            // No `.nonactivatingPanel`, here or ever (#127): it takes key focus without activating
+            // the app, so a click could not bring a detached window forward. Nor can it be toggled
+            // per mode — the flag is read at creation, and rewriting a live mask drops the responder.
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
-                styleMask: [
-                    .titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel
-                ],
+                styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
                 backing: .buffered, defer: false)
 
             // AppKit persists and restores the frame; panel mode re-anchors the origin on every show.
@@ -331,7 +329,9 @@ class WindowManager: NSObject, NSWindowDelegate {
             panel.isReleasedWhenClosed = false
             panel.isFloatingPanel = true
             panel.hidesOnDeactivate = false
-            panel.becomesKeyOnlyIfNeeded = true
+
+            // Key on a click anywhere: it is an editor, and nothing in it does not want the caret.
+            panel.becomesKeyOnlyIfNeeded = false
             panel.delegate = self
             panel.contentView = mainHostingView
 

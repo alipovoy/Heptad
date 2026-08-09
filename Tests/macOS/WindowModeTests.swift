@@ -23,7 +23,6 @@ struct WindowModeTests {
 
         #expect(window.isVisible, "Window should be visible after toggle")
         #expect(manager.isPanelMode, "Window should still be in panel mode")
-        #expect(window.styleMask.contains(.nonactivatingPanel), "Should be a non-activating panel")
     }
 
     @Test func pinningTurnsThePanelIntoARegularWindow() throws {
@@ -39,6 +38,31 @@ struct WindowModeTests {
         #expect(window.isFloatingPanel == false, "Pinned window should not float above all else")
     }
 
+    /// #127: `.nonactivatingPanel` takes key focus without making Heptad active, so a detached
+    /// window could be clicked, or picked in Mission Control, and the app stayed in the background
+    /// with only the status item to get it back.
+    ///
+    /// Asserted in both modes and across a transition, because the first attempt at this fix
+    /// toggled the mask per mode and that is exactly what does not work: the flag is read when the
+    /// window is created. It has to be absent from construction and stay absent.
+    @Test(.bug(id: 127))
+    func theWindowNeverCarriesTheNonActivatingMask() throws {
+        let window = try fixture.showWindow()
+
+        #expect(window.styleMask.contains(.nonactivatingPanel) == false, "as the panel")
+        #expect(
+            window.becomesKeyOnlyIfNeeded == false,
+            "and a click anywhere in it makes it key")
+
+        manager.setPinned(true)
+        #expect(window.styleMask.contains(.nonactivatingPanel) == false, "and once detached")
+
+        manager.setPinned(false)
+        #expect(
+            window.styleMask.contains(.nonactivatingPanel) == false,
+            "and reattaching does not put it back")
+    }
+
     @Test func unpinningRestoresPanelBehaviourInPlace() throws {
         let window = try fixture.showWindow()
         manager.setPinned(true)
@@ -50,7 +74,6 @@ struct WindowModeTests {
         #expect(
             window.styleMask.contains(.miniaturizable) == false,
             "Panel has no miniaturize button")
-        #expect(window.styleMask.contains(.nonactivatingPanel), "Panel styling is re-applied")
     }
 
     @Test func toggleWindowPinNotificationTogglesTheState() throws {
