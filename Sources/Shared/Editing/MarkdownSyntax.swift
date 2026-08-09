@@ -11,19 +11,31 @@ import Foundation
 ///
 /// * Constructs never span lines, so a stray `**` can spoil at most its own line.
 /// * A link's label is not parsed. `[**a**](b)` is a link whose label reads literally.
-/// * There are no backslash escapes, so text that genuinely contains `**` renders as markers.
-///   A note is a scratchpad; the cost of that is cosmetic, and the parser stays small enough
-///   to hold in your head.
+/// * A backslash escapes the character after it when that character is one this file can act on:
+///   `\*\*text\*\*` is four literal asterisks, not a bold run. It is what lets a note hold the
+///   markdown it is talking *about* — `MarkdownWriting` puts the backslashes in when the text
+///   would otherwise be read back as formatting the user never applied.
 enum MarkdownSyntax {
-    /// What a run of text is, once parsed. `marker` is the syntax itself — the `**`, the
-    /// `- [x] `, the `](https://…)` — which is drawn dimmed rather than hidden, because the
-    /// buffer holds the source and the caret has to be able to move through it.
+    /// What a run of text is, once parsed.
+    ///
+    /// The two kinds of syntax are deliberately separate, because formatted mode does opposite
+    /// things with them:
+    ///
+    /// * `marker` is the delimiter the user never meant to look at — the `**`, the `_`, the
+    ///   `](https://…)`. It describes the run beside it and does not survive into rich text.
+    /// * `listMarker` is the `- `, `1. ` or `- [x] ` at the head of a line. It is content: the
+    ///   user typed it, or pressed Return and had it typed for them, and a list whose bullets
+    ///   went missing is not a list. It survives as the characters it is.
+    ///
+    /// An escaping backslash is a `marker` too: it says what the character after it is *not*, and
+    /// having said it, it has no business on screen.
     enum Style: Equatable {
         case strong
         case emphasis
         case strikethrough
         case link
         case marker
+        case listMarker
     }
 
     struct Span: Equatable {
@@ -42,6 +54,21 @@ enum MarkdownSyntax {
     static let emphasis = "_"
 
     static let strikethrough = "~~"
+
+    /// The one character that changes what the next one means.
+    static let escape: Character = "\\"
+
+    /// What a backslash can be put in front of: every character this file acts on, and itself.
+    /// A backslash before anything else is an ordinary backslash — these notes hold paths and
+    /// regexes, and doubling every one of those would be its own kind of noise.
+    static func isEscapable(_ character: Character) -> Bool {
+        "*_~[]()\\".contains(character)
+    }
+
+    static func isEscapable(_ character: unichar) -> Bool {
+        guard let scalar = Unicode.Scalar(character) else { return false }
+        return isEscapable(Character(scalar))
+    }
 
     /// Every styled run in `text`, in source order.
     static func spans(in text: NSString) -> [Span] {
@@ -94,7 +121,7 @@ enum MarkdownSyntax {
         // on Return — rather than being restated here, so the two can never disagree about what
         // a marker is.
         if let length = ListContinuation.markerLength(on: text.substring(with: content)) {
-            spans.append(Span(range: NSRange(location: cursor, length: length), style: .marker))
+            spans.append(Span(range: NSRange(location: cursor, length: length), style: .listMarker))
             cursor += length
         }
 
@@ -116,6 +143,14 @@ enum MarkdownSyntax {
         var cursor = range.location
 
         while cursor < limit {
+            // An escape is taken first and takes the character after it with it, so an escaped
+            // delimiter never gets the chance to open anything.
+            if let past = escaped(in: text, at: cursor, limit: limit) {
+                spans.append(Span(range: NSRange(location: cursor, length: 1), style: .marker))
+                cursor = past
+                continue
+            }
+
             var matched = link(in: text, at: cursor, limit: limit, into: &spans)
 
             for delimiter in inlineDelimiters where matched == nil {
@@ -196,6 +231,7 @@ enum MarkdownSyntax {
         _ delimiter: Delimiter, in text: NSString, at index: Int, limit: Int
     ) -> Bool {
         matches(delimiter.characters, in: text, at: index, limit: limit)
+            && !isEscaped(index, in: text)
             && !isWhitespace(text.character(at: index - 1))
             && canClose(delimiter.characters, in: text, at: index, limit: limit)
     }
@@ -222,8 +258,8 @@ enum MarkdownSyntax {
         return !isWordCharacter(text.character(at: after))
     }
 
-    /// Not private: `MarkdownFormatting` has to apply the same rule, or its commands would
-    /// claim underscores the parser never read as delimiters.
+    /// Not private: `AttributedFormatting` and `MarkdownWriting` apply the same rule, or a
+    /// command would claim underscores the parser never read as delimiters.
     ///
     /// `_` counts as a word character here, which is not what CommonMark says but is what an
     /// identifier says: without it the second underscore of `__init__` opens a run the first one
@@ -257,6 +293,35 @@ enum MarkdownSyntax {
         return urlEnd + 1
     }
 
+    // MARK: - Escapes
+
+    /// The index just past `\x` when one starts at `index`, or nil when it does not.
+    private static func escaped(in text: NSString, at index: Int, limit: Int) -> Int? {
+        guard index + 1 < limit, text.character(at: index) == escapeCharacter,
+            isEscapable(text.character(at: index + 1))
+        else { return nil }
+
+        return index + 2
+    }
+
+    /// Whether the character at `index` is spoken for by a backslash in front of it.
+    ///
+    /// Counted rather than checked one back: `\\` is an escaped backslash, so it leaves the
+    /// character after it free. An odd number of them escapes, an even number does not.
+    private static func isEscaped(_ index: Int, in text: NSString) -> Bool {
+        var backslashes = 0
+        var cursor = index - 1
+
+        while cursor >= 0, text.character(at: cursor) == escapeCharacter {
+            backslashes += 1
+            cursor -= 1
+        }
+
+        return backslashes.isMultiple(of: 2) == false
+    }
+
+    private static let escapeCharacter = Array(String(escape).utf16)[0]
+
     // MARK: - Scanning
 
     private static func matches(
@@ -267,18 +332,21 @@ enum MarkdownSyntax {
         return units.enumerated().allSatisfy { text.character(at: index + $0.offset) == $0.element }
     }
 
+    /// The first unescaped `needle` at or after `from`. Escaped ones are passed over, which is
+    /// what lets a label hold a `]` and a note hold a literal `[docs](url)`.
     private static func index(of needle: String, in text: NSString, from: Int, limit: Int) -> Int? {
         var cursor = from
         while cursor < limit {
-            if matches(needle, in: text, at: cursor, limit: limit) { return cursor }
+            if matches(needle, in: text, at: cursor, limit: limit), !isEscaped(cursor, in: text) {
+                return cursor
+            }
             cursor += 1
         }
         return nil
     }
 
-    /// Not private: `MarkdownFormatting` trims selections to the same idea of whitespace this
-    /// parser refuses to close a delimiter against, so the commands cannot emit markdown their
-    /// own parser would reject.
+    /// Not private: the commands and the writer trim to the same idea of whitespace this parser
+    /// refuses to close a delimiter against, so neither can emit markdown it would reject.
     static func isWhitespace(_ character: unichar) -> Bool {
         guard let scalar = Unicode.Scalar(character) else { return false }
         return CharacterSet.whitespacesAndNewlines.contains(scalar)

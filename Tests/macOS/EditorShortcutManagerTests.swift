@@ -76,9 +76,7 @@ struct EditorShortcutManagerTests {
         scratchDefaults = try ScratchDefaults(name: "EditorShortcutManagerTests")
 
         textView = SpyTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
-        textView.string = "Test Text"
-        textView.textStorage?.addAttribute(
-            .font, value: NSFont.systemFont(ofSize: 14), range: NSRange(location: 0, length: 9))
+        textView.load(markdown: "Test Text")
 
         manager = EditorShortcutManager(defaults: scratchDefaults.defaults)
     }
@@ -158,21 +156,25 @@ struct EditorShortcutManagerTests {
     }
 
     /// The formatting arms land on the manager's own helpers rather than on the text view, so
-    /// they are checked by what they did — to the text for the emphasis commands, and to the
+    /// they are checked by what they did — to the note for the emphasis commands, and to the
     /// stored zoom for ⌘+/⌘-, which stopped being a text edit when notes became markdown.
+    ///
+    /// Read back as markdown: the buffer holds rich text, so the delimiters are in what the note
+    /// *stores* rather than in what is on screen (#124).
     @Test(
         arguments: [
             ("b", false, "**Test** Text"), ("i", false, "_Test_ Text"),
             ("x", true, "~~Test~~ Text"), ("X", false, "~~Test~~ Text")
         ])
-    func emphasisShortcutsWrapTheSelection(chars: String, hasShift: Bool, expected: String) throws {
+    func emphasisShortcutsFormatTheSelection(chars: String, hasShift: Bool, stored: String) throws {
         textView.setSelectedRange(NSRange(location: 0, length: 4))  // "Test"
 
         let result = manager.handleTextViewShortcut(
             chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
 
         #expect(result == nil, "A format that applied means the key was consumed")
-        #expect(textView.string == expected)
+        #expect(textView.string == "Test Text", "and put no delimiters on screen")
+        #expect(textView.markdown == stored)
         #expect(
             textView.commands.isEmpty,
             "⌘⇧X strikes through; cutting here would destroy the selection instead")
@@ -207,8 +209,9 @@ struct EditorShortcutManagerTests {
     // (#114). Both are checked by what lands in the note. Which flavors resolve to what text is
     // `PlainTextPasteboardTests`' to pin; these cover the wiring and the empty case.
 
-    /// HTML with no plain-text flavor. ⌘V keeps the bold as source, ⌘⇧V drops it — which is the
-    /// only difference left between the two, and the reason both shortcuts still exist.
+    /// HTML with no plain-text flavor. ⌘V keeps the bold, ⌘⇧V drops it — which is the only
+    /// difference left between the two, and the reason both shortcuts still exist. Read back as
+    /// markdown, since that is where the delimiters live now.
     @Test(
         arguments: [
             ("v", false, "**formatted**"),
@@ -227,12 +230,13 @@ struct EditorShortcutManagerTests {
             chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
 
         #expect(result == nil, "A paste that ran means the key was consumed")
-        #expect(textView.string == expected)
+        #expect(textView.markdown == expected)
         #expect(textView.commands.isEmpty, "Neither paste reaches NSTextView.paste any more")
     }
 
-    /// Nothing a paste inserts may carry attributes into the note — the invariant #117 turns on.
-    /// Checked on ⌘V, the one that reads the clipboard's formatting at all.
+    /// A paste may bring in only what this app can write back out — the invariant #117 turns on.
+    /// The bold has a markdown spelling and survives; the clipboard's colour and size do not and
+    /// are taken back off. Checked on ⌘V, the one that reads the clipboard's formatting at all.
     @Test(.bug(id: 117))
     func pastingRichTextLeavesNoAttributesInTheNote() throws {
         let scratch = ScratchPasteboard()
@@ -255,11 +259,15 @@ struct EditorShortcutManagerTests {
             chars: "v", hasShift: false, on: textView, event: try passThroughEvent())
 
         #expect(result == nil, "A paste that ran means the key was consumed")
-        #expect(textView.string == "**formatted**", "The bold arrives as source, not as a font")
+        #expect(textView.string == "formatted")
+        #expect(textView.markdown == "**formatted**", "The bold arrives, and the note stores it")
+
         let storage = try #require(textView.textStorage)
+        let font = try #require(storage.attribute(.font, at: 2, effectiveRange: nil) as? NSFont)
+        #expect(font.pointSize == AppConstants.Layout.defaultFontSize, "at the note's own size")
         #expect(
             storage.attribute(.foregroundColor, at: 2, effectiveRange: nil) as? NSColor != .systemRed,
-            "The clipboard's colour does not come with it")
+            "and not in the clipboard's colour")
     }
 
     /// An image is not text, and the note is left alone. The key is still consumed — handing it

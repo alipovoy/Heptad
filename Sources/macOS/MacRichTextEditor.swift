@@ -72,24 +72,16 @@ struct MacRichTextEditor: NSViewRepresentable {
         }
 
         override func load(_ text: String, into editorView: NSView) {
-            guard let textView = textView(in: editorView) else { return }
-
-            textView.undoManager?.disableUndoRegistration()
-            textView.textStorage?.replaceCharacters(
-                in: NSRange(location: 0, length: textView.textStorage?.length ?? 0), with: text)
-            textView.undoManager?.enableUndoRegistration()
-            textView.undoManager?.removeAllActions()
-
-            textView.restyle()
+            textView(in: editorView)?.load(markdown: text)
         }
 
-        /// Applies the note's mode and the app-wide zoom. Repaints only — the text is not read,
-        /// not rewritten, and the saver is not told anything, because nothing changed.
+        /// Applies the note's mode and the app-wide zoom.
+        ///
+        /// A zoom step only repaints. A *mode* step rewrites the buffer, because the two modes
+        /// hold different things: formatted mode holds rich text with no delimiters in it, plain
+        /// mode holds the source. See `MarkdownTextView.apply(_:)`.
         override func configure(_ editorView: NSView, appearance: MarkdownStyling.Appearance) {
-            guard let textView = textView(in: editorView) else { return }
-
-            textView.styling = appearance
-            textView.restyle()
+            textView(in: editorView)?.apply(appearance)
         }
 
         override func resignFocus(from editorView: NSView) {
@@ -109,6 +101,10 @@ struct MacRichTextEditor: NSViewRepresentable {
 
         override func plainText(of editorView: NSView) -> String {
             textView(in: editorView)?.string ?? ""
+        }
+
+        override func markdown(of editorView: NSView) -> String {
+            textView(in: editorView)?.markdown ?? ""
         }
 
         override func statsDidChange(_ stats: TextStats) {
@@ -162,10 +158,10 @@ struct MacRichTextEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? MarkdownTextView else { return }
 
-            // The storage has already repainted itself by now — the text view is its own
-            // storage delegate. Only the typing attributes are left to put back.
-            textView.resetTypingAttributes()
-            textDidChange(text: textView.string)
+            // The storage has already been normalized by now — the text view is its own storage
+            // delegate. Only the typing attributes are left, which no storage pass can reach.
+            textView.normalizeTypingAttributes()
+            noteDidChange()
         }
     }
 }
@@ -186,7 +182,11 @@ extension NSTextView {
     }
 }
 
-/// The editor's text view: its own undo stack, and markdown styling painted on from its text.
+/// The editor's text view: its own undo stack, and a buffer whose shape is its note's mode.
+///
+/// Formatted mode holds rich text — bold is a bold font, and there is no markdown in the buffer
+/// at all. Plain mode holds the source, every delimiter visible. The note is markdown either way;
+/// what changes is only what this view is holding, and `apply(_:)` is where it converts.
 class MarkdownTextView: NSTextView, NSTextStorageDelegate {
     private let customUndoManager = UndoManager()
 
@@ -194,8 +194,9 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
         return customUndoManager
     }
 
-    /// How this view draws. Display only — none of it is ever stored.
-    var styling = MarkdownStyling.Appearance(
+    /// How this view draws, and which of the two shapes its buffer is in. Display only — none of
+    /// it is ever stored.
+    private(set) var styling = MarkdownStyling.Appearance(
         plainText: false, fontSize: AppConstants.Layout.defaultFontSize)
 
     /// The note leaves on the clipboard as its own characters, never as rich text.
@@ -221,36 +222,93 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
         "NeXT RTFD pasteboard type"
     ]
 
-    /// Repaints the whole note, for when every line's appearance changes at once — a mode
-    /// switch, a zoom step, or freshly loaded text.
-    func restyle() {
-        guard let textStorage else { return }
-
-        MarkdownStyling.apply(styling, to: textStorage)
-        resetTypingAttributes()
+    /// The note as it would be stored: markdown, whichever mode this view is in.
+    var markdown: String {
+        guard let textStorage else { return "" }
+        return styling.isStyled ? MarkdownWriting.markdown(from: textStorage) : string
     }
 
-    /// Repaints the lines an edit landed on.
+    /// Puts a note's markdown into the view, in the shape its mode calls for.
     ///
-    /// Half of the fix for #117: whatever colour or alignment a paste brought with it is gone by
-    /// the end of this call, because the lines it landed on are set back to base attributes
-    /// before the markdown is drawn. Doing it here rather than in `textDidChange` is what keeps
-    /// it to the edited lines — this is the one place the edited range is known.
+    /// Undo registration is off for this and the stack is emptied after it: what is being
+    /// replaced is the whole buffer, and an undo step recorded against the note that was in it
+    /// describes ranges in text that is gone.
+    func load(markdown: String) {
+        guard let textStorage else { return }
+
+        let caret = selectedRange()
+        undoManager?.disableUndoRegistration()
+        textStorage.setAttributedString(
+            RichTextRendering.attributed(from: markdown, appearance: styling))
+        undoManager?.enableUndoRegistration()
+        undoManager?.removeAllActions()
+
+        setSelectedRange(
+            NSRange(location: min(caret.location, textStorage.length), length: 0))
+        typingAttributes = MarkdownStyling.baseAttributes(styling)
+    }
+
+    /// Applies a mode and a zoom level.
+    ///
+    /// A zoom step normalizes, which rebuilds every run's font at the new size with its traits
+    /// intact. A *mode* step converts the buffer instead: the two modes hold different text, so
+    /// the note is written out of the shape it is in and read back into the other one. That
+    /// conversion is the only styling work this editor does on anything but a load — which is the
+    /// point of #124's redesign. Typing is no longer a parse.
+    func apply(_ appearance: MarkdownStyling.Appearance) {
+        guard let textStorage else { return }
+        guard appearance != styling else { return }
+
+        let source = markdown
+        let switchingMode = appearance.plainText != styling.plainText
+        styling = appearance
+
+        if switchingMode {
+            load(markdown: source)
+        } else {
+            MarkdownStyling.normalize(styling, in: textStorage)
+            typingAttributes = MarkdownStyling.normalized(typingAttributes, in: styling)
+        }
+    }
+
+    /// Takes an edit back to what this app can express.
+    ///
+    /// The fix for #117 in its new shape. A paste can still arrive carrying colour, alignment and
+    /// a font of its own — through a drag, or through `readSelection` — and this is what strips
+    /// the lot while keeping the bold. Doing it here rather than in `textDidChange` is what keeps
+    /// it to the range the edit landed on: this is the one place that range is known.
     func textStorage(
         _ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
         range editedRange: NSRange, changeInLength delta: Int
     ) {
         guard editedMask.contains(.editedCharacters) else { return }
 
-        MarkdownStyling.apply(styling, to: textStorage, over: editedRange)
+        MarkdownStyling.normalize(styling, in: textStorage, over: editedRange)
     }
 
-    /// The other half of #117, and the half no repaint of the storage can cover.
+    /// The other half of #117, and the half no pass over the storage can cover.
     ///
     /// `typingAttributes` are not part of the text storage: AppKit sets them from whatever was
     /// pasted, and undo restores the characters without restoring them — which is how deleting a
-    /// pasted run left its colour on the caret for everything typed next.
-    func resetTypingAttributes() {
-        typingAttributes = MarkdownStyling.baseAttributes(styling)
+    /// pasted run left its colour on the caret for everything typed next. Normalized rather than
+    /// reset, because in this mode the caret legitimately carries the bold it is sitting in.
+    func normalizeTypingAttributes() {
+        typingAttributes = MarkdownStyling.normalized(typingAttributes, in: styling)
+    }
+
+    /// The selection leaves on the clipboard as markdown source.
+    ///
+    /// The buffer holds no delimiters any more, so the characters alone would put a note's
+    /// formatting on the clipboard and lose it. Writing what the note *stores* keeps a copy from
+    /// one note into another exact, and keeps ⌘C honest about what was copied.
+    override func writeSelection(
+        to pboard: NSPasteboard, type: NSPasteboard.PasteboardType
+    ) -> Bool {
+        guard styling.isStyled, let textStorage else {
+            return super.writeSelection(to: pboard, type: type)
+        }
+
+        let selected = textStorage.attributedSubstring(from: selectedRange())
+        return pboard.setString(MarkdownWriting.markdown(from: selected), forType: type)
     }
 }

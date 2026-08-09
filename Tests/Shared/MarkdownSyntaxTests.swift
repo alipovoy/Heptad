@@ -17,16 +17,25 @@ struct MarkdownSyntaxTests {
     }
 
     /// The styled ranges, as the substrings they cover — the readable form of an assertion that
-    /// would otherwise be a list of offsets.
+    /// would otherwise be a list of offsets. Syntax of either kind is left out; the two helpers
+    /// below are what pin that.
     private func styled(_ text: String) -> [(String, MarkdownSyntax.Style)] {
         spans(text)
-            .filter { $0.style != .marker }
+            .filter { $0.style != .marker && $0.style != .listMarker }
             .map { ((text as NSString).substring(with: $0.range), $0.style) }
     }
 
     private func markers(_ text: String) -> [String] {
+        substrings(of: .marker, in: text)
+    }
+
+    private func listMarkers(_ text: String) -> [String] {
+        substrings(of: .listMarker, in: text)
+    }
+
+    private func substrings(of style: MarkdownSyntax.Style, in text: String) -> [String] {
         spans(text)
-            .filter { $0.style == .marker }
+            .filter { $0.style == style }
             .map { (text as NSString).substring(with: $0.range) }
     }
 
@@ -42,8 +51,8 @@ struct MarkdownSyntaxTests {
         #expect(styled(text).map(\.1) == [style])
     }
 
-    /// The delimiters are spans of their own, drawn dimmed. They stay in the buffer — the note is
-    /// its source — so the caret can move through them.
+    /// The delimiters are spans of their own, which is what formatted mode drops: they describe
+    /// the run beside them, and rich text carries that description in its attributes instead.
     @Test func delimitersAreReportedAsMarkers() {
         #expect(markers("**bold**") == ["**", "**"])
     }
@@ -55,10 +64,14 @@ struct MarkdownSyntaxTests {
     }
 
     /// The list grammar comes from `ListContinuation`, so what Return continues and what the
-    /// editor dims are the same set by construction.
-    @Test(arguments: ["- ", "* ", "1. ", "- [ ] ", "- [x] ", "  - "])
-    func listMarkersAreMarked(marker: String) {
-        #expect(markers(marker + "item").first == marker)
+    /// editor reads as a bullet are the same set by construction.
+    ///
+    /// A bullet is its own style rather than a `marker`, and #124 is the difference: markers are
+    /// dropped when a note is rendered, and a list whose bullets went with them is not a list.
+    @Test(.bug(id: 124), arguments: ["- ", "* ", "1. ", "- [ ] ", "- [x] ", "  - "])
+    func listMarkersAreTheirOwnStyleRatherThanDroppableSyntax(marker: String) {
+        #expect(listMarkers(marker + "item") == [marker])
+        #expect(markers(marker + "item").isEmpty, "A bullet is content, not a delimiter")
     }
 
     @Test func aRunInsideAListItemIsStillStyled() {
@@ -120,10 +133,44 @@ struct MarkdownSyntaxTests {
         #expect(styled(text).isEmpty)
     }
 
-    /// A documented limit rather than a bug: there are no escapes, so a note that genuinely
-    /// contains delimiters renders them. Pinned so the cost of the choice stays visible.
-    @Test func thereAreNoEscapes() {
-        #expect(styled("\\_not italic\\_").map(\.0) == ["not italic\\"])
+    // MARK: - Escapes
+
+    /// A backslash says what the character after it is not, so a note can hold the markdown it
+    /// is talking about. `MarkdownWriting` is what puts them in.
+    @Test(arguments: [
+        "\\_not italic\\_",
+        "\\*\\*not bold\\*\\*",
+        "\\~\\~not struck\\~\\~",
+        "\\[not a link](https://example.com)"
+    ])
+    func anEscapedDelimiterStylesNothing(text: String) {
+        #expect(styled(text).isEmpty)
+    }
+
+    /// The backslash itself is a marker: it has said its piece by the time the note is drawn, so
+    /// what is left on screen is the character it was protecting.
+    @Test func theBackslashIsAMarkerAndTheCharacterAfterItIsText() {
+        #expect(markers("\\*keys\\*") == ["\\", "\\"])
+    }
+
+    /// An escaped delimiter cannot close a run either — otherwise `**a \** b**` would end at the
+    /// half the note meant literally.
+    @Test func anEscapedDelimiterDoesNotCloseARun() {
+        #expect(styled("**bold \\** still**").map(\.0) == ["bold \\** still"])
+    }
+
+    /// `\\` is an escaped backslash, which leaves the character after it free to mean what it
+    /// says. Counting them is what tells the two cases apart.
+    @Test func anEscapedBackslashDoesNotEscapeWhatFollowsIt() {
+        #expect(styled("\\\\**bold**").map(\.0) == ["bold"])
+    }
+
+    /// A backslash in front of anything this parser cannot act on is an ordinary backslash —
+    /// these notes are full of paths and regexes, and doubling every one would be its own noise.
+    @Test(arguments: ["C:\\Users\\admin", "\\d+ digits", "back\\slash"])
+    func aBackslashBeforeAnOrdinaryCharacterIsItselfOrdinary(text: String) {
+        #expect(markers(text).isEmpty)
+        #expect(styled(text).isEmpty)
     }
 
     /// Constructs nest, which is the point of spelling italic `_`: `⌘I` inside `**keys**` has a

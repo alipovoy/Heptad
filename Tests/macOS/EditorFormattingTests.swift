@@ -6,9 +6,10 @@ import Testing
 /// What ⌘B, ⌘I, ⌘⇧X and ⌘+/⌘- do, as opposed to which keystroke reaches them —
 /// `EditorShortcutManagerTests` covers the dispatch table that routes to these.
 ///
-/// Every formatting command is a text edit now: they write markdown delimiters instead of
-/// mutating attributes, so what a note holds stays something the commands can take back out
-/// (#117). Font size left the text entirely and became an app-wide zoom.
+/// Every formatting command is an attribute change: formatted mode holds rich text, so ⌘B turns
+/// bold on over the selection rather than typing delimiters around it (#124). What the note
+/// *stores* is still markdown, which is what `markdown` reads back here. Font size is neither —
+/// it left the text entirely and became an app-wide zoom.
 ///
 /// `NSTextView` is a main-actor type, and the suite drives it directly.
 @MainActor
@@ -24,7 +25,7 @@ struct EditorFormattingTests {
         scratchDefaults = try ScratchDefaults(name: "EditorFormattingTests")
 
         textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
-        textView.string = "Test Text"
+        textView.load(markdown: "Test Text")
 
         manager = EditorShortcutManager(
             notificationCenter: notificationCenter, defaults: scratchDefaults.defaults)
@@ -33,66 +34,79 @@ struct EditorFormattingTests {
     // MARK: - Emphasis
 
     @Test(arguments: [
-        (MarkdownFormatting.Emphasis.strong, "**Test** Text"),
+        (Emphasis.strong, "**Test** Text"),
         (.emphasis, "_Test_ Text"),
         (.strikethrough, "~~Test~~ Text")
     ])
-    func togglingEmphasisWrapsTheSelection(
-        emphasis: MarkdownFormatting.Emphasis, expected: String
-    ) {
+    func togglingEmphasisAppliesItToTheSelection(emphasis: Emphasis, stored: String) {
         textView.setSelectedRange(NSRange(location: 0, length: 4))  // "Test"
 
         manager.toggleEmphasis(emphasis, on: textView)
 
-        #expect(textView.string == expected)
+        #expect(textView.string == "Test Text", "The buffer holds no delimiters")
+        #expect(textView.markdown == stored, "and the note stores them")
     }
 
-    /// The property the whole markdown swap is built on: every command is its own inverse, so
-    /// nothing it can add is beyond its reach afterwards.
-    ///
-    /// Wrapping leaves the inner text selected, which is what lets the second press find its own
-    /// delimiters sitting just outside the selection.
-    @Test(arguments: MarkdownFormatting.Emphasis.allCases)
-    func togglingEmphasisTwiceLeavesTheTextAsItWas(emphasis: MarkdownFormatting.Emphasis) {
+    /// Every command is its own inverse. Under delimiters this held only when the second press
+    /// found its own pair still sitting beside the selection; a trait needs no such luck.
+    @Test(arguments: Emphasis.allCases)
+    func togglingEmphasisTwiceLeavesTheNoteAsItWas(emphasis: Emphasis) {
         textView.setSelectedRange(NSRange(location: 0, length: 4))
 
         manager.toggleEmphasis(emphasis, on: textView)
         manager.toggleEmphasis(emphasis, on: textView)
 
-        #expect(textView.string == "Test Text")
+        #expect(textView.markdown == "Test Text")
         #expect(textView.selectedRange() == NSRange(location: 0, length: 4))
     }
 
-    /// Selecting the delimiters along with the text is the other way to ask for them off.
-    @Test func togglingEmphasisOverTheWholeRunUnwrapsIt() {
-        textView.string = "**Test** Text"
-        textView.setSelectedRange(NSRange(location: 0, length: 8))  // "**Test**"
-
-        manager.toggleEmphasis(.strong, on: textView)
-
-        #expect(textView.string == "Test Text")
-    }
-
-    /// With nothing selected the command inserts an empty pair and puts the caret between the
-    /// halves, so ⌘B then typing comes out bold — what it did when it moved typing attributes.
-    @Test func togglingEmphasisWithoutSelectionOpensAPairAroundTheCaret() {
-        textView.setSelectedRange(NSRange(location: 4, length: 0))
-
-        manager.toggleEmphasis(.strong, on: textView)
-
-        #expect(textView.string == "Test**** Text")
-        #expect(textView.selectedRange() == NSRange(location: 6, length: 0))
-    }
-
-    @Test func togglingEmphasisStylesTheWrappedText() throws {
+    /// The reported bug in #124, in the order that produced it: bold, then italic, then bold off
+    /// again. Under delimiters the second ⌘B could not see the `**` — the italic pair had moved
+    /// it out of reach — so it wrapped a second time and left `**_**hello**_**` on screen.
+    @Test(.bug(id: 124)) func emphasisCommandsComposeInAnyOrder() {
         textView.setSelectedRange(NSRange(location: 0, length: 4))
 
         manager.toggleEmphasis(.strong, on: textView)
-        textView.restyle()
+        manager.toggleEmphasis(.emphasis, on: textView)
+        manager.toggleEmphasis(.strong, on: textView)
+
+        #expect(textView.markdown == "_Test_ Text", "Taking the bold off leaves the italic alone")
+        #expect(textView.string == "Test Text")
+    }
+
+    /// Deleting the last character of a formatted run is an ordinary deletion now. Under
+    /// delimiters it emptied the pair into `****`, four literal asterisks the user never typed.
+    @Test(.bug(id: 124)) func emptyingAFormattedRunLeavesNothingBehind() throws {
+        textView.load(markdown: "**a** b")
+        textView.setSelectedRange(NSRange(location: 1, length: 0))
+
+        textView.deleteBackward(nil)
+
+        #expect(textView.string == " b")
+        #expect(textView.markdown == " b", "and nothing is left in the note to look at")
+    }
+
+    /// With nothing selected the command arms the caret, so ⌘B then typing comes out bold —
+    /// without putting a single character in the note for a press the user then thinks better of.
+    @Test func togglingEmphasisWithoutSelectionArmsTheCaret() {
+        textView.setSelectedRange(NSRange(location: 9, length: 0))
+
+        manager.toggleEmphasis(.strong, on: textView)
+
+        #expect(textView.string == "Test Text", "Nothing typed yet, nothing written")
+
+        textView.insertText(" more", replacementRange: NSRange(location: 9, length: 0))
+        #expect(textView.markdown == "Test Text **more**")
+    }
+
+    @Test func togglingEmphasisStylesTheSelectedText() throws {
+        textView.setSelectedRange(NSRange(location: 0, length: 4))
+
+        manager.toggleEmphasis(.strong, on: textView)
 
         let storage = try #require(textView.textStorage)
         let font = try #require(storage.attribute(.font, at: 3, effectiveRange: nil) as? NSFont)
-        #expect(NSFontManager.shared.traits(of: font).contains(.boldFontMask))
+        #expect(font.isBold)
     }
 
     /// Driven through a real undo manager, which an `NSTextView` only has once it is in a window.
@@ -111,11 +125,11 @@ struct EditorFormattingTests {
         textView.setSelectedRange(NSRange(location: 0, length: 4))  // "Test"
 
         manager.toggleEmphasis(.strong, on: textView)
-        #expect(textView.string == "**Test** Text")
+        #expect(textView.markdown == "**Test** Text")
 
         textView.undoManager?.undo()
 
-        #expect(textView.string == "Test Text")
+        #expect(textView.markdown == "Test Text")
     }
 
     /// ⌘⇧X is the same path as ⌘B and ⌘I, which is the point of it being one line.
@@ -123,10 +137,10 @@ struct EditorFormattingTests {
         textView.setSelectedRange(NSRange(location: 0, length: 4))
 
         manager.toggleStrikethrough(on: textView)
-        #expect(textView.string == "~~Test~~ Text")
+        #expect(textView.markdown == "~~Test~~ Text")
 
         manager.toggleStrikethrough(on: textView)
-        #expect(textView.string == "Test Text")
+        #expect(textView.markdown == "Test Text")
     }
 
     // MARK: - Font size

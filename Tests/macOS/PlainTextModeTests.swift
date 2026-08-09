@@ -6,9 +6,10 @@ import Testing
 /// Per-note plain-text mode, where it is applied: the text view the coordinator configures, and
 /// the commands that have to stop working in it.
 ///
-/// The mode is a rendering choice now, not a transform. It used to flatten the note's attributes,
-/// which made switching a one-way trip that took the formatting with it — the second half of
-/// #117. Most of what this suite pins is that switching changes *nothing* about the text.
+/// The mode decides what the editor is *holding*: formatted mode holds rich text with the
+/// delimiters parsed away, plain mode holds the source. Switching converts between the two, so
+/// most of what this suite pins is that the conversion is lossless — the note that comes out of a
+/// round trip is the note that went in (#124), and switching is never an edit to it (#117).
 ///
 /// `MarkdownTextViewTests` covers what the view does regardless of mode.
 @MainActor
@@ -46,8 +47,9 @@ struct PlainTextModeTests {
         }
     }
 
-    /// A rich note opens proportional, with its markdown drawn.
-    @Test func aRichNoteOpensProportionalWithItsMarkdownStyled() throws {
+    /// A rich note opens proportional, with its markdown *drawn* rather than shown: the
+    /// delimiters were parsed away on the way in and the run they described is bold.
+    @Test(.bug(id: 124)) func aRichNoteOpensProportionalWithItsMarkdownDrawn() throws {
         let container = NSView()
         let note = NoteItem(id: 1, text: "pass: **rotate-me**")
 
@@ -57,13 +59,14 @@ struct PlainTextModeTests {
         let textView = try #require(scrollView.documentView as? MarkdownTextView)
         let storage = try #require(textView.textStorage)
 
+        #expect(textView.string == "pass: rotate-me", "No delimiters on screen")
         #expect(
             storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
                 == fixture.baseFont(plainText: false), "Unstyled text takes the base font")
 
-        // "pass: **rotate-me**" — location 8 is inside the delimited run.
+        // "pass: rotate-me" — location 8 is inside the run the delimiters described.
         let inRun = try #require(storage.attribute(.font, at: 8, effectiveRange: nil) as? NSFont)
-        #expect(NSFontManager.shared.traits(of: inRun).contains(.boldFontMask))
+        #expect(inRun.isBold)
     }
 
     /// Opening a note is not an edit to it — the fix's central promise, checked at the point
@@ -104,41 +107,48 @@ struct PlainTextModeTests {
     // MARK: - Switching, in both directions
 
     /// The bug this fix exists for, in its second form: switching modes used to clear the
-    /// note's formatting for good. Now the source is untouched and the styling comes back.
+    /// note's formatting for good. Now each mode is a shape of the same note, and the switch
+    /// converts between them.
     @Test(.bug(id: 117))
     func switchingModesAndBackRestoresTheStyling() throws {
         let textView = try fixture.textView()
-        textView.string = "pass: **rotate-me**"
         fixture.configure(plainText: false)
+        textView.load(markdown: "pass: **rotate-me**")
 
         let styled = try fixture.font(at: 8)
-        try #require(NSFontManager.shared.traits(of: styled).contains(.boldFontMask))
+        try #require(styled.isBold)
 
         fixture.configure(plainText: true)
-        #expect(try fixture.font(at: 8) == fixture.baseFont(plainText: true),
-            "Plain mode stops styling it")
-        #expect(textView.string == "pass: **rotate-me**", "and changes not one character")
+        #expect(textView.string == "pass: **rotate-me**", "Plain mode shows the source")
+        #expect(try fixture.font(at: 8) == fixture.baseFont(plainText: true), "and styles none of it")
 
         fixture.configure(plainText: false)
-        #expect(try fixture.font(at: 8) == styled, "Switching back brings the styling back")
+        #expect(textView.string == "pass: rotate-me", "Formatted mode draws it again")
+        #expect(try fixture.font(at: 8) == styled)
+        #expect(textView.markdown == "pass: **rotate-me**", "and the note is what it always was")
     }
 
-    /// Repeatedly, not just once: the mode is derived from the note on every repaint, so there
-    /// is no state to wear down. Under the old flattening implementation the second round trip
-    /// had nothing left to restore.
-    @Test func switchingModesIsReversibleIndefinitely() throws {
+    /// Repeatedly, not just once. Each switch is a conversion, so a note that lost or gained a
+    /// character on the way through would drift a little further with every flip — which is the
+    /// one failure mode this design has that drawing the source did not.
+    @Test(.bug(id: 124)) func switchingModesIsReversibleIndefinitely() throws {
         let textView = try fixture.textView()
-        textView.string = "- [ ] rotate ~~the~~ *keys*"
+        let source = "- [ ] rotate ~~the~~ *keys*"
+        fixture.configure(plainText: false)
+        textView.load(markdown: source)
 
         for _ in 0..<5 {
             fixture.configure(plainText: true)
             fixture.configure(plainText: false)
         }
 
-        #expect(textView.string == "- [ ] rotate ~~the~~ *keys*")
+        #expect(textView.markdown == source, "Five round trips, character for character")
+
+        // "- [ ] rotate the *keys*" — `*keys*` is literal, since italic is spelled `_`.
+        #expect(textView.string == "- [ ] rotate the *keys*")
         let storage = try #require(textView.textStorage)
         #expect(
-            storage.attribute(.strikethroughStyle, at: 16, effectiveRange: nil) as? Int
+            storage.attribute(.strikethroughStyle, at: 13, effectiveRange: nil) as? Int
                 == NSUnderlineStyle.single.rawValue)
     }
 
@@ -163,7 +173,7 @@ struct PlainTextModeTests {
     ///
     /// Read from a private pasteboard rather than `paste(_:)`, which would take over the user's
     /// real clipboard for the length of the run. This is the raw AppKit read — the path that used
-    /// to leave attributes behind — so it proves the repaint erases them wherever they enter.
+    /// to leave attributes behind — so it proves normalizing erases them wherever they enter.
     @Test func pastingStyledTextIntoAPlainNoteDropsTheStyling() throws {
         let textView = try fixture.textView()
         fixture.configure(plainText: true)
@@ -183,7 +193,6 @@ struct PlainTextModeTests {
         }
 
         #expect(textView.readSelection(from: scratch.pasteboard))
-        textView.restyle()
 
         #expect(textView.string == "rotate-me")
         #expect(
@@ -199,12 +208,12 @@ struct PlainTextModeTests {
 
     // MARK: - Formatting shortcuts
 
-    /// ⌘B, ⌘I and ⌘⇧X have nothing worth applying in a note that leaves its markdown literal —
-    /// the delimiters would be noise with nothing to show for them.
+    /// ⌘B, ⌘I and ⌘⇧X have nothing to apply in a note that shows its source: the only thing they
+    /// could do there is type delimiters the user is already free to type.
     @Test func formattingShortcutsDoNothingInAPlainNote() throws {
         let textView = try fixture.textView()
-        textView.string = "user: admin"
         fixture.configure(plainText: true)
+        textView.load(markdown: "user: admin")
         textView.setSelectedRange(NSRange(location: 0, length: 4))
 
         manager.toggleEmphasis(.strong, on: textView)
@@ -218,13 +227,13 @@ struct PlainTextModeTests {
     /// commands. `EditorFormattingTests` covers what they do in detail.
     @Test func formattingShortcutsStillWorkInARichNote() throws {
         let textView = try fixture.textView()
-        textView.string = "user: admin"
         fixture.configure(plainText: false)
+        textView.load(markdown: "user: admin")
         textView.setSelectedRange(NSRange(location: 0, length: 4))
 
         manager.toggleEmphasis(.strong, on: textView)
 
-        #expect(textView.string == "**user**: admin")
+        #expect(textView.markdown == "**user**: admin")
     }
 
     // MARK: - Pasting
@@ -234,8 +243,8 @@ struct PlainTextModeTests {
     /// own commands could take back out — the one thing the whole Markdown swap exists to stop.
     @Test func pastingIntoAPlainNoteBringsNoDelimiters() throws {
         let textView = try fixture.textView()
-        textView.string = ""
         fixture.configure(plainText: true)
+        textView.load(markdown: "")
 
         let scratch = ScratchPasteboard()
         scratch.write { $0.setData(Data("<b>secret</b>".utf8), forType: .html) }
@@ -247,11 +256,12 @@ struct PlainTextModeTests {
         #expect(textView.string == "secret")
     }
 
-    /// The same clipboard in a rich note does keep the bold, as source.
-    @Test func pastingIntoARichNoteConvertsTheFormatting() throws {
+    /// The same clipboard in a rich note keeps the bold — as bold on screen, and as `**` in what
+    /// the note stores.
+    @Test(.bug(id: 124)) func pastingIntoARichNoteKeepsTheFormatting() throws {
         let textView = try fixture.textView()
-        textView.string = ""
         fixture.configure(plainText: false)
+        textView.load(markdown: "")
 
         let scratch = ScratchPasteboard()
         scratch.write { $0.setData(Data("<b>secret</b>".utf8), forType: .html) }
@@ -260,6 +270,7 @@ struct PlainTextModeTests {
 
         shortcutManager.pasteAsMarkdown(on: textView)
 
-        #expect(textView.string == "**secret**")
+        #expect(textView.string == "secret", "No delimiters land in the buffer")
+        #expect(textView.markdown == "**secret**")
     }
 }

@@ -54,6 +54,8 @@ final class SpyEditorCoordinator: NoteEditorCoordinator {
     private(set) var stepsInOrder: [String] = []
 
     /// What each note's view reports as its text; the real subclasses read this off a text view.
+    /// The two readings are the same string here, as they are in a plain-text note — what
+    /// `MarkdownWriting` does to them apart is tested where it happens.
     var plainTextByNoteId: [Int: String] = [:]
 
     /// Fires on every `statsDidChange`, so a test can resume once the detached work lands
@@ -99,6 +101,10 @@ final class SpyEditorCoordinator: NoteEditorCoordinator {
     override func plainText(of editorView: PlatformView) -> String {
         guard let noteId = noteIdsByView[ObjectIdentifier(editorView)] else { return "" }
         return plainTextByNoteId[noteId] ?? ""
+    }
+
+    override func markdown(of editorView: PlatformView) -> String {
+        plainText(of: editorView)
     }
 
     override func statsDidChange(_ stats: TextStats) {

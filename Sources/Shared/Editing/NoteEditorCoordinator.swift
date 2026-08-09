@@ -144,13 +144,21 @@ class NoteEditorCoordinator: NSObject {
 
     /// Called by the platform delegate methods when the visible note's text changes.
     ///
-    /// One string now, where this used to take the attributed storage as well: the note *is* its
-    /// text, so the saver and the counters read the same thing.
-    func textDidChange(text: String) {
-        guard let noteId = currentNoteId, let saver = savers[noteId] else { return }
-        saver.save(text: text)
+    /// The two readings of "the text" have come apart, and this is where that shows: the counters
+    /// want what is on screen, and the store wants markdown, which in formatted mode means
+    /// writing the buffer out. The markdown is fetched as a closure rather than produced here, so
+    /// that walk happens once per debounce window instead of once per keystroke.
+    func noteDidChange() {
+        guard let noteId = currentNoteId, let editorView = editorViews[noteId],
+            let saver = savers[noteId]
+        else { return }
 
-        updateStats(plainText: text, for: noteId)
+        saver.save { [weak self, weak editorView] in
+            guard let self, let editorView else { return nil }
+            return markdown(of: editorView)
+        }
+
+        updateStats(plainText: plainText(of: editorView), for: noteId)
     }
 
     /// Counts characters/words/lines off the main actor so large notes don't stall typing,
@@ -206,7 +214,12 @@ class NoteEditorCoordinator: NSObject {
 
     func focus(_ editorView: PlatformView) {}
 
+    /// What the view is showing, for the counters.
     func plainText(of editorView: PlatformView) -> String { "" }
+
+    /// The same note as markdown, for the store. In plain mode the two are the same string; in
+    /// formatted mode this is the buffer written back out — see `MarkdownWriting`.
+    func markdown(of editorView: PlatformView) -> String { "" }
 
     func statsDidChange(_ stats: TextStats) {}
 }

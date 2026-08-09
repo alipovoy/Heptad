@@ -13,22 +13,27 @@ import Foundation
     typealias PlatformColor = NSColor
 #endif
 
-/// How a note's markdown is drawn.
+/// How a note's text is drawn, and what an editor is allowed to hold.
 ///
-/// Every attribute this file produces is **derived state**: it is recomputed from the text after
-/// each change and never saved — `NoteItem` stores a `String`. That is the whole fix for #117.
-/// Undo restores text storage but not `typingAttributes`, so under attributed storage a paste
-/// could strand colour and alignment the app had no command to remove. Here there is nothing to
-/// strand: the next repaint overwrites every attribute in the view, and none of them were ever
-/// going to be written to disk anyway.
+/// The two modes are opposites, and the split is the point (#124):
 ///
-/// It is also what makes the plain-text toggle non-destructive. Plain mode is a different
-/// `Appearance`, not a different document.
+/// * **Formatted** holds rich text with no markdown in it at all. `**keys**` was parsed into a
+///   bold run on the way in and is written back out on the way to the store — see
+///   `RichTextRendering` and `MarkdownWriting`. `⌘B` toggles a trait, so it is order-free and
+///   its own inverse; deleting text deletes text. Nothing is on screen the user did not type.
+/// * **Plain** holds the source verbatim, every delimiter visible, in one monospaced font.
+///
+/// Whichever mode a note is in, **nothing here is ever stored**: `NoteItem` holds a markdown
+/// `String`, and the attributes below are rebuilt from it on the way in. That is the fix for
+/// #117, and it survives the move to rich text — a paste can still arrive carrying colour,
+/// alignment and a 24pt font, and `normalize` takes the whole lot back off. What is left is the
+/// vocabulary the commands can reach, which is the only thing `MarkdownWriting` can spell.
 enum MarkdownStyling {
     /// The two things that decide how a note looks: its mode, and the app-wide zoom.
-    struct Appearance {
-        /// Monospaced, and markdown left as literal text — for credentials and keys, where a
-        /// proportional font gets in the way and dimmed markers are just noise.
+    struct Appearance: Equatable {
+        /// Monospaced, and every character of the markdown left exactly as typed — for
+        /// credentials and keys, where a proportional font gets in the way, and for reading the
+        /// source of what the other mode draws.
         let plainText: Bool
 
         /// Passed in rather than read from `EditorFontSize.current()` here. Defaulting it made
@@ -39,7 +44,7 @@ enum MarkdownStyling {
 
         var baseFont: PlatformFont { .editorBody(plainText: plainText, size: fontSize) }
 
-        /// Plain mode shows the source and nothing else, so there is no styling pass at all.
+        /// Whether this mode draws formatting rather than the characters that describe it.
         var isStyled: Bool { !plainText }
     }
 
@@ -51,71 +56,94 @@ enum MarkdownStyling {
         ]
     }
 
-    /// Repaints `storage` from its own text.
+    /// Brings `storage` back to what this app can express, and to the current zoom.
     ///
-    /// Unconditionally clears to the base attributes first. That single line is what makes a
-    /// paste harmless: whatever colour, alignment or font arrived with it is gone by the end of
-    /// this call, and only the characters are left.
-    static func apply(_ appearance: Appearance, to storage: NSMutableAttributedString) {
+    /// Plain mode is flat by definition, so everything goes. Formatted mode keeps the four things
+    /// with a markdown spelling — bold, italic, strikethrough, links — and takes the rest: any
+    /// other colour, any other font, alignment, kerning, the lot. A pasted 24pt centred red run
+    /// therefore lands as ordinary text in the note's own font, still bold if it was bold.
+    static func normalize(_ appearance: Appearance, in storage: NSMutableAttributedString) {
         let whole = NSRange(location: 0, length: storage.length)
         guard whole.length > 0 else { return }
 
         storage.beginEditing()
-        apply(appearance, to: storage, over: whole)
+        normalize(appearance, in: storage, over: whole)
         storage.endEditing()
     }
 
-    /// Repaints just the lines `range` touches.
-    ///
-    /// What a line looks like depends on that line alone — constructs never span lines — so an
-    /// edit only ever invalidates the lines it landed on. Repainting the whole note on every
-    /// keystroke was correct but put O(document) attribute setting and a full layout
-    /// invalidation on the main actor for each character typed.
+    /// The same, over the range an edit landed on.
     ///
     /// No `beginEditing`/`endEditing` here: the caller may already be inside `processEditing`,
-    /// where opening another editing group is not allowed. The whole-document entry point above
+    /// where opening another editing group is not allowed. The whole-buffer entry point above
     /// wraps its own.
-    static func apply(
-        _ appearance: Appearance, to storage: NSMutableAttributedString, over range: NSRange
+    static func normalize(
+        _ appearance: Appearance, in storage: NSMutableAttributedString, over range: NSRange
     ) {
-        let text = storage.string as NSString
-        guard text.length > 0 else { return }
+        let clamped = clamp(range, to: storage.length)
+        guard clamped.length > 0 else { return }
 
-        let start = min(range.location, text.length)
-        let clamped = NSRange(location: start, length: min(range.length, text.length - start))
-        let lines = text.lineRange(for: clamped)
-        guard lines.length > 0 else { return }
+        guard appearance.isStyled else {
+            storage.setAttributes(baseAttributes(appearance), range: clamped)
+            return
+        }
 
-        storage.setAttributes(baseAttributes(appearance), range: lines)
-        guard appearance.isStyled else { return }
+        // Collected before anything is written: mutating attributes while enumerating the same
+        // range is not defined behaviour.
+        var replacements: [(NSRange, [NSAttributedString.Key: Any])] = []
 
-        for span in MarkdownSyntax.spans(in: text, over: lines) {
-            apply(span, to: storage, appearance: appearance)
+        storage.enumerateAttributes(in: clamped, options: []) { attributes, subrange, _ in
+            replacements.append((subrange, normalized(attributes, in: appearance)))
+        }
+
+        for (subrange, attributes) in replacements {
+            storage.setAttributes(attributes, range: subrange)
         }
     }
 
-    private static func apply(
-        _ span: MarkdownSyntax.Span, to storage: NSMutableAttributedString, appearance: Appearance
-    ) {
-        switch span.style {
-        case .strong:
-            restyle(storage, over: span.range) { $0.bolded() }
-        case .emphasis:
-            restyle(storage, over: span.range) { $0.italicized() }
-        case .strikethrough:
-            storage.addAttribute(
-                .strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: span.range)
-        case .link:
-            storage.addAttribute(.foregroundColor, value: PlatformColor.editorLink, range: span.range)
-            storage.addAttribute(
-                .underlineStyle, value: NSUnderlineStyle.single.rawValue, range: span.range)
-        case .marker:
-            // Dimmed rather than hidden: the buffer holds the source, so the caret has to be
-            // able to sit inside `**` and arrow through it. Hiding the markers would leave the
-            // selection jumping over characters that are still there.
-            storage.addAttribute(
-                .foregroundColor, value: PlatformColor.editorMarker, range: span.range)
+    /// One run's attributes, reduced to the vocabulary and re-based on the note's own font.
+    ///
+    /// The traits are read off whatever font arrived and re-applied to the base one, so a pasted
+    /// bold Helvetica 24 comes out bold in the editor's font at the editor's size. That is also
+    /// what makes a zoom step work: every run is rebuilt at the new size, weight and slant intact.
+    ///
+    /// Not private: `typingAttributes` are not part of any storage, so the text views run the
+    /// same filter over them by hand.
+    static func normalized(
+        _ attributes: [NSAttributedString.Key: Any], in appearance: Appearance
+    ) -> [NSAttributedString.Key: Any] {
+        guard appearance.isStyled else { return baseAttributes(appearance) }
+
+        var font = appearance.baseFont
+        if let existing = attributes[.font] as? PlatformFont {
+            if existing.isBold { font = font.bolded() }
+            if existing.isItalic { font = font.italicized() }
         }
+
+        var kept: [NSAttributedString.Key: Any] = [.font: font]
+
+        if let link = attributes[.link] {
+            kept[.link] = link
+            kept[.foregroundColor] = PlatformColor.editorLink
+            kept[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        } else {
+            kept[.foregroundColor] = PlatformColor.adaptiveEditorText
+        }
+
+        if attributes[.strikethroughStyle] != nil {
+            kept[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+        }
+
+        return kept
+    }
+
+    /// A range brought inside `length`.
+    ///
+    /// The edited range handed to a storage delegate describes text that may no longer be there:
+    /// after a deletion it can start at or past the end of what is left. This is what stands
+    /// between that and an out-of-range crash while typing.
+    private static func clamp(_ range: NSRange, to length: Int) -> NSRange {
+        let start = min(max(range.location, 0), length)
+        return NSRange(location: start, length: min(range.length, length - start))
     }
 
     /// Rewrites the font of every run in `range` through `transform`.
@@ -125,7 +153,7 @@ enum MarkdownStyling {
     /// left behind and adds to it, where assigning `baseFont.italicized()` would drop the weight.
     /// The runs are collected before any of them is changed, because mutating an attribute while
     /// enumerating that same attribute is not defined behaviour.
-    private static func restyle(
+    static func restyle(
         _ storage: NSMutableAttributedString, over range: NSRange,
         _ transform: (PlatformFont) -> PlatformFont
     ) {
@@ -151,9 +179,12 @@ extension PlatformFont {
 
     /// The bold and italic cuts of this font, or this font unchanged when it has none.
     ///
-    /// Falling back to the original rather than to a synthesised face keeps `**text**` legible
-    /// in a plain-text note's monospaced font, which on some systems has no italic at all.
+    /// Falling back to the original rather than to a synthesised face keeps a bold run legible in
+    /// a font that has no bold cut at all.
     #if canImport(UIKit)
+        var isBold: Bool { fontDescriptor.symbolicTraits.contains(.traitBold) }
+        var isItalic: Bool { fontDescriptor.symbolicTraits.contains(.traitItalic) }
+
         func bolded() -> PlatformFont { withTrait(.traitBold) }
         func italicized() -> PlatformFont { withTrait(.traitItalic) }
 
@@ -164,6 +195,9 @@ extension PlatformFont {
             return UIFont(descriptor: descriptor, size: pointSize)
         }
     #else
+        var isBold: Bool { fontDescriptor.symbolicTraits.contains(.bold) }
+        var isItalic: Bool { fontDescriptor.symbolicTraits.contains(.italic) }
+
         func bolded() -> PlatformFont { withTrait(.bold) }
         func italicized() -> PlatformFont { withTrait(.italic) }
 
@@ -178,10 +212,10 @@ extension PlatformFont {
 extension PlatformColor {
     /// The system's body-text colour: black in light appearance, white in dark.
     ///
-    /// Applied to the whole note on every repaint, which is what keeps it adaptive. Under RTF
-    /// storage it had to be filled in on load instead — text layout falls back to opaque black
-    /// for runs with no `.foregroundColor`, and RTF stores no colour for such runs, so notes
-    /// went unreadable in dark mode. Nothing is stored now, so there is nothing to fill in.
+    /// Applied on every normalize, which is what keeps it adaptive. Under RTF storage it had to
+    /// be filled in on load instead — text layout falls back to opaque black for runs with no
+    /// `.foregroundColor`, and RTF stores no colour for such runs, so notes went unreadable in
+    /// dark mode. Nothing is stored now, so there is nothing to fill in.
     static var adaptiveEditorText: PlatformColor {
         #if canImport(UIKit)
             .label
@@ -196,15 +230,6 @@ extension PlatformColor {
             .link
         #else
             .linkColor
-        #endif
-    }
-
-    /// The syntax characters themselves, pushed back so they read as punctuation.
-    static var editorMarker: PlatformColor {
-        #if canImport(UIKit)
-            .tertiaryLabel
-        #else
-            .tertiaryLabelColor
         #endif
     }
 }

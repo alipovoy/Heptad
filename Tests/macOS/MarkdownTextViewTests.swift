@@ -12,30 +12,65 @@ import Testing
 struct MarkdownTextViewTests {
     private let fixture: MarkdownEditorFixture
 
+    /// ⌘B writes the zoom nowhere, but the manager reads it — a scratch suite keeps the real
+    /// app's stored size out of it either way.
+    private let scratch: ScratchDefaults
+
     init() throws {
         fixture = try MarkdownEditorFixture()
+        scratch = try ScratchDefaults(name: "MarkdownTextViewTests")
     }
 
-    // MARK: - Repainting
+    // MARK: - Loading and writing back
 
-    /// An edit repaints the lines it landed on, not the whole note — a construct never spans
-    /// lines, so nothing further can have changed. The result has to be indistinguishable from
-    /// repainting everything, which is what this compares it against.
-    @Test func editingOneLineRepaintsItToTheSameResultAsRepaintingAll() throws {
+    /// The note goes in as markdown and comes back out as markdown, with rich text in between —
+    /// which is the whole of #124's redesign, seen from the view that holds it.
+    @Test(.bug(id: 124)) func aNoteGoesInAndComesBackOutAsMarkdown() throws {
         let textView = try fixture.textView()
         fixture.configure(plainText: false)
-        textView.string = "**one**\nplain here\n_three_"
-        textView.restyle()
 
-        let storage = try #require(textView.textStorage)
-        storage.replaceCharacters(in: NSRange(location: 8, length: 10), with: "~~struck~~")
+        textView.load(markdown: "**one**\nplain here\n_three_")
 
-        let afterEdit = NSAttributedString(attributedString: storage)
-        textView.restyle()
+        #expect(textView.string == "one\nplain here\nthree", "No delimiters in the buffer")
+        #expect(textView.markdown == "**one**\nplain here\n_three_")
+    }
 
-        #expect(
-            afterEdit.isEqual(to: storage),
-            "The line-scoped repaint left the note as a full one would")
+    /// Typing is no longer a parse: an edit only has to arrive normalized, so what is typed into
+    /// a note is in the note's own font whatever the caret was carrying.
+    @Test func typingLandsInTheNotesOwnFont() throws {
+        let textView = try fixture.textView()
+        fixture.configure(plainText: false)
+        textView.load(markdown: "**one**")
+
+        textView.setSelectedRange(NSRange(location: 3, length: 0))
+        textView.insertText(" two", replacementRange: NSRange(location: 3, length: 0))
+
+        let font = try fixture.font(at: 4)
+        #expect(font.pointSize == fixture.baseFont(plainText: false).pointSize)
+        #expect(textView.markdown == "**one two**", "and inside the bold run, stays bold")
+    }
+
+    /// The whole path, end to end: an edit in the editor becomes markdown in the store.
+    ///
+    /// The one place the redesign could lose a note is here — the buffer holds rich text, so what
+    /// is saved is what `MarkdownWriting` makes of it rather than what is on screen. Driven
+    /// through the coordinator and its saver, then flushed the way hiding the window flushes.
+    @Test(.bug(id: 124)) func editingANoteWritesMarkdownBackToTheStore() throws {
+        let container = NSView()
+        let note = NoteItem(id: 0, text: "rotate keys")
+        fixture.coordinator.setup(container: container, notes: [note], selectedIndex: 0)
+
+        let scrollView = try #require(container.subviews.first as? NSScrollView)
+        let textView = try #require(scrollView.documentView as? MarkdownTextView)
+        try #require(textView.string == "rotate keys")
+
+        textView.setSelectedRange(NSRange(location: 7, length: 4))  // "keys"
+        EditorShortcutManager(defaults: scratch.defaults).toggleEmphasis(.strong, on: textView)
+
+        // What the window does on its way off screen, and what a debounce would do on its own.
+        NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
+
+        #expect(note.text == "rotate **keys**")
     }
 
     // MARK: - Typing attributes
@@ -88,10 +123,13 @@ struct MarkdownTextViewTests {
 
         #expect(textView.string == "", "The text goes")
 
-        // And so does the formatting, which is the half that used to survive.
+        // And so does everything the clipboard brought that this app cannot write back out. The
+        // bold is allowed to stay on the caret — it has a markdown spelling and ⌘B takes it off
+        // again, which is exactly what "stranded" meant and no longer applies to it.
+        let font = try #require(textView.typingAttributes[.font] as? NSFont)
         #expect(
-            textView.typingAttributes[.font] as? NSFont == fixture.baseFont(plainText: false),
-            "Typing after the undo is the note's own font, not the clipboard's")
+            font.pointSize == fixture.baseFont(plainText: false).pointSize,
+            "Typing after the undo is the note's own size, not the clipboard's")
         #expect(textView.typingAttributes[.foregroundColor] as? NSColor == .adaptiveEditorText)
         #expect(textView.typingAttributes[.paragraphStyle] == nil, "No alignment is left behind")
     }
@@ -107,9 +145,9 @@ struct MarkdownTextViewTests {
     @Test(.bug(id: 117))
     func copyingAStyledNoteRoundTripsExactly() throws {
         let textView = try fixture.textView()
-        textView.string = "**keys** and _more_"
         fixture.configure(plainText: false)
-        textView.setSelectedRange(NSRange(location: 0, length: 19))
+        textView.load(markdown: "**keys** and _more_")
+        textView.setSelectedRange(NSRange(location: 0, length: (textView.string as NSString).length))
 
         // No rich flavor offered, and the plain one still spelled the way AppKit's own writer
         // recognises — returning `[.string]` here makes `writeSelection` fail and copy nothing.

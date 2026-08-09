@@ -52,21 +52,13 @@ struct IOSRichTextEditor: UIViewRepresentable {
         }
 
         override func load(_ text: String, into editorView: UIView) {
-            guard let textView = editorView as? MarkdownTextView else { return }
-
-            textView.text = text
-            textView.undoManager?.removeAllActions()  // clear undo history on load
-
-            textView.restyle()
+            (editorView as? MarkdownTextView)?.load(markdown: text)
         }
 
-        /// Applies the note's mode and the app-wide zoom. Repaints only — the text is not read,
-        /// not rewritten, and the saver is not told anything, because nothing changed.
+        /// Applies the note's mode and the app-wide zoom. A zoom step repaints; a mode step
+        /// converts the buffer, because the two modes hold different things. See the macOS twin.
         override func configure(_ editorView: UIView, appearance: MarkdownStyling.Appearance) {
-            guard let textView = editorView as? MarkdownTextView else { return }
-
-            textView.styling = appearance
-            textView.restyle()
+            (editorView as? MarkdownTextView)?.apply(appearance)
         }
 
         override func resignFocus(from editorView: UIView) {
@@ -81,6 +73,10 @@ struct IOSRichTextEditor: UIViewRepresentable {
 
         override func plainText(of editorView: UIView) -> String {
             (editorView as? UITextView)?.text ?? ""
+        }
+
+        override func markdown(of editorView: UIView) -> String {
+            (editorView as? MarkdownTextView)?.markdown ?? ""
         }
 
         override func statsDidChange(_ stats: TextStats) {
@@ -104,38 +100,60 @@ struct IOSRichTextEditor: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             guard let textView = textView as? MarkdownTextView else { return }
 
-            // The storage has already repainted itself by now — the text view is its own
-            // storage delegate. Only the typing attributes are left to put back.
-            textView.resetTypingAttributes()
-            textDidChange(text: textView.text ?? "")
+            // The storage has already been normalized by now — the text view is its own storage
+            // delegate. Only the typing attributes are left, which no storage pass can reach.
+            textView.normalizeTypingAttributes()
+            noteDidChange()
         }
     }
 }
 
-/// The editor's text view, with markdown styling painted on from its text.
+/// The editor's text view: a buffer whose shape is its note's mode. See the macOS twin, which
+/// this mirrors line for line.
 class MarkdownTextView: UITextView, NSTextStorageDelegate {
-    /// How this view draws. Display only — none of it is ever stored.
-    var styling = MarkdownStyling.Appearance(
+    /// How this view draws, and which of the two shapes its buffer is in. Display only — none of
+    /// it is ever stored.
+    private(set) var styling = MarkdownStyling.Appearance(
         plainText: false, fontSize: AppConstants.Layout.defaultFontSize)
 
-    /// Repaints the whole note, for when every line's appearance changes at once — a mode
-    /// switch, a zoom step, or freshly loaded text.
+    /// The note as it would be stored: markdown, whichever mode this view is in.
+    var markdown: String {
+        styling.isStyled ? MarkdownWriting.markdown(from: textStorage) : (text ?? "")
+    }
+
+    /// Puts a note's markdown into the view, in the shape its mode calls for.
     ///
-    /// The selection is restored around the repaint. Setting attributes across the whole
-    /// document leaves it alone on macOS, but UIKit collapses it to the end. The line-scoped
-    /// repaint below does not need this: it never touches the whole document.
-    func restyle() {
-        let selection = selectedRange
+    /// The caret is put back afterwards. Replacing the whole buffer leaves it alone on macOS, but
+    /// UIKit collapses it to the end.
+    func load(markdown: String) {
+        let caret = selectedRange
 
-        MarkdownStyling.apply(styling, to: textStorage)
-        resetTypingAttributes()
+        undoManager?.removeAllActions()  // its ranges describe a buffer that is being replaced
+        textStorage.setAttributedString(
+            RichTextRendering.attributed(from: markdown, appearance: styling))
+        undoManager?.removeAllActions()
 
-        if selectedRange != selection {
-            selectedRange = selection
+        selectedRange = NSRange(location: min(caret.location, textStorage.length), length: 0)
+        typingAttributes = MarkdownStyling.baseAttributes(styling)
+    }
+
+    /// Applies a mode and a zoom level. See the macOS twin for why a mode step is a conversion.
+    func apply(_ appearance: MarkdownStyling.Appearance) {
+        guard appearance != styling else { return }
+
+        let source = markdown
+        let switchingMode = appearance.plainText != styling.plainText
+        styling = appearance
+
+        if switchingMode {
+            load(markdown: source)
+        } else {
+            MarkdownStyling.normalize(styling, in: textStorage)
+            typingAttributes = MarkdownStyling.normalized(typingAttributes, in: styling)
         }
     }
 
-    /// Repaints the lines an edit landed on. See the macOS twin.
+    /// Takes an edit back to what this app can express. See the macOS twin.
     ///
     /// `NSTextStorage.EditActions` here where AppKit spells the same type
     /// `NSTextStorageEditActions` — the one place the two editors cannot share a signature.
@@ -145,12 +163,12 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
     ) {
         guard editedMask.contains(.editedCharacters) else { return }
 
-        MarkdownStyling.apply(styling, to: textStorage, over: editedRange)
+        MarkdownStyling.normalize(styling, in: textStorage, over: editedRange)
     }
 
-    /// Typing attributes are not part of the storage, so no repaint of it can cover them —
-    /// they are the half of #117 that undo does not restore.
-    func resetTypingAttributes() {
-        typingAttributes = MarkdownStyling.baseAttributes(styling)
+    /// Typing attributes are not part of the storage, so no pass over it can cover them — they
+    /// are the half of #117 that undo does not restore.
+    func normalizeTypingAttributes() {
+        typingAttributes = MarkdownStyling.normalized(typingAttributes, in: styling)
     }
 }

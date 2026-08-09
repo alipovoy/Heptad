@@ -1,121 +1,163 @@
 import Foundation
 import Testing
 
+#if canImport(UIKit)
+    import UIKit
+#else
+    import AppKit
+#endif
+
 @testable import Heptad
 
-/// The repaint's range arithmetic.
+/// What an editor is allowed to hold, and the range arithmetic that keeps it there.
 ///
-/// `MarkdownStyling.apply(_:to:over:)` runs from the text storage's `didProcessEditing` hook on
-/// every keystroke, handed the range the edit landed on. After a deletion that range describes
-/// text that is no longer there, so it can start at or past the end of what is left. The clamp in
-/// front of `lineRange(for:)` is what stands between that and an out-of-range `NSRange` — a crash
-/// while typing, not a wrong colour.
-///
-/// None of this is reachable from the editor suites: they only ever repaint ranges still inside
-/// the buffer, so the clamp is exercised there but never actually put under pressure.
+/// `MarkdownStyling.normalize` runs from the text storage's `didProcessEditing` hook on every
+/// keystroke, handed the range the edit landed on. It is the fix for #117 in its rich-text shape:
+/// a paste can arrive carrying a font, a colour and an alignment, and only the four things with a
+/// markdown spelling are allowed to survive it — because those are the only things
+/// `MarkdownWriting` can write back to the store.
 struct MarkdownStylingTests {
 
     private let appearance = MarkdownStyling.Appearance(
         plainText: false, fontSize: AppConstants.Layout.defaultFontSize)
 
+    private let plain = MarkdownStyling.Appearance(
+        plainText: true, fontSize: AppConstants.Layout.defaultFontSize)
+
     private func storage(_ text: String) -> NSMutableAttributedString {
         NSMutableAttributedString(string: text)
     }
 
-    /// The same text, fully repainted — what every clamped repaint below has to match.
-    private func fullyRepainted(_ text: String) -> NSMutableAttributedString {
-        let storage = storage(text)
-        MarkdownStyling.apply(appearance, to: storage)
-        return storage
+    private func font(_ storage: NSAttributedString, at location: Int) throws -> PlatformFont {
+        try #require(storage.attribute(.font, at: location, effectiveRange: nil) as? PlatformFont)
     }
 
-    // MARK: - Nothing to paint
+    // MARK: - What survives
 
-    /// Both entry points guard on an empty buffer, which is the state a cleared note is in.
-    @Test func repaintingEmptyStorageDoesNothing() {
-        let empty = storage("")
+    /// The vocabulary, one trait at a time: what a command can produce, normalize keeps.
+    @Test(.bug(id: 124)) func theFormattingWithAMarkdownSpellingSurvives() throws {
+        let text = storage("bold italic struck")
+        text.addAttribute(
+            .font, value: appearance.baseFont.bolded(), range: NSRange(location: 0, length: 4))
+        text.addAttribute(
+            .font, value: appearance.baseFont.italicized(), range: NSRange(location: 5, length: 6))
+        text.addAttribute(
+            .strikethroughStyle, value: NSUnderlineStyle.single.rawValue,
+            range: NSRange(location: 12, length: 6))
 
-        MarkdownStyling.apply(appearance, to: empty)
-        MarkdownStyling.apply(appearance, to: empty, over: NSRange(location: 0, length: 0))
+        MarkdownStyling.normalize(appearance, in: text)
 
-        #expect(empty.length == 0)
+        #expect(try font(text, at: 0).isBold)
+        #expect(try font(text, at: 5).isItalic)
+        #expect(text.attribute(.strikethroughStyle, at: 12, effectiveRange: nil) != nil)
     }
 
-    /// A zero-length range still repaints the line the caret sits on — `lineRange(for:)` of an
-    /// empty range is the whole line — which is what makes typing a delimiter restyle its line
-    /// rather than nothing at all.
-    @Test func aZeroLengthRangeStillRepaintsItsLine() throws {
+    @Test(.bug(id: 124)) func aLinkKeepsItsDestination() throws {
+        let text = storage("docs")
+        text.addAttribute(
+            .link, value: "https://example.com", range: NSRange(location: 0, length: 4))
+
+        MarkdownStyling.normalize(appearance, in: text)
+
+        #expect(
+            text.attribute(.link, at: 0, effectiveRange: nil) as? String == "https://example.com")
+        #expect(
+            text.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? PlatformColor
+                == .editorLink)
+    }
+
+    // MARK: - What does not
+
+    /// The reported shape of #117: a pasted run arrives 24pt, red and centred. The bold is the
+    /// only part of it this app could ever write back out, so it is the only part that stays.
+    @Test(.bug(id: 117)) func everythingWithoutAMarkdownSpellingIsTakenBackOff() throws {
+        let centred = NSMutableParagraphStyle()
+        centred.alignment = .center
+
+        let text = storage("pasted")
+        text.setAttributes(
+            [
+                .font: PlatformFont.boldSystemFont(ofSize: 24),
+                .foregroundColor: PlatformColor.red,
+                .paragraphStyle: centred,
+                .kern: 4
+            ], range: NSRange(location: 0, length: 6))
+
+        MarkdownStyling.normalize(appearance, in: text)
+
+        let font = try font(text, at: 0)
+        #expect(font.isBold, "The bold is the one thing that has a spelling")
+        #expect(font.pointSize == appearance.fontSize, "at the note's own size")
+        #expect(
+            text.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? PlatformColor
+                == .adaptiveEditorText)
+        #expect(text.attribute(.paragraphStyle, at: 0, effectiveRange: nil) == nil)
+        #expect(text.attribute(.kern, at: 0, effectiveRange: nil) == nil)
+    }
+
+    /// Plain mode is flat by definition — it shows the source, and source has no formatting.
+    @Test func plainModeKeepsNothingAtAll() throws {
         let text = storage("**keys**")
+        text.addAttribute(
+            .font, value: appearance.baseFont.bolded(), range: NSRange(location: 0, length: 8))
 
-        MarkdownStyling.apply(appearance, to: text, over: NSRange(location: 4, length: 0))
+        MarkdownStyling.normalize(plain, in: text)
 
-        let painted = try #require(
-            text.attribute(.font, at: 2, effectiveRange: nil) as? PlatformFont)
-        #expect(painted != appearance.baseFont, "The line the caret is on is styled")
+        #expect(try font(text, at: 0) == plain.baseFont)
+    }
+
+    /// A zoom step is a normalize at a new size: every run is rebuilt, weight and slant intact.
+    @Test func zoomingRebuildsEveryRunAtTheNewSize() throws {
+        let text = storage("bold")
+        text.addAttribute(
+            .font, value: appearance.baseFont.bolded(), range: NSRange(location: 0, length: 4))
+
+        MarkdownStyling.normalize(
+            MarkdownStyling.Appearance(plainText: false, fontSize: 24), in: text)
+
+        #expect(try font(text, at: 0).pointSize == 24)
+        #expect(try font(text, at: 0).isBold)
     }
 
     // MARK: - Ranges that reach past the text
 
-    /// Every one of these clamps onto the single line the text has, so the result must be
-    /// indistinguishable from repainting the whole thing. Asserting that rather than merely "it
-    /// did not crash" is what makes the cases capable of failing for a wrong clamp as well as a
-    /// fatal one.
+    /// The edited range a storage delegate is handed describes text that may no longer be there:
+    /// after a deletion it can start at or past the end of what is left. The clamp in front of
+    /// every read is what stands between that and a crash while typing.
     @Test(arguments: [
-        NSRange(location: 8, length: 0),  // exactly at the end
-        NSRange(location: 8, length: 40),  // starts at the end and runs past it
+        NSRange(location: 4, length: 0),  // exactly at the end
+        NSRange(location: 4, length: 40),  // starts at the end and runs past it
         NSRange(location: 99, length: 0),  // starts past the end
         NSRange(location: 99, length: 40),  // entirely past the end
         NSRange(location: 0, length: 999)  // starts inside, overruns
     ])
     func aRangeReachingPastTheTextIsClampedToIt(edited: NSRange) {
-        let text = storage("**keys**")
+        let text = storage("keys")
 
-        MarkdownStyling.apply(appearance, to: text, over: edited)
+        MarkdownStyling.normalize(appearance, in: text, over: edited)
 
-        #expect(text.string == "**keys**", "A repaint never changes a character")
-        #expect(text.isEqual(to: fullyRepainted("**keys**")), "and lands where a full one would")
+        #expect(text.string == "keys", "Normalizing never changes a character")
     }
 
-    /// The case the clamp exists for, in the shape the editor produces it: characters are deleted
-    /// from the end and the storage delegate is handed the range the edit *occupied*, which no
-    /// longer fits the text that is left.
-    @Test func repaintingAfterADeletionAtTheEndIsHarmless() {
-        let text = storage("**keys** and more")
-        MarkdownStyling.apply(appearance, to: text)
+    @Test func normalizingEmptyStorageDoesNothing() {
+        let empty = storage("")
 
-        let deleted = NSRange(location: 8, length: 9)
-        text.replaceCharacters(in: deleted, with: "")
+        MarkdownStyling.normalize(appearance, in: empty)
+        MarkdownStyling.normalize(appearance, in: empty, over: NSRange(location: 0, length: 0))
 
-        // The range as it stood before the delete — now past the end of what remains.
-        MarkdownStyling.apply(appearance, to: text, over: deleted)
-
-        #expect(text.string == "**keys**")
-        #expect(text.isEqual(to: fullyRepainted("**keys**")))
+        #expect(empty.length == 0)
     }
 
-    /// Plain mode takes the early return before any span is drawn, and has to survive the same
-    /// out-of-range ranges on the way to it.
-    @Test func aPlainAppearanceClampsTheSameWay() {
-        let plain = MarkdownStyling.Appearance(
-            plainText: true, fontSize: AppConstants.Layout.defaultFontSize)
-        let text = storage("**keys**")
+    /// Scoped to the range it is given, so an edit on one line leaves the rest of the note alone.
+    @Test func normalizingOneRangeLeavesTheRestAlone() {
+        let text = storage("one\ntwo")
+        text.addAttribute(.kern, value: 4, range: NSRange(location: 0, length: 7))
 
-        MarkdownStyling.apply(plain, to: text, over: NSRange(location: 99, length: 40))
+        MarkdownStyling.normalize(appearance, in: text, over: NSRange(location: 0, length: 3))
 
-        let expected = storage("**keys**")
-        MarkdownStyling.apply(plain, to: expected)
-        #expect(text.isEqual(to: expected))
-    }
-
-    /// A repaint scoped to one line leaves the other lines exactly as they were, which is the
-    /// property the line-scoped optimisation rests on.
-    @Test func repaintingOneLineLeavesTheOthersAlone() {
-        let text = fullyRepainted("**one**\nplain\n_three_")
-        let before = NSAttributedString(attributedString: text)
-
-        // The middle line, which holds no markdown and so has nothing to redraw.
-        MarkdownStyling.apply(appearance, to: text, over: NSRange(location: 9, length: 5))
-
-        #expect(text.isEqual(to: before))
+        #expect(text.attribute(.kern, at: 0, effectiveRange: nil) == nil)
+        #expect(
+            text.attribute(.kern, at: 5, effectiveRange: nil) != nil,
+            "and the other line as it was")
     }
 }
