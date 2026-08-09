@@ -15,7 +15,7 @@ struct WindowModeTests {
     private var manager: WindowManager { fixture.manager }
 
     init() throws {
-        fixture = try WindowManagerFixture(name: "WindowModeTests")
+        fixture = try WindowManagerFixture()
     }
 
     @Test func toggleWindowCreatesPanel() throws {
@@ -63,33 +63,40 @@ struct WindowModeTests {
         #expect(manager.isPinned == false)
     }
 
-    @Test func windowShouldCloseKeepsThePinnedState() throws {
+    /// #123: pinning is state, not a preference. It lasts as long as the window is on screen,
+    /// and closing puts the panel back — otherwise one drag past the threshold left the app
+    /// detached forever, with no click-outside dismissal and no way back most users would find.
+    @Test(.bug(id: 123))
+    func hidingAPinnedWindowReattachesIt() throws {
         let window = try fixture.showWindow()
         manager.setPinned(true)
 
         _ = manager.windowShouldClose(window)
 
-        #expect(manager.isPinned, "Closing must not silently unpin the window")
         #expect(window.isVisible == false, "Window should be closed")
+        #expect(manager.isPanelMode, "Hiding reattaches the window")
+        #expect(window.isFloatingPanel, "and restores the panel's styling with it")
+        #expect(window.styleMask.contains(.miniaturizable) == false)
+        #expect(fixture.state.isPinned == false, "The pin toggle sees the same state")
     }
 
-    @Test func showRestoresThePersistedPinnedStateWithoutReAnchoring() throws {
+    @Test(.bug(id: 123))
+    func theNextShowIsAPanelAnchoredUnderTheStatusItemAgain() throws {
         let window = try fixture.showWindow()
         manager.setPinned(true)
-
         window.setFrameOrigin(NSPoint(x: 420, y: 320))
-        let parked = window.frame.origin  // AppKit may constrain the frame to the screen
         _ = manager.windowShouldClose(window)
 
-        manager.toggleWindow(sender: fixture.statusBarButton)
+        let button = fixture.statusBarButton
+        manager.toggleWindow(sender: button)
 
-        #expect(window.isVisible, "Toggling a hidden pinned window shows it again")
-        #expect(manager.isPinned, "Pinned state is restored on the next show")
-        #expect(window.isFloatingPanel == false, "Restored as a regular window, not a panel")
-        #expect(window.styleMask.contains(.miniaturizable))
+        #expect(window.isVisible, "Toggling a hidden window shows it again")
+        #expect(manager.isPanelMode, "as the panel, whatever it was when it went away")
+
+        let buttonRect = try #require(button.window?.convertToScreen(button.frame))
         #expect(
-            window.frame.origin == parked,
-            "A pinned window stays where the user parked it instead of re-anchoring")
+            abs(window.frame.origin.y - (buttonRect.minY - window.frame.height - 5)) <= 1,
+            "A reattached window is anchored under the status item, not left where it was parked")
     }
 
     @Test(.bug(id: 40))

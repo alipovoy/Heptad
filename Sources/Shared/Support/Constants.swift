@@ -16,12 +16,6 @@ enum AppConstants {
     static let globalHotKeyKeyCodeKey = "globalHotKeyKeyCode"
     static let globalHotKeyModifierFlagsKey = "globalHotKeyModifierFlags"
 
-    /// UserDefaults key backing the pinned window state (macOS only). True means the regular,
-    /// stays-put window the pin toggle and ⌘P produce; false means the menubar panel that
-    /// dismisses itself on a click outside. WindowManager is the only writer; the title-bar
-    /// toggle reads it through @AppStorage to render the current state.
-    static let windowPinnedKey = "windowPinned"
-
     /// UserDefaults key backing the editor's zoom level, which `⌘+` and `⌘-` step. One size for
     /// every note: see `EditorFontSize`.
     static let editorFontSizeKey = "editorFontSize"

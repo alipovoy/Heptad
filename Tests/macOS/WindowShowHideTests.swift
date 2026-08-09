@@ -23,7 +23,7 @@ struct WindowShowHideTests {
     private var manager: WindowManager { fixture.manager }
 
     init() throws {
-        fixture = try WindowManagerFixture(name: "WindowShowHideTests")
+        fixture = try WindowManagerFixture()
     }
 
     // MARK: - Pinned show/hide
@@ -43,7 +43,7 @@ struct WindowShowHideTests {
         manager.toggleWindow(sender: fixture.statusBarButton)
 
         #expect(window.isVisible == false, "A pinned window already in front hides on toggle")
-        #expect(manager.isPinned, "Hiding it must not unpin it")
+        #expect(manager.isPanelMode, "and comes back as the menubar panel — see #123")
     }
 
     // MARK: - Flushing pending saves
@@ -107,7 +107,7 @@ struct WindowShowHideTests {
         cover.makeKeyAndOrderFront(nil)
         try #require(window.isKeyWindow == false, "The pinned window must not be the key window")
 
-        try await fixture.expectingNotification(.windowDidBecomeVisible, count: 0) {
+        await fixture.expectingNotification(.windowDidBecomeVisible, count: 0) {
             manager.toggleWindow(sender: fixture.statusBarButton)
         }
 

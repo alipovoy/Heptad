@@ -47,8 +47,8 @@ extension Trait where Self == ConditionTrait {
     }
 }
 
-/// The AppKit fixture every window-manager suite is built on: a window manager wired to scratch
-/// defaults and private notification centres, and a button to anchor its panel under.
+/// The AppKit fixture every window-manager suite is built on: a window manager wired to private
+/// notification centres and its own window state, and a button to anchor its panel under.
 ///
 /// **The button is a stand-in, not a real status item.** `WindowManager` only ever asks its sender
 /// for a frame on a screen — see `anchorBelowStatusItem` — so an `NSStatusBarButton` parked in a
@@ -72,18 +72,18 @@ final class WindowManagerFixture {
     /// centred panel fits beside it — so an ordinary show involves no frame correction.
     let statusBarButton: NSStatusBarButton
 
-    private let scratchDefaults: ScratchDefaults
+    /// The state object the manager writes and the pin toggle observes. Reached through the
+    /// manager so a test can assert on what the *view* would see, not only on `isPinned`.
+    var state: WindowState { manager.state }
 
     /// Every window this fixture put on screen, closed together at teardown.
     private var standInWindows: [NSWindow] = []
 
-    init(name: String) throws {
-        scratchDefaults = try ScratchDefaults(name: name)
+    init() throws {
         notificationCenter = NotificationCenter()
         workspaceNotificationCenter = NotificationCenter()
         activation = SpyActivationCoordinator()
         manager = WindowManager(
-            defaults: scratchDefaults.defaults,
             notificationCenter: notificationCenter,
             workspaceNotificationCenter: workspaceNotificationCenter,
             activation: activation,
