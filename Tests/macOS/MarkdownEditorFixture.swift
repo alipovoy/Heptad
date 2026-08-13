@@ -30,9 +30,14 @@ final class MarkdownEditorFixture {
     }
 
     /// The appearance the coordinator would build for a note in this mode, at the default zoom.
+    ///
+    /// Carries note 0's bold tint, because the coordinator's does — the view under test is built
+    /// for `NoteItem(id: 0)` above. Leaving it out would let a bold run come up in the body-text
+    /// colour here and in the note's own colour in the app.
     func appearance(plainText: Bool) -> MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
-            plainText: plainText, fontSize: AppConstants.Layout.defaultFontSize)
+            plainText: plainText, fontSize: AppConstants.Layout.defaultFontSize,
+            boldTint: NotePalette.boldTint(forNoteIndex: 0))
     }
 
     func baseFont(plainText: Bool) -> NSFont {

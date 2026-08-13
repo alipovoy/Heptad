@@ -42,6 +42,17 @@ enum MarkdownStyling {
         /// reached a repaint.
         let fontSize: CGFloat
 
+        /// The colour bold runs are drawn in, and only in formatted mode — plain mode is one
+        /// font in one colour by definition. `nil` leaves bold in the body-text colour, which is
+        /// what a caller with no note in hand gets: `MarkdownWriting` reads traits, never draws.
+        let boldTint: BoldTint?
+
+        init(plainText: Bool, fontSize: CGFloat, boldTint: BoldTint? = nil) {
+            self.plainText = plainText
+            self.fontSize = fontSize
+            self.boldTint = boldTint
+        }
+
         var baseFont: PlatformFont { .editorBody(plainText: plainText, size: fontSize) }
 
         /// Whether this mode draws formatting rather than the characters that describe it.
@@ -123,17 +134,34 @@ enum MarkdownStyling {
 
         if let link = attributes[.link] {
             kept[.link] = link
-            kept[.foregroundColor] = PlatformColor.editorLink
             kept[.underlineStyle] = NSUnderlineStyle.single.rawValue
-        } else {
-            kept[.foregroundColor] = PlatformColor.adaptiveEditorText
         }
+
+        kept[.foregroundColor] = foregroundColor(for: kept, in: appearance)
 
         if attributes[.strikethroughStyle] != nil {
             kept[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
         }
 
         return kept
+    }
+
+    /// What a run carrying `attributes` is drawn in.
+    ///
+    /// A link wins over bold: its colour is the one that already carried meaning, and a bold link
+    /// that stopped looking like a link would trade one signal for another. Bold takes the note's
+    /// tint, which is the delimiter formatted mode no longer has.
+    static func foregroundColor(
+        for attributes: [NSAttributedString.Key: Any], in appearance: Appearance
+    ) -> PlatformColor {
+        guard appearance.isStyled else { return .adaptiveEditorText }
+        if attributes[.link] != nil { return .editorLink }
+
+        guard let tint = appearance.boldTint,
+            (attributes[.font] as? PlatformFont)?.isBold == true
+        else { return .adaptiveEditorText }
+
+        return tint.color
     }
 
     /// A range brought inside `length`.
