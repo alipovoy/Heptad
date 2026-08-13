@@ -41,10 +41,13 @@ class NoteEditorCoordinator: NSObject {
             name: .editorFontSizeDidChange, object: nil)
     }
 
-    /// How a note should be drawn right now: its own mode, at the app-wide zoom.
+    /// How a note should be drawn right now: its own mode, at the app-wide zoom, in its own
+    /// colour. The id is the palette index, so the tint is looked up here rather than threaded
+    /// down from the view alongside the note.
     func appearance(forNoteId id: Int) -> MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
-            plainText: modes[id] ?? false, fontSize: EditorFontSize.current(defaults))
+            plainText: modes[id] ?? false, fontSize: EditorFontSize.current(defaults),
+            boldTint: NotePalette.boldTint(forNoteIndex: id))
     }
 
     func setup(container: PlatformView, notes: [NoteItem], selectedIndex: Int) {

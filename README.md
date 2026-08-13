@@ -23,6 +23,8 @@ Return continues a list, numbering upward and keeping the indent; Return on an e
 
 Italic is `_`, not `*`. Every delimiter is disjoint from every other, which is what makes each command exactly its own inverse: `⌘I` inside `**bold**` has a delimiter of its own to add, so `**_both_**` is reachable and reversible. It also leaves `*` an ordinary character, so `2 * 3` and `SELECT *` mean what they say. An underscore inside a word belongs to the word — `AWS_SECRET_KEY` and `__init__` are never italicised, and `⌘I` declines rather than write a pair it could not read back.
 
+Bold is drawn in the note's own colour, derived from the colour the window is already wearing and adjusted for light and dark so all seven read at the same weight. It is the second signal that a run is bold, which a proportional font gives away only faintly in one word. Plain-text notes are untinted: the delimiters say it there.
+
 Constructs nest but never span lines, and there are no backslash escapes — a note that genuinely contains `**` will show it styled. That is the accepted cost of a parser small enough to hold in your head.
 
 Any note can be switched to plain text from the statistics bar: monospaced, with its Markdown left as literal text and the formatting shortcuts turned off — useful for credentials, keys and anything else where a proportional font gets in the way. Switching is a rendering choice and never edits the note, so it is reversible as often as you like. The mode is stored per note.

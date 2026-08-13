@@ -130,7 +130,13 @@ struct MarkdownTextViewTests {
         #expect(
             font.pointSize == fixture.baseFont(plainText: false).pointSize,
             "Typing after the undo is the note's own size, not the clipboard's")
-        #expect(textView.typingAttributes[.foregroundColor] as? NSColor == .adaptiveEditorText)
+        // The clipboard's red is gone. What is there instead is the note's bold tint, because the
+        // caret is still bold — a colour this app derives from the note, not one it was handed.
+        let caretColor = try #require(textView.typingAttributes[.foregroundColor] as? NSColor)
+        #expect(caretColor != .systemRed, "The clipboard's colour is not left behind")
+        #expect(
+            caretColor.usingColorSpace(.sRGB)
+                == fixture.appearance(plainText: false).boldTint?.color.usingColorSpace(.sRGB))
         #expect(textView.typingAttributes[.paragraphStyle] == nil, "No alignment is left behind")
     }
 

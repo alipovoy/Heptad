@@ -90,6 +90,10 @@ enum AttributedFormatting {
     ///
     /// Removing a font trait means rebuilding the font from the base one and putting back the
     /// *other* trait, because a symbolic trait cannot be subtracted from a font that has it.
+    ///
+    /// The colour is re-derived rather than carried over, so `⌘B` puts the note's tint on and
+    /// takes it off. Nothing else would: this writes attributes, not characters, so the storage
+    /// delegate that normalizes every other edit never sees it.
     private static func applied(
         _ emphasis: Emphasis, _ applying: Bool,
         to attributes: [NSAttributedString.Key: Any], appearance: MarkdownStyling.Appearance
@@ -106,6 +110,7 @@ enum AttributedFormatting {
             updated[.font] = rebuilt(font, bold: font.isBold, italic: applying, appearance)
         }
 
+        updated[.foregroundColor] = MarkdownStyling.foregroundColor(for: updated, in: appearance)
         return updated
     }
 
