@@ -25,6 +25,15 @@ class NoteEditorCoordinator: NSObject {
     /// managed objects for the coordinator's lifetime as a lookup table.
     private var modes: [Int: Bool] = [:]
 
+    /// Each note's palette index — its position in the array everything above this class
+    /// addresses notes by.
+    ///
+    /// Held rather than derived from the id. This is the one component that addresses a note by
+    /// `id`, and the two agree only while the stored ids are exactly `0..<noteCount`; where they
+    /// came apart, `NotePalette.boldTint` clamped rather than failed, so bold text came up in
+    /// another note's colour with nothing to say which.
+    private var paletteIndices: [Int: Int] = [:]
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard, notificationCenter: NotificationCenter = .default) {
@@ -42,12 +51,16 @@ class NoteEditorCoordinator: NSObject {
     }
 
     /// How a note should be drawn right now: its own mode, at the app-wide zoom, in its own
-    /// colour. The id is the palette index, so the tint is looked up here rather than threaded
-    /// down from the view alongside the note.
+    /// colour, all three looked up here rather than threaded down alongside the note.
+    ///
+    /// A note with no recorded palette index gets no tint rather than someone else's. It cannot
+    /// happen — `update` records one for every note before anything is configured — and `nil` is
+    /// deliberately not a value this can otherwise return: it is what the text views' initial
+    /// `styling` carries, and what makes their first `configure` do anything at all.
     func appearance(forNoteId id: Int) -> MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
             plainText: modes[id] ?? false, fontSize: EditorFontSize.current(defaults),
-            boldTint: NotePalette.boldTint(forNoteIndex: id))
+            boldTint: paletteIndices[id].map(NotePalette.boldTint(forNoteIndex:)))
     }
 
     func setup(container: PlatformView, notes: [NoteItem], selectedIndex: Int) {
@@ -61,7 +74,10 @@ class NoteEditorCoordinator: NSObject {
     /// the answer it used to give was to install no editor at all: a blank, untypable note
     /// beside a statistics bar describing a different one.
     func update(notes: [NoteItem], selectedIndex: Int) {
-        for note in notes { modes[note.id] = note.isPlainText }
+        for (index, note) in notes.enumerated() {
+            modes[note.id] = note.isPlainText
+            paletteIndices[note.id] = index
+        }
         let note = notes[selectedIndex]
 
         if currentNoteId == note.id {

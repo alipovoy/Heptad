@@ -90,6 +90,29 @@ struct NoteEditorCoordinatorTests {
         #expect(coordinator.stepsInOrder == ["make", "configure(showing: 1)", "load"])
     }
 
+    // MARK: - Appearance
+
+    /// Each note is drawn in its own colour, and that colour is its *position* — not its id.
+    ///
+    /// This class is the only one that addresses a note by `id`; everything above it, the palette
+    /// included, addresses one by position. The two agree only while the stored ids are exactly
+    /// `0..<noteCount`, and `NotePalette.boldTint` clamps rather than fails — so where they came
+    /// apart, bold text was drawn in another note's colour with nothing to say which.
+    ///
+    /// Sparse ids rather than `0, 1`, because with those every wrong answer is also the right one.
+    @Test func eachNoteIsTintedByItsPositionRatherThanItsId() {
+        let sparse = [NoteItem(id: 3), NoteItem(id: 9)]
+
+        coordinator.setup(container: container, notes: sparse, selectedIndex: 0)
+        coordinator.update(notes: sparse, selectedIndex: 1)
+
+        #expect(coordinator.configuredAppearances.count == 2)
+        #expect(coordinator.configuredAppearances.first?.boldTint == NotePalette.boldTint(forNoteIndex: 0))
+        #expect(
+            coordinator.configuredAppearances.last?.boldTint == NotePalette.boldTint(forNoteIndex: 1),
+            "Note 9 is the second note, so it takes the second tint — not the clamped seventh")
+    }
+
     // MARK: - Zoom
 
     /// A zoom step repaints every note that has a cached view, not only the one on screen.

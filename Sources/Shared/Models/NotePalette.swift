@@ -19,8 +19,11 @@ import SwiftUI
 enum NotePalette {
     static let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]
 
-    /// The colour bold text is drawn in on note `index`, in formatted mode. Clamped for the same
-    /// reason every other reader of `colors` clamps: the index comes from a stored selection.
+    /// The colour bold text is drawn in on note `index`, in formatted mode.
+    ///
+    /// Clamped rather than trusted. Its one production caller passes a position in the notes
+    /// array, so there is nothing out of range for it to catch there — but `colors` is fixed at
+    /// seven and an index is a plain `Int`, and a scratchpad should not trap over a colour.
     static func boldTint(forNoteIndex index: Int) -> BoldTint {
         BoldTint(noteIndex: NoteSelection.clamped(index, noteCount: colors.count))
     }
