@@ -248,6 +248,21 @@ struct RichTextRoundTripTests {
         #expect(roundTripIsStable(written), "and it is not written differently the second time")
     }
 
+    /// A trait with no spelling costs the line itself and nothing else.
+    ///
+    /// `_c_` between two word characters is an identifier to the parser, so the spelling that
+    /// writes it comes back as different characters and is rejected — and the candidate that ends
+    /// the ladder holds no delimiters at all, which would take the link with it. Between them is
+    /// the rung that drops just the pair it cannot write.
+    @Test func aTraitWithNoSpellingDoesNotCostTheLineItsOtherFormatting() {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "ab cd")
+        text.addAttribute(.link, value: "https://e.co", range: NSRange(location: 0, length: 2))
+        MarkdownStyling.restyle(text, over: NSRange(location: 3, length: 1)) { $0.italicized() }
+
+        #expect(MarkdownWriting.markdown(from: text) == "[ab](https://e.co) cd")
+    }
+
     private func roundTripIsStable(_ markdown: String) -> Bool {
         roundTrip(markdown) == markdown
     }

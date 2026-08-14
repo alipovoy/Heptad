@@ -42,16 +42,49 @@ enum MarkdownWriting {
         return lines(of: whole, in: attributed).reduce(into: "") { markdown, line in
             let original = attributed.attributedSubstring(from: line)
 
-            for escaping in [false, true] {
-                let written = emit(line, of: attributed, escaping: escaping)
+            for spelling in Spelling.ladder {
+                let written = emit(line, of: attributed, as: spelling)
                 guard reads(written, as: original) else { continue }
 
                 markdown += written
                 return
             }
 
-            markdown += content(line, of: attributed, escaping: true)
+            markdown += content(line, of: attributed, as: .plain)
         }
+    }
+
+    /// How hard one candidate line tries, and the order they are tried in.
+    ///
+    /// Two independent retreats, because they give up different things. Escaping costs the source
+    /// its cleanliness; caution costs the note a trait. Neither is worth spending until the
+    /// spelling that keeps both has been written and rejected.
+    private struct Spelling {
+        /// Every character the parser could act on gets a backslash in front of it.
+        let escaping: Bool
+
+        /// A `_` pair whose neighbours in the *rendered* text are word characters is not written
+        /// at all, and the trait is dropped instead.
+        ///
+        /// A conservative test, and knowingly so: it is blind to the delimiters the writer is
+        /// about to put between those neighbours, so it refuses pairs that would have read back
+        /// perfectly — `the **_hard_**ware` among them. That is why it cannot be a precondition.
+        /// As a late rung it is the right question, because by then the permissive spelling has
+        /// already been tried and rejected, and the choice left is between dropping this one
+        /// trait and dropping every trait on the line.
+        let cautious: Bool
+
+        /// Most faithful first. `markdown(from:)` writes the first that reads back, and its own
+        /// unconditional fallback is what happens when none of them does.
+        static let ladder = [
+            Self(escaping: false, cautious: false),
+            Self(escaping: true, cautious: false),
+            Self(escaping: false, cautious: true),
+            Self(escaping: true, cautious: true)
+        ]
+
+        /// The characters alone, escaped. No delimiters are written under this one.
+        static let plain = Self(escaping: true, cautious: true)
     }
 
     // MARK: - Checking
@@ -99,18 +132,18 @@ enum MarkdownWriting {
     /// Emphasis over a link is written *around* it — `**[docs](url)**` — which is the spelling
     /// the parser already reads. Inside the brackets there is nowhere to put it.
     private static func emit(
-        _ range: NSRange, of text: NSAttributedString, escaping: Bool
+        _ range: NSRange, of text: NSAttributedString, as spelling: Spelling
     ) -> String {
         guard range.length > 0 else { return "" }
 
         var markdown = ""
         text.enumerateAttribute(.link, in: range, options: []) { value, subrange, _ in
-            let label = content(subrange, of: text, escaping: escaping)
+            let label = content(subrange, of: text, as: spelling)
 
             // A link that got dragged across a line break is not one the parser would read back,
             // so it is written as the text it holds.
             guard let destination = destination(value), !label.contains(where: \.isNewline) else {
-                markdown += wrap(subrange, of: text, in: Emphasis.allCases, escaping: escaping)
+                markdown += wrap(subrange, of: text, in: Emphasis.allCases, as: spelling)
                 return
             }
 
@@ -162,20 +195,21 @@ enum MarkdownWriting {
     /// The order is `Emphasis`'s own case order: bold covering half of an italic run comes out as
     /// `**a _b_** _c_`, never as the interleaved `**a _b**c_` that reads as neither.
     private static func wrap(
-        _ range: NSRange, of text: NSAttributedString, in traits: [Emphasis], escaping: Bool
+        _ range: NSRange, of text: NSAttributedString, in traits: [Emphasis],
+        as spelling: Spelling
     ) -> String {
-        guard let trait = traits.first else { return content(range, of: text, escaping: escaping) }
+        guard let trait = traits.first else { return content(range, of: text, as: spelling) }
         let rest = Array(traits.dropFirst())
 
         var markdown = ""
         for section in sections(of: range, in: text, carrying: trait) {
             guard section.isOn else {
-                markdown += wrap(section.range, of: text, in: rest, escaping: escaping)
+                markdown += wrap(section.range, of: text, in: rest, as: spelling)
                 continue
             }
 
             for line in lines(of: section.range, in: text) {
-                markdown += delimited(line, of: text, with: trait, then: rest, escaping: escaping)
+                markdown += delimited(line, of: text, with: trait, then: rest, as: spelling)
             }
         }
 
@@ -185,24 +219,51 @@ enum MarkdownWriting {
     /// One line's worth of a run, with the pair written around its non-whitespace core.
     private static func delimited(
         _ line: NSRange, of text: NSAttributedString, with trait: Emphasis, then rest: [Emphasis],
-        escaping: Bool
+        as spelling: Spelling
     ) -> String {
         let source = text.string as NSString
         let core = trimmed(line, in: source)
 
         // Nothing to put a pair around: whitespace has to stay outside one, so a run that is all
-        // whitespace is written as the characters it is.
-        guard core.length > 0 else { return content(line, of: text, escaping: escaping) }
+        // whitespace is written as the characters it is. On a cautious spelling, the same is done
+        // with a `_` pair the rendered text says would not read back — losing the one trait rather
+        // than the whole line.
+        guard core.length > 0, !spelling.cautious || mayClose(trait, around: core, in: source) else {
+            return content(line, of: text, as: spelling)
+        }
 
         let before = NSRange(location: line.location, length: core.location - line.location)
         let after = NSRange(
             location: NSMaxRange(core), length: NSMaxRange(line) - NSMaxRange(core))
 
-        return content(before, of: text, escaping: escaping)
+        return content(before, of: text, as: spelling)
             + trait.delimiter
-            + wrap(core, of: text, in: rest, escaping: escaping)
+            + wrap(core, of: text, in: rest, as: spelling)
             + trait.delimiter
-            + content(after, of: text, escaping: escaping)
+            + content(after, of: text, as: spelling)
+    }
+
+    /// Whether a pair written around `core` could be one `MarkdownSyntax` reads as this trait,
+    /// judged on the neighbours it has in the rendered text. Only `_` can fail, and only against
+    /// a word character — see `MarkdownSyntax.isWordCharacter`.
+    ///
+    /// A lower bound, not an answer: the delimiters this writer is about to put between `core`
+    /// and those neighbours are not here to be seen, so a pair that would have read back can
+    /// still be refused. `Spelling.cautious` is where that is the right trade and says why.
+    private static func mayClose(
+        _ trait: Emphasis, around core: NSRange, in source: NSString
+    ) -> Bool {
+        guard MarkdownSyntax.mindsWordBoundaries(trait.delimiter) else { return true }
+
+        let before = core.location - 1
+        if before >= 0, MarkdownSyntax.isWordCharacter(source.character(at: before)) { return false }
+
+        let after = NSMaxRange(core)
+        if after < source.length, MarkdownSyntax.isWordCharacter(source.character(at: after)) {
+            return false
+        }
+
+        return true
     }
 
     // MARK: - Slicing
@@ -265,11 +326,11 @@ enum MarkdownWriting {
     /// characters that happen to be part of a construct *this* time would leave the result
     /// depending on what the parser found, which is the thing being defended against.
     private static func content(
-        _ range: NSRange, of text: NSAttributedString, escaping: Bool
+        _ range: NSRange, of text: NSAttributedString, as spelling: Spelling
     ) -> String {
         guard range.length > 0 else { return "" }
         let characters = (text.string as NSString).substring(with: range)
-        guard escaping else { return characters }
+        guard spelling.escaping else { return characters }
 
         return characters.reduce(into: "") { escaped, character in
             if MarkdownSyntax.isEscapable(character) { escaped.append(MarkdownSyntax.escape) }
