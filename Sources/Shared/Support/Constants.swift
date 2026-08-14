@@ -20,6 +20,10 @@ enum AppConstants {
     /// every note: see `EditorFontSize`.
     static let editorFontSizeKey = "editorFontSize"
 
+    /// The most markup ⌘V will decode before falling back to pasting the clipboard's characters.
+    /// See `NSPasteboard.markdownForPaste`, which is the only reader and explains the number.
+    static let richPasteByteLimit = 1 << 20
+
     enum Layout {
         /// Padding and spacing within the UI
         static let defaultSpacing: CGFloat = 12
