@@ -13,9 +13,14 @@ final class SpyActivationCoordinator: ActivationCoordinating {
     private(set) var activatedCurrentAppCount = 0
     private(set) var deactivatedCurrentAppCount = 0
 
+    /// Run as the app is activated, so a test can see what the world looked like at that moment.
+    /// The ordering against `makeKeyAndOrderFront` is the whole subject of one of them.
+    var whileActivating: (() -> Void)?
+
     func activateCurrentApp() {
         activatedCurrentAppCount += 1
         isCurrentAppActive = true
+        whileActivating?()
     }
 
     func activate(_ app: NSRunningApplication) {

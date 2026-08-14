@@ -229,11 +229,9 @@ class WindowManager: NSObject, NSWindowDelegate {
         togglePin()
     }
 
-    /// Applies the current mode to the live window: the anchor and click-outside dismissal are all
-    /// that differ. Neither branch touches the level or the mask — see the class doc.
+    /// Applies the current mode to the live window: the anchor and click-outside dismissal are
+    /// all that differ, and neither branch touches the level or the mask — see the class doc.
     private func applyPinnedState(to window: NSPanel) {
-        // Detached never dismisses itself, and keeps the panel's level, so it stays on top until
-        // it is closed. What makes a click on it activate the app is not here — see `showWindow`.
         if isPanelMode {
             applyPanelStyling(to: window)
         } else {
@@ -241,10 +239,10 @@ class WindowManager: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Panel styling: re-anchored on every show, click-outside dismisses.
+    /// Panel styling: re-anchored on every show, click-outside dismisses. Unpinning in place can
+    /// leave the window far from the status item, so the drag-away gesture is measured from where
+    /// the window actually is rather than from a stale anchor.
     private func applyPanelStyling(to window: NSPanel) {
-        // Unpinning in place can leave the window far from the status item, so the drag-away
-        // gesture is measured from where the window actually is rather than a stale anchor.
         anchorOrigin = window.frame.origin
 
         if window.isVisible {
@@ -350,11 +348,14 @@ class WindowManager: NSObject, NSWindowDelegate {
             anchorBelowStatusItem(sender: sender, window: window)
         }
 
+        // Activation first: key status is granted by the window server and only to the active
+        // application, so asking for it from the background asks for what cannot be given — the
+        // panel came up without key, and without a caret, until something else activated the app.
+        takeActivation()
         window.makeKeyAndOrderFront(nil)
         isPositioningPanel = false
 
         applyPinnedState(to: window)
-        takeActivation()
         notificationCenter.post(name: .windowDidBecomeVisible, object: nil)
     }
 
@@ -385,13 +386,12 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// What the monitor above does with one click. Internal so a test can hand it an event
     /// rather than produce a real one in another application.
     ///
-    /// A global monitor is documented to see only what is dispatched to *other* applications, and
-    /// mostly does — but not the click that activates an inactive app, which arrives here too
-    /// with `event.window` resolved in this process. Heptad is inactive on every show that
-    /// follows a dismissal — `hide` hands activation back, and taking it again does not always
-    /// land — so the first click after one was closing the panel: any click, the text included,
-    /// and the note went away under the caret. Hence the guard on the window rather than on the
-    /// status item alone: an event carrying any window of ours is a click *inside* the app.
+    /// A global monitor is documented to see only what is dispatched to *other* applications,
+    /// and mostly does — but not the click that activates an inactive app, which arrives here
+    /// with `event.window` resolved in this process. Whenever Heptad was showing without having
+    /// won activation, the first click closed the panel: any click, the text included, and the
+    /// note went away under the caret. Hence the guard on the window and not on the status item
+    /// alone — an event carrying any window of ours is a click *inside* the app.
     func handleClickOutside(_ event: NSEvent) {
         guard isPanelMode, let window, window.isVisible, event.window == nil else { return }
 

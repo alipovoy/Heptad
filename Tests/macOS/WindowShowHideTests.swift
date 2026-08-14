@@ -54,6 +54,27 @@ struct WindowShowHideTests {
         #expect(manager.isPanelMode, "and comes back as the menubar panel — see #123")
     }
 
+    // MARK: - Activation
+
+    /// Heptad is made active *before* the window is ordered on, not after.
+    ///
+    /// Key status is granted by the window server and only to the active application, so asking
+    /// for it from the background asks for something that cannot be given: the panel came up
+    /// without key, and without a caret, until something else activated the app. Measured on the
+    /// real app after a dismissal, it was still inactive a second later.
+    @Test func theAppIsActivatedBeforeTheWindowIsOrderedOn() throws {
+        fixture.activation.whileActivating = { [manager] in
+            #expect(
+                manager.window?.isVisible != true,
+                "Activation comes first — the ordering is what needs the app already active")
+        }
+
+        let window = try fixture.showWindow()
+
+        #expect(window.isVisible, "and the window is on screen by the end of it")
+        #expect(fixture.activation.activatedCurrentAppCount == 1)
+    }
+
     // MARK: - The click-outside monitor
 
     /// A click carrying one of this app's own windows is a click *inside* it.

@@ -154,11 +154,10 @@ class EditorShortcutManager {
         case "a" where !hasShift:
             textView.selectAll(nil)
             return nil
-        // ⌘⌫. Takes the key from NSTextView's "delete to beginning of line", which is a poor
-        // trade for a note whose whole point is being disposable — and it is undoable.
-        case "\u{7F}" where !hasShift:
-            textView.clearNote()
-            return nil
+        // ⌘⌫ is deliberately absent. It used to clear the whole note, wherever the caret was,
+        // which cost `NSTextView` its "delete to beginning of line" — the thing the key means
+        // in every other editor, and what a hand reaching for it expects. Emptying a note is
+        // ⌘A ⌫, two keystrokes and one undo, so nothing needed a key of its own.
         default:
             return event  // pass through
         }
