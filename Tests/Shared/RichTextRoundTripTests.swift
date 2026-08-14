@@ -47,6 +47,7 @@ struct RichTextRoundTripTests {
             "chmod +x *.sh here",
             "trailing spaces   \nand a tab\tinside",
             "\\*\\*not bold\\*\\*",
+            "- [ ] \\*\\*not bold\\*\\*",
             "\\_not italic\\_ but **this is**",
             "C:\\Users\\admin",
             "a \\ b"
@@ -147,6 +148,25 @@ struct RichTextRoundTripTests {
     @Test func aRedundantEscapeIsWrittenInItsShorterSpelling() {
         #expect(rendered("escaped \\\\ backslash").string == "escaped \\ backslash")
         #expect(roundTrip("escaped \\\\ backslash") == "escaped \\ backslash")
+    }
+
+    /// The escaping stops short of the line's own list marker.
+    ///
+    /// `- [ ] ` is content — the user typed it, or pressed Return and had it typed for them — so
+    /// a backslash through it is not a defence against anything. It demoted the checkbox to a
+    /// bare bullet in the stored file, and the item stopped being a task on the first save that
+    /// escaped its line.
+    @Test(arguments: ["- [ ] ", "- [x] ", "- ", "1. ", "  - "])
+    func escapingALineLeavesItsListMarkerAlone(marker: String) {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: marker + "**not bold**")
+
+        let written = MarkdownWriting.markdown(from: text)
+
+        #expect(written == marker + "\\*\\*not bold\\*\\*")
+        #expect(
+            ListContinuation.markerLength(on: written) == marker.utf16.count,
+            "and the line still reads as the list item it was")
     }
 
     /// Escaping is decided per line, so one awkward line does not put backslashes through the

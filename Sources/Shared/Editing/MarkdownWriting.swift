@@ -343,16 +343,41 @@ enum MarkdownWriting {
     /// All of them or none of them, decided per line by the check above. Escaping only the
     /// characters that happen to be part of a construct *this* time would leave the result
     /// depending on what the parser found, which is the thing being defended against.
+    ///
+    /// With one exception, and it is not one: the list marker at the head of a line is not
+    /// syntax the escaping is defending against. `- [ ] ` is content the user typed or had typed
+    /// for them, and a backslash through it demotes the checkbox to a bare bullet in the stored
+    /// file — a line that read as a task before the save does not after it, and `⌘⇧U` in plain
+    /// mode then has nothing to toggle.
     private static func content(
         _ range: NSRange, of text: NSAttributedString, as spelling: Spelling
     ) -> String {
         guard range.length > 0 else { return "" }
-        let characters = (text.string as NSString).substring(with: range)
-        guard spelling.escaping else { return characters }
+        let source = text.string as NSString
+        guard spelling.escaping else { return source.substring(with: range) }
 
-        return characters.reduce(into: "") { escaped, character in
-            if MarkdownSyntax.isEscapable(character) { escaped.append(MarkdownSyntax.escape) }
-            escaped.append(character)
+        let marker = markerPrefix(of: range, in: source)
+        let rest = NSRange(
+            location: range.location + marker, length: range.length - marker)
+
+        return source.substring(with: NSRange(location: range.location, length: marker))
+            + source.substring(with: rest).reduce(into: "") { escaped, character in
+                if MarkdownSyntax.isEscapable(character) { escaped.append(MarkdownSyntax.escape) }
+                escaped.append(character)
+            }
+    }
+
+    /// How much of `range` is the leading list marker of the line it starts on, in UTF-16 units.
+    ///
+    /// Asked of the line rather than of `range`, because `range` is whatever slice of it the run
+    /// boundaries produced — the marker is only ever at the head of the line, and only the part
+    /// of it this slice holds is left alone.
+    private static func markerPrefix(of range: NSRange, in source: NSString) -> Int {
+        let line = source.lineRange(for: NSRange(location: range.location, length: 0))
+        guard let length = ListContinuation.markerLength(on: source.substring(with: line)) else {
+            return 0
         }
+
+        return max(0, min(line.location + length, NSMaxRange(range)) - range.location)
     }
 }
