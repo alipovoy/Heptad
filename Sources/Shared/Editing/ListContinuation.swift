@@ -25,11 +25,17 @@ enum ListContinuation {
         let lineRange = text.lineRange(for: selectedRange)
         guard let marker = marker(on: text.substring(with: lineRange)) else { return nil }
 
-        // Return on a marker with nothing after it ends the list rather than growing it.
+        // Only a caret past the marker is *in* the item. At or before it — opening a blank line
+        // above an item, the common case — Return is an ordinary newline, the way it is in every
+        // other editor; continuing there wrote a second marker in front of the first.
+        guard selectedRange.location >= lineRange.location + marker.length else { return nil }
+
+        // Return on a marker with nothing after it ends the list rather than growing it. The
+        // whole content goes, not just the marker: `- [ ]   ` would otherwise leave its trailing
+        // spaces behind on a line the user just emptied.
         guard !marker.contentIsEmpty else {
-            return TextEdit(
-                range: NSRange(location: lineRange.location, length: marker.length),
-                replacement: "")
+            let content = MarkdownSlicing.withoutTerminator(lineRange, in: text)
+            return TextEdit(range: content, replacement: "")
         }
 
         return TextEdit(range: selectedRange, replacement: "\n" + marker.next)

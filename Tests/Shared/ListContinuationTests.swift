@@ -92,6 +92,15 @@ struct ListContinuationTests {
         #expect(edit.range == NSRange(location: 0, length: (line as NSString).length))
     }
 
+    /// And it takes the whole content, not the marker alone: the item is empty of *text*, which
+    /// is not the same as empty. `- [ ]   ` left its two trailing spaces on the line.
+    @Test func endingAListClearsTheWhitespaceAfterTheMarkerToo() throws {
+        let edit = try #require(returnEdit(atEndOf: "- [ ]   "))
+
+        #expect(edit.replacement.isEmpty)
+        #expect(edit.range == NSRange(location: 0, length: 8))
+    }
+
     // MARK: - Leaving Return alone
 
     @Test(
@@ -104,6 +113,37 @@ struct ListContinuationTests {
         ])
     func returnIsUntouchedOffAList(line: String) {
         #expect(returnEdit(atEndOf: line) == nil)
+    }
+
+    /// A caret at or inside the marker is not in the item yet, so Return is an ordinary newline.
+    ///
+    /// Continuing there wrote a second marker in front of the first: `- abc` with the caret at 0
+    /// — pressing Return to open a blank line above an item, which is the common way to reach
+    /// this — became `\n- - abc`, and a caret partway through the marker simply mangled the line.
+    @Test(
+        arguments: [
+            ("- abc", 0), ("- abc", 1),
+            ("- [ ] abc", 0), ("- [ ] abc", 3),
+            ("  1. abc", 0), ("  1. abc", 4),
+            // The empty item is the same rule: at column 0 there is no item to end.
+            ("- ", 0)
+        ])
+    func returnAtOrInsideTheMarkerIsUntouched(line: String, caret: Int) {
+        #expect(
+            ListContinuation.returnEdit(
+                in: line as NSString, selectedRange: NSRange(location: caret, length: 0)) == nil)
+    }
+
+    /// Measured from the start of the caret's own line, not the start of the text.
+    @Test func theMarkerIsMeasuredOnTheCaretsOwnLine() {
+        let text = "- first\n- second" as NSString
+
+        #expect(
+            ListContinuation.returnEdit(in: text, selectedRange: NSRange(location: 8, length: 0))
+                == nil, "column 0 of the second item")
+        #expect(
+            ListContinuation.returnEdit(in: text, selectedRange: NSRange(location: 10, length: 0))
+                != nil, "and past its marker the list continues")
     }
 
     /// Return over a selection replaces it; continuing the list there would drop the
