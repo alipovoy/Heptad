@@ -88,12 +88,29 @@ class GlobalHotKeyManager {
 
     /// Persists a new binding, re-registering it immediately when the hotkey is already live.
     /// There is no settings UI yet; this is the seam one would drive.
+    ///
+    /// A binding that will not register is rolled back, and the one that was working is claimed
+    /// again. Without that, one attempt at a combination another app already owns left the app
+    /// with no hotkey at all and nothing to change it with: `register()` gives up the working
+    /// claim before it tries, and the failed binding was already in `UserDefaults` — so it was
+    /// read back at every launch after, and failed again.
     @discardableResult
     func setBinding(keyCode: UInt32, modifierFlags: NSEvent.ModifierFlags) -> Bool {
+        let previous = (keyCode: self.keyCode, modifierFlags: self.modifierFlags)
+        store(keyCode: keyCode, modifierFlags: modifierFlags)
+
+        guard isRegistered else { return true }
+        guard !register() else { return true }
+
+        store(keyCode: previous.keyCode, modifierFlags: previous.modifierFlags)
+        register()
+        return false
+    }
+
+    private func store(keyCode: UInt32, modifierFlags: NSEvent.ModifierFlags) {
         let flags = modifierFlags.intersection(.deviceIndependentFlagsMask)
         defaults.set(Int(keyCode), forKey: AppConstants.globalHotKeyKeyCodeKey)
         defaults.set(Int(flags.rawValue), forKey: AppConstants.globalHotKeyModifierFlagsKey)
-        return isRegistered ? register() : true
     }
 
     /// Carbon's modifier constants are a bit set of their own, unrelated to `NSEvent.ModifierFlags`.
