@@ -104,7 +104,11 @@ enum ListContinuation {
 
         let digits = rest.prefix(while: \.isWholeNumber)
         if !digits.isEmpty, rest.dropFirst(digits.count).hasPrefix(". "), let number = Int(digits) {
-            return make(digits + ". ", next: "\(number + 1). ")
+            // A number with nothing after it continues as itself. `Int.max + 1` traps, and a
+            // trap here is the app closing on a keystroke — over a line the user is entitled to
+            // type, since `9223372036854775807. ` is a list item like any other.
+            let (incremented, overflowed) = number.addingReportingOverflow(1)
+            return make(digits + ". ", next: "\(overflowed ? number : incremented). ")
         }
 
         return nil

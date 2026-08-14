@@ -44,6 +44,21 @@ struct ListContinuationTests {
         #expect(edit.range == NSRange(location: (line as NSString).length, length: 0))
     }
 
+    /// The largest number a marker can hold continues as itself rather than trapping. Return on
+    /// `9223372036854775807. ` closed the app: an overflow on a keystroke, over a line nothing
+    /// stops anyone typing.
+    @Test func aMarkerAtTheLargestNumberContinuesWithoutOverflowing() throws {
+        let edit = try #require(returnEdit(atEndOf: "\(Int.max). item"))
+
+        #expect(edit.replacement == "\n\(Int.max). ")
+    }
+
+    /// One digit further and it is not a number this app can count with, so the line is not a
+    /// list at all and Return is left alone.
+    @Test func aMarkerTooLargeToCountWithIsNotAList() {
+        #expect(returnEdit(atEndOf: "\(Int.max)0. item") == nil)
+    }
+
     /// Return mid-item still continues the list — the item splits in two, both marked.
     @Test func returnContinuesFromInsideTheItem() throws {
         let text = "- item" as NSString
