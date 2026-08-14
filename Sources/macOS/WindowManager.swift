@@ -79,9 +79,6 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// hand focus straight back to it. See `yieldActivation()` for why that is not automatic.
     private var previouslyActiveApp: NSRunningApplication?
 
-    /// The status item, weakly, so a click on it is not read as a click outside the panel.
-    weak var statusBarButton: NSStatusBarButton?
-
     /// What AppKit persists the panel's frame under; "" persists nothing. Injected so the tests
     /// can turn it off — the autosave writes to standard defaults, see `WindowManagerFixture`.
     private let frameAutosaveName: NSWindow.FrameAutosaveName
@@ -116,8 +113,6 @@ class WindowManager: NSObject, NSWindowDelegate {
     // MARK: - API
 
     func toggleWindow(sender: NSStatusBarButton) {
-        self.statusBarButton = sender
-
         // A pinned window keeps its place, so the menubar icon (and the global hotkey, which
         // lands here too) acts as show/hide for it: bring it forward when another app covers
         // it, hide it only when it is already the window in front.
@@ -378,22 +373,28 @@ class WindowManager: NSObject, NSWindowDelegate {
     // MARK: - Global Click Monitor (click-outside to dismiss in panel mode)
 
     private func installGlobalClickMonitor() {
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]
         globalClickMonitor?.stop()
-        globalClickMonitor = EventMonitor(local: false, mask: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            guard let self = self,
-                self.isPanelMode,
-                let window = self.window,
-                window.isVisible
-            else { return event }
-
-            // Don't dismiss if the click is on the status bar button
-            if let buttonWindow = self.statusBarButton?.window, buttonWindow == event.window {
-                return event
-            }
-
-            self.hide(window)
+        globalClickMonitor = EventMonitor(local: false, mask: mask) { [weak self] event in
+            self?.handleClickOutside(event)
             return event
         }
         globalClickMonitor?.start()
+    }
+
+    /// What the monitor above does with one click. Internal so a test can hand it an event
+    /// rather than produce a real one in another application.
+    ///
+    /// A global monitor is documented to see only what is dispatched to *other* applications, and
+    /// mostly does — but not the click that activates an inactive app, which arrives here too
+    /// with `event.window` resolved in this process. Heptad is inactive on every show that
+    /// follows a dismissal — `hide` hands activation back, and taking it again does not always
+    /// land — so the first click after one was closing the panel: any click, the text included,
+    /// and the note went away under the caret. Hence the guard on the window rather than on the
+    /// status item alone: an event carrying any window of ours is a click *inside* the app.
+    func handleClickOutside(_ event: NSEvent) {
+        guard isPanelMode, let window, window.isVisible, event.window == nil else { return }
+
+        hide(window)
     }
 }
