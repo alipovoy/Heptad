@@ -25,7 +25,7 @@ struct ContentView: View {
     /// Everything above `NoteEditorCoordinator` addresses a note by its position in this array,
     /// so what it has to hold is ids `0..<noteCount` in order — which counting rows is only a
     /// proxy for. A store holding an eighth id has seven perfectly good notes in it, and the
-    /// count made that a permanent "Initializing notes…" with all seven intact on disk and
+    /// count made that a permanent "could not be loaded" with all seven intact on disk and
     /// unreachable. Extras are ignored rather than deleted: they are not this view's to remove.
     private var notes: [NoteItem] { stored.filter { $0.id < AppConstants.noteCount } }
 
@@ -64,17 +64,30 @@ struct ContentView: View {
                     )
                     .background(backgroundFill)
                 }
-                #if os(macOS)
-                    .frame(minWidth: 320, minHeight: 200)
-                    .ignoresSafeArea(.all, edges: .top)
-                #else
+                #if !os(macOS)
                     .background(backgroundFill)
                 #endif
             } else {
-                ProgressView("Initializing notes...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Not a state anything is working its way out of. `sharedModelContainer` seeds
+                // before it hands the container over, and both mount sites take it from there, so
+                // the first pass never runs against an unseeded store — and nothing afterwards
+                // adds or removes a note. Taken once, this branch is taken forever, and the
+                // spinner that used to be here promised progress that was not happening.
+                ContentUnavailableView(
+                    "Notes could not be loaded",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(
+                        "Expected \(AppConstants.noteCount) notes, found \(notes.count). "
+                            + "Quit and remove the note store to start over."))
             }
         }
+        #if os(macOS)
+            // On the `Group`, so the unavailable branch is sized and inset like the editor is:
+            // the panel draws no title bar, and without these the message sat under one that is
+            // not there, in a window the user could shrink to nothing.
+            .frame(minWidth: 320, minHeight: 200)
+            .ignoresSafeArea(.all, edges: .top)
+        #endif
         .onAppear { ticker.start() }
         .onDisappear { ticker.stop() }
         // iOS backgrounding. Inert on macOS: ContentView is mounted in a bare NSHostingView with
@@ -187,9 +200,9 @@ struct ContentView: View {
         #endif
 }
 
-/// The branch that shows until the seven notes exist — an empty store stands in for the
-/// moment before `HeptadApp` has seeded one.
-#Preview("Initializing") {
+/// The branch that shows when the store does not hold the seven notes — an empty store stands in
+/// for a seed that did not happen. Not a loading state: nothing later fills it in.
+#Preview("Notes missing") {
     ContentView()
         .modelContainer(PreviewFixtures.container(seeded: false))
         .frame(width: 420, height: 320)

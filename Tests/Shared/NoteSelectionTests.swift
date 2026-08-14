@@ -28,8 +28,8 @@ struct NoteSelectionTests {
     }
 
     /// The count is the array in hand, not `AppConstants.noteCount`: a store that has not
-    /// finished seeding is the state `ContentView` renders its "Initializing" branch for, and
-    /// the clamp must not answer with an index that array cannot serve.
+    /// finished seeding is the state `ContentView` renders its "could not be loaded" branch for,
+    /// and the clamp must not answer with an index that array cannot serve.
     @Test(arguments: [-1, 0, 3])
     func anEmptyNotesArrayCannotBeIndexed(stored: Int) {
         #expect(NoteSelection.clamped(stored, noteCount: 0) == 0)
