@@ -380,7 +380,10 @@ enum MarkdownSyntax {
         return CharacterSet.whitespacesAndNewlines.contains(scalar)
     }
 
-    private static func isNewline(_ character: unichar) -> Bool {
+    /// Not private, and for the same reason as `isWhitespace`: the writer has to know where a
+    /// line ends to keep a construct off the terminator, and two spellings of "newline" could
+    /// disagree.
+    static func isNewline(_ character: unichar) -> Bool {
         guard let scalar = Unicode.Scalar(character) else { return false }
         return CharacterSet.newlines.contains(scalar)
     }

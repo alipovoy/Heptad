@@ -249,6 +249,20 @@ struct RichTextRoundTripTests {
         #expect(roundTripIsStable(written), "and it is not written differently the second time")
     }
 
+    /// A link that reaches the end of its line still gets written.
+    ///
+    /// The attribute carries the terminator — the shape a link arrives in when it is dragged over
+    /// or pasted with the line break — and the writer used to see a newline in the label and give
+    /// up, which meant a link survived only on the note's *last* line, where there is no
+    /// terminator to carry.
+    @Test func aLinkThatRunsToTheEndOfALineIsStillWritten() {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "docs\nnext")
+        text.addAttribute(.link, value: "https://e.co", range: NSRange(location: 0, length: 5))
+
+        #expect(MarkdownWriting.markdown(from: text) == "[docs](https://e.co)\nnext")
+    }
+
     /// A trait with no spelling costs the line itself and nothing else.
     ///
     /// `_c_` between two word characters is an identifier to the parser, so the spelling that

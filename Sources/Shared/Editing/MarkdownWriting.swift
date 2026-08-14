@@ -135,28 +135,46 @@ enum MarkdownWriting {
         _ range: NSRange, of text: NSAttributedString, as spelling: Spelling
     ) -> String {
         guard range.length > 0 else { return "" }
+        let source = text.string as NSString
 
         var markdown = ""
         text.enumerateAttribute(.link, in: range, options: []) { value, subrange, _ in
-            let label = content(subrange, of: text, as: spelling)
+            // The terminator is not part of the label. `markdown(from:)` has already split by
+            // line, so a link carrying one is a link that reaches the end of its line, not one
+            // spanning two — and writing the `\n` inside the brackets is what used to drop it
+            // everywhere except the note's last line, where there is no terminator to carry.
+            let core = withoutTerminator(subrange, in: source)
 
-            // A link that got dragged across a line break is not one the parser would read back,
-            // so it is written as the text it holds.
-            guard let destination = destination(value), !label.contains(where: \.isNewline) else {
+            guard let destination = destination(value), core.length > 0 else {
                 markdown += wrap(subrange, of: text, in: Emphasis.allCases, as: spelling)
                 return
             }
 
+            let terminator = NSRange(
+                location: NSMaxRange(core), length: NSMaxRange(subrange) - NSMaxRange(core))
+
             // The destination is written as it is: a URL holding a bracket of its own is a link
             // this app cannot spell either way, and escaping inside one would only move the
             // problem into the address.
-            let traits = uniform(over: subrange, in: text)
+            let traits = uniform(over: core, in: text)
             markdown += traits.map(\.delimiter).joined()
-                + "[" + label + "](" + destination + ")"
+                + "[" + content(core, of: text, as: spelling) + "](" + destination + ")"
                 + traits.reversed().map(\.delimiter).joined()
+                + content(terminator, of: text, as: spelling)
         }
 
         return markdown
+    }
+
+    /// `range` without the line terminator it ends with, if it ends with one.
+    private static func withoutTerminator(_ range: NSRange, in source: NSString) -> NSRange {
+        var end = NSMaxRange(range)
+
+        while end > range.location, MarkdownSyntax.isNewline(source.character(at: end - 1)) {
+            end -= 1
+        }
+
+        return NSRange(location: range.location, length: end - range.location)
     }
 
     /// The traits carried by every character of `range`, in nesting order.
