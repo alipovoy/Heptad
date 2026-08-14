@@ -91,7 +91,9 @@ struct ContentView: View {
             // On the `Group`, so the unavailable branch is sized and inset like the editor is:
             // the panel draws no title bar, and without these the message sat under one that is
             // not there, in a window the user could shrink to nothing.
-            .frame(minWidth: 320, minHeight: 200)
+            .frame(
+                minWidth: AppConstants.Window.minimumContentSize.width,
+                minHeight: AppConstants.Window.minimumContentSize.height)
             .ignoresSafeArea(.all, edges: .top)
         #endif
         .onAppear { ticker.start() }

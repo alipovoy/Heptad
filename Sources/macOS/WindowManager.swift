@@ -305,7 +305,7 @@ class WindowManager: NSObject, NSWindowDelegate {
             // the app, so a click could not bring a detached window forward. Nor can it be toggled
             // per mode — the flag is read at creation, and rewriting a live mask drops the responder.
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
+                contentRect: NSRect(origin: .zero, size: AppConstants.Window.openingContentSize),
                 styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
                 backing: .buffered, defer: false)
 

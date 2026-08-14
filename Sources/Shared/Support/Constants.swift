@@ -58,6 +58,19 @@ enum AppConstants {
     enum Window {
         /// Distance the panel must be dragged away from its menubar anchor to become pinned
         static let dragToPinThreshold: CGFloat = 20
+
+        /// The panel's smallest content size, declared by `ContentView` and read back by
+        /// `WindowManager` for the size it opens at.
+        ///
+        /// The view is the source of truth for the width because it cannot help being:
+        /// `NSHostingView` installs its root's minimum as the window's `contentMinSize` and grows
+        /// the window to satisfy it, so a narrower `contentRect` never survived first contact —
+        /// the panel opened at this width whatever the window manager asked for.
+        static let minimumContentSize = CGSize(width: 320, height: 200)
+
+        /// What the panel is built at, before any autosaved frame is restored. Only the height is
+        /// its own: the width is the minimum above, because that is what it would be given anyway.
+        static let openingContentSize = CGSize(width: minimumContentSize.width, height: 400)
     }
 
     enum Timing {
