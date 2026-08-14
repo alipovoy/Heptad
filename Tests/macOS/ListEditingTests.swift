@@ -45,6 +45,26 @@ struct ListEditingTests {
         textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
     }
 
+    /// The same view holding `markdown` as *formatted* text — the delimiters gone and the traits
+    /// on the characters, which is the shape a note is actually edited in.
+    ///
+    /// `type` above gives a flat buffer, and a flat buffer cannot show what an inserted marker
+    /// inherits: every list test in this suite ran against text with no formatting anywhere in
+    /// it, which is why a bold marker went unnoticed through a green suite.
+    private func load(_ markdown: String) {
+        textView.apply(
+            MarkdownStyling.Appearance(
+                plainText: false, fontSize: AppConstants.Layout.defaultFontSize))
+        textView.load(markdown: markdown)
+        textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
+    }
+
+    private func isBold(at location: Int) throws -> Bool {
+        let storage = try #require(textView.textStorage)
+        let font = try #require(storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont)
+        return font.isBold
+    }
+
     // MARK: - Return
 
     @Test func returnOnAnEmptyItemEndsTheList() {
@@ -60,6 +80,43 @@ struct ListEditingTests {
 
         #expect(pressReturn())
         #expect(textView.string == "plain text")
+    }
+
+    // MARK: - Markers are syntax, not formatting
+
+    /// Return at the end of a formatted item gives the next one a plain marker.
+    ///
+    /// A bare string inserted into an attributed buffer inherits the run it lands in, so the new
+    /// `- ` came out bold — `**-** ` in the store, which is not a list marker at all: Return
+    /// would not continue it, `⌘⇧U` would find no checkbox on it, and every other reader of the
+    /// file sees a bold hyphen where a bullet should be.
+    @Test(arguments: [
+        ("- **item**", "- item\n- ", "- **item**\n- "),
+        ("1. **a**", "1. a\n2. ", "1. **a**\n2. "),
+        ("- item **x**", "- item x\n- ", "- item **x**\n- "),
+        ("- [ ] **task**", "- [ ] task\n- [ ] ", "- [ ] **task**\n- [ ] ")
+    ])
+    func returnAfterAFormattedItemLeavesTheNewMarkerUnformatted(
+        markdown: String, buffer: String, stored: String
+    ) throws {
+        load(markdown)
+
+        #expect(pressReturn() == false)
+        #expect(textView.string == buffer)
+        #expect(try isBold(at: textView.string.utf16.count - 1) == false, "the marker is plain")
+        #expect(textView.markdown == stored, "so the new line is still a list item in the store")
+    }
+
+    /// And the checkbox character is part of a marker too, so flipping one in a formatted item
+    /// does not paint the box with the run it sits beside.
+    @Test func flippingACheckboxOnAFormattedItemKeepsTheBoxPlain() throws {
+        load("- [ ] **task**")
+
+        manager.toggleCheckbox(on: textView)
+
+        #expect(textView.string == "- [x] task")
+        #expect(try isBold(at: 3) == false, "the box itself is not formatting")
+        #expect(textView.markdown == "- [x] **task**")
     }
 
     // MARK: - ⌘⇧U

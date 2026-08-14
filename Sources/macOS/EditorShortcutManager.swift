@@ -319,12 +319,12 @@ class EditorShortcutManager {
     /// line without one. Unlike the formatting commands this is a text edit, so it goes
     /// through the same should/didChangeText pair the list continuation uses.
     func toggleCheckbox(on textView: NSTextView) {
-        guard
+        guard let markdownView = textView as? MarkdownTextView,
             let edit = ListContinuation.checkboxEdit(
                 in: textView.string as NSString, selectedRange: textView.selectedRange())
         else { return }
 
-        textView.apply(edit)
+        markdownView.applyMarkup(edit)
         textView.undoManager?.setActionName("Checkbox")
     }
 

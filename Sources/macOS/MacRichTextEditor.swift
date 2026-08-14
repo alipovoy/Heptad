@@ -125,11 +125,12 @@ struct MacRichTextEditor: NSViewRepresentable {
             replacementString: String?
         ) -> Bool {
             guard replacementString == "\n",
+                let markdownView = textView as? MarkdownTextView,
                 let edit = ListContinuation.returnEdit(
                     in: textView.string as NSString, selectedRange: affectedCharRange)
             else { return true }
 
-            textView.apply(edit)
+            markdownView.applyMarkup(edit)
             return false
         }
 
@@ -246,6 +247,12 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
         setSelectedRange(
             NSRange(location: min(caret.location, textStorage.length), length: 0))
         typingAttributes = MarkdownStyling.baseAttributes(styling)
+    }
+
+    /// Applies an edit whose replacement is markup this app wrote — a list marker, a checkbox —
+    /// in the note's own body face rather than in whatever run it lands in. See `TextEdit`.
+    func applyMarkup(_ edit: TextEdit) {
+        apply(edit, attributes: MarkdownStyling.baseAttributes(styling))
     }
 
     /// Applies a mode and a zoom level.
