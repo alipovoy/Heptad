@@ -263,6 +263,45 @@ struct RichTextRoundTripTests {
         #expect(MarkdownWriting.markdown(from: text) == "a**🔑b**")
     }
 
+    // MARK: - Characters a note may not hold
+
+    /// A pasted image's placeholder does not reach the store.
+    ///
+    /// U+FFFC is what an `NSTextAttachment` contributes to a string, so copying an image and a
+    /// word of bold out of Mail brings one along. `normalize` strips the attachment *attribute*
+    /// and leaves the character, which is invisible, cannot be selected as anything, and used to
+    /// survive every save from then on.
+    @Test func anAttachmentPlaceholderIsNotStored() {
+        let text = rendered("**caption**")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "\u{FFFC}")
+
+        #expect(MarkdownWriting.markdown(from: text) == "**caption**")
+    }
+
+    /// The control characters go the same way, and the line keeps its formatting: they are taken
+    /// out before the writer reasons about the line at all, rather than making it a line the
+    /// check finds wrong and rewrites as plain text.
+    @Test(
+        arguments: [
+            ("a\u{0}b", "ab"),
+            ("a\u{B}b", "ab"),
+            ("a\r\nb", "a\nb", ),
+            ("a\tb", "a\tb")
+        ])
+    func aControlCharacterIsNotStored(typed: String, expected: String) {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: typed)
+
+        #expect(MarkdownWriting.markdown(from: text) == expected)
+    }
+
+    @Test func filteringACharacterOutDoesNotCostTheLineItsFormatting() {
+        let text = rendered("**bold** and _italic_")
+        text.replaceCharacters(in: NSRange(location: 4, length: 0), with: "\u{FFFC}")
+
+        #expect(MarkdownWriting.markdown(from: text) == "**bold** and _italic_")
+    }
+
     // MARK: - The line the check rejects twice
 
     /// A link this app cannot spell used to be written anyway, permanently changing the note's

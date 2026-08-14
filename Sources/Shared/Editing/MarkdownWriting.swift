@@ -32,11 +32,14 @@ enum MarkdownWriting {
     /// everything the parser would act on has a backslash in front of it. Something has to be
     /// unconditional, or a line the check rejects twice is written rejected — which is how a link
     /// this app cannot spell used to change the note's own text. **A save may lose formatting; it
-    /// may never lose a character.**
+    /// may never lose a character.** The one exception is the characters a note may not hold at
+    /// all — `NoteCharacters` says which, and they are taken out before any of this runs, so what
+    /// the ladder is reasoning about is text that could be typed.
     ///
     /// Per line, because escapes are noise in the source and a note is read in that mode too: a
     /// line that needs them gets them, and the rest of the note stays as clean as it reads.
     static func markdown(from attributed: NSAttributedString) -> String {
+        let attributed = storable(attributed)
         let whole = NSRange(location: 0, length: attributed.length)
 
         return MarkdownSlicing.lines(of: whole, in: attributed).reduce(into: "") { markdown, line in
@@ -52,6 +55,27 @@ enum MarkdownWriting {
 
             markdown += content(line, of: attributed, as: .plain)
         }
+    }
+
+    /// `attributed` without the characters a note may not hold, and the same object when there
+    /// are none.
+    ///
+    /// Taken out here rather than as each slice is written, so every index the check compares
+    /// still lines up: a line whose attachment placeholder went missing between the writing and
+    /// the reading looks like a line the writer got wrong, and would be sent to a candidate that
+    /// keeps nothing.
+    private static func storable(_ attributed: NSAttributedString) -> NSAttributedString {
+        let source = attributed.string as NSString
+        let discarded = (0..<source.length)
+            .filter { !NoteCharacters.isStorable(source.character(at: $0)) }
+        guard !discarded.isEmpty else { return attributed }
+
+        let filtered = NSMutableAttributedString(attributedString: attributed)
+        for index in discarded.reversed() {
+            filtered.deleteCharacters(in: NSRange(location: index, length: 1))
+        }
+
+        return filtered
     }
 
     /// How hard one candidate line tries, and the order they are tried in.

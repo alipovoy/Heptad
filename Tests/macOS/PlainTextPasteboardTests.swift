@@ -86,6 +86,30 @@ private enum PlainTextPasteboardTestError: Error {
         #expect(scratch.pasteboard.plainTextForPaste() == expected)
     }
 
+    /// What the clipboard carries that a note may not hold is dropped on the way in, on every
+    /// flavor — ⌘⇧V never goes near the writer, so this reading is the only place to do it.
+    /// U+FFFC is what an image on the clipboard contributes to the text beside it.
+    @Test(arguments: [("secret\u{FFFC}", "secret"), ("a\u{0}b", "ab"), ("a\r\nb", "a\nb")])
+    func charactersANoteMayNotHoldAreDropped(written: String, expected: String) {
+        let scratch = ScratchPasteboard()
+        scratch.write { $0.setString(written, forType: .string) }
+
+        #expect(scratch.pasteboard.plainTextForPaste() == expected)
+    }
+
+    /// A flavor holding nothing but those characters is an empty flavor, so the search falls
+    /// through to one with text in it rather than pasting nothing.
+    @Test func aFlavorOfNothingButThoseCharactersFallsThrough() throws {
+        let rtf = try Self.rtf()
+        let scratch = ScratchPasteboard()
+        scratch.write {
+            $0.setData(rtf, forType: .rtf)
+            $0.setString("\u{FFFC}", forType: .string)
+        }
+
+        #expect(scratch.pasteboard.plainTextForPaste() == "formatted")
+    }
+
     /// nil, not "", so the caller can tell a clipboard with no text from one holding empty text
     /// — the first leaves the note alone, and only the second would be a paste of nothing.
     @Test func aClipboardHoldingNoTextIsNil() throws {
