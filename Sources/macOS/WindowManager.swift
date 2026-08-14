@@ -26,8 +26,14 @@ extension Notification.Name {
 /// - **Panel mode**: the window is the menubar-attached floating `NSPanel`. It is re-anchored
 ///   under the status item on every show, floats above other apps, and a click anywhere outside
 ///   it dismisses it.
-/// - **Pinned**: the user-facing state behind the title-bar pin toggle and ⌘P. An ordinary
-///   movable window that stays put when the user clicks into another app.
+/// - **Pinned**: the user-facing state behind the title-bar pin toggle and ⌘P. The same window,
+///   parked where the user put it: not re-anchored, not dismissed by a click outside, and still
+///   floating, so it stays above other apps until ⌘W or Esc closes it — which reattaches it.
+///
+/// Only those two things differ. Level and mask are set once, at creation, and never toggled per
+/// mode; the mask never carries `.miniaturizable`, because minimising was the one way off the
+/// screen that bypassed `hide(_:)` (P1-8). Detaching is a drag past `dragToPinThreshold` or ⌘P;
+/// only ⌘P attaches again without closing — `windowDidMove` arms the gesture in panel mode only.
 ///
 /// They are exact opposites (`isPanelMode == !isPinned`), and pinning lasts only as long as the
 /// window is on screen: `hide(_:)` puts it back. It is state, not a preference — see #123.
@@ -228,27 +234,20 @@ class WindowManager: NSObject, NSWindowDelegate {
         togglePin()
     }
 
+    /// Applies the current mode to the live window: the anchor and click-outside dismissal are all
+    /// that differ. Neither branch touches the level or the mask — see the class doc.
     private func applyPinnedState(to window: NSPanel) {
-        if isPinned {
-            applyPinnedStyling(to: window)
-        } else {
+        // Detached never dismisses itself, and keeps the panel's level, so it stays on top until
+        // it is closed. What makes a click on it activate the app is not here — see `showWindow`.
+        if isPanelMode {
             applyPanelStyling(to: window)
+        } else {
+            globalClickMonitor?.stop()
         }
     }
 
-    /// Pinned styling: an ordinary movable window that other apps may cover and that never
-    /// dismisses itself. What makes a click on it activate the app is not here — see `showWindow`.
-    private func applyPinnedStyling(to window: NSPanel) {
-        window.styleMask.insert(.miniaturizable)
-        window.isFloatingPanel = false
-        globalClickMonitor?.stop()
-    }
-
-    /// Panel styling: floats above other apps, no miniaturize button, click-outside dismisses.
+    /// Panel styling: re-anchored on every show, click-outside dismisses.
     private func applyPanelStyling(to window: NSPanel) {
-        window.styleMask.remove(.miniaturizable)
-        window.isFloatingPanel = true
-
         // Unpinning in place can leave the window far from the status item, so the drag-away
         // gesture is measured from where the window actually is rather than a stale anchor.
         anchorOrigin = window.frame.origin
@@ -327,7 +326,7 @@ class WindowManager: NSObject, NSWindowDelegate {
             panel.standardWindowButton(.zoomButton)?.isHidden = true
             panel.isMovableByWindowBackground = true
             panel.isReleasedWhenClosed = false
-            panel.isFloatingPanel = true
+            panel.isFloatingPanel = true  // both modes float; set here, never toggled
             panel.hidesOnDeactivate = false
 
             // Key on a click anywhere: it is an editor, and nothing in it does not want the caret.
