@@ -62,10 +62,16 @@ struct ContentView: View {
                         isPlainText: selectedNote.isPlainText,
                         togglePlainText: { selectedNote.isPlainText.toggle() }
                     )
-                    .background(backgroundFill)
+                    #if os(macOS)
+                        // macOS alone: there is no root background there, so each part of the
+                        // stack paints its own. iOS has one below, and painting the bar again
+                        // composited a second 0.1 of the note's colour under it — a tint 26%
+                        // stronger than the same bar on macOS.
+                        .background(backgroundFill)
+                    #endif
                 }
                 #if !os(macOS)
-                    .background(backgroundFill)
+                    .background(backgroundFill.ignoresSafeArea(edges: [.bottom, .leading, .trailing]))
                 #endif
             } else {
                 // Not a state anything is working its way out of. `sharedModelContainer` seeds
@@ -151,9 +157,11 @@ struct ContentView: View {
 
     private var selectedNote: NoteItem { notes[selectedNoteIndex] }
 
+    /// The note's colour, faintly. Plain, with no `ignoresSafeArea` folded in: only the root fill
+    /// on iOS has a safe area to ignore, and carrying it on the shared value applied it to two
+    /// more uses that sit in the middle of a `VStack`.
     private var backgroundFill: some View {
         NotePalette.colors[selectedNoteIndex].opacity(0.1)
-            .ignoresSafeArea(edges: [.bottom, .leading, .trailing])
     }
 
     #if os(macOS)
