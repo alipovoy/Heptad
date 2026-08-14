@@ -115,17 +115,17 @@ struct NoteEditorCoordinatorTests {
 
     // MARK: - Zoom
 
-    /// A zoom step repaints every note that has a cached view, not only the one on screen.
+    /// A zoom step repaints the note on screen, and only that one.
     ///
-    /// The zoom is app-wide and views are cached across switches, so a repaint scoped to the
-    /// showing note would leave every other note drawn at the old size until it was next switched
-    /// to — and `⌘+` is held down, so the stale notes would be the ones the user is not looking at
-    /// while they change the size for the one they are.
+    /// The other six are configured again on their way back in (#103), so repainting them here
+    /// is work thrown away and then redone — 155 ms per `⌘+` with seven long notes cached,
+    /// against the 33 ms a held key leaves, six sevenths of it for notes nobody is looking at.
+    /// `aCachedNoteComesBackAtTheZoomItMissed` is the other half of this: nothing is left stale.
     ///
     /// Driven through the coordinator's own seams rather than `.standard`/`.default`: with the
     /// defaults it reads and the centre it listens on both injected, this covers the whole path
     /// from the stored size to the repaint instead of stopping at the notification.
-    @Test func aZoomStepRepaintsEveryCachedNote() throws {
+    @Test func aZoomStepRepaintsTheShowingNoteAlone() throws {
         let scratch = try ScratchDefaults(name: "NoteEditorCoordinatorTests")
         let center = NotificationCenter()
         let zoomed = SpyEditorCoordinator(defaults: scratch.defaults, notificationCenter: center)
@@ -137,12 +137,30 @@ struct NoteEditorCoordinatorTests {
         EditorFontSize.step(increase: true, defaults: scratch.defaults, notificationCenter: center)
 
         let repainted = zoomed.configuredNoteIds.dropFirst(configuredBeforeTheStep)
-        #expect(
-            Set(repainted) == [0, 1],
-            "Every cached note is repainted, not only the one on screen")
+        #expect(Array(repainted) == [1], "The showing note, once")
         #expect(
             zoomed.configuredAppearances.last?.fontSize == EditorFontSize.current(scratch.defaults),
             "and at the size that was just stored")
+    }
+
+    /// A note that was off screen when the zoom changed comes back at the new size.
+    ///
+    /// This is what lets the step above skip it: the switch-in `configure` builds a fresh
+    /// appearance, and the zoom is read there rather than carried on the view.
+    @Test func aCachedNoteComesBackAtTheZoomItMissed() throws {
+        let scratch = try ScratchDefaults(name: "NoteEditorCoordinatorTests")
+        let center = NotificationCenter()
+        let zoomed = SpyEditorCoordinator(defaults: scratch.defaults, notificationCenter: center)
+
+        zoomed.setup(container: container, notes: notes, selectedIndex: 0)
+        zoomed.update(notes: notes, selectedIndex: 1)  // note 0 is now cached and off screen
+
+        EditorFontSize.step(increase: true, defaults: scratch.defaults, notificationCenter: center)
+        zoomed.update(notes: notes, selectedIndex: 0)
+
+        #expect(zoomed.configuredNoteIds.last == 0)
+        #expect(
+            zoomed.configuredAppearances.last?.fontSize == EditorFontSize.current(scratch.defaults))
     }
 
     /// A step that changes nothing posts nothing, so there is no repaint to observe either —

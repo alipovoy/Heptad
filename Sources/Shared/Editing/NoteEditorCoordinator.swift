@@ -17,8 +17,8 @@ class NoteEditorCoordinator: NSObject {
     private var savers: [Int: NoteContentSaver] = [:]
     private(set) var currentNoteId: Int?
 
-    /// Each note's mode, by id, so a font-size change can repaint every cached view without
-    /// waiting for SwiftUI to drive one through.
+    /// Each note's mode, by id, so `appearance(forNoteId:)` can answer with no `NoteItem` in
+    /// hand — the zoom repaint has an id and nothing else.
     ///
     /// Modes rather than the notes themselves: `configure` asks a note for `isPlainText` and
     /// nothing else, so keeping the models alive only to look one flag up would retain seven
@@ -160,16 +160,21 @@ class NoteEditorCoordinator: NSObject {
         return editorView
     }
 
-    /// Repaints every cached note at the new zoom level.
+    /// Repaints the showing note at the new zoom level.
+    ///
+    /// Only the showing one. Every cached view is configured again on its way back in (#103), so
+    /// repainting the other six here does work that is thrown away and then done a second time —
+    /// with seven 300-line notes cached that measured 155 ms per `⌘+`, against the 33 ms a key
+    /// repeat leaves, six sevenths of it spent on notes nobody was looking at.
     ///
     /// `@objc` selector dispatch (used by `NotificationCenter`) crosses the Swift/ObjC boundary
     /// without hopping actors, so this can't be `@MainActor`-isolated directly. The poster is
     /// the key monitor, which is already on the main actor.
     @objc nonisolated private func editorFontSizeDidChange() {
         MainActor.assumeIsolated {
-            for (id, editorView) in editorViews {
-                configure(editorView, appearance: appearance(forNoteId: id))
-            }
+            guard let noteId = currentNoteId, let editorView = editorViews[noteId] else { return }
+
+            configure(editorView, appearance: appearance(forNoteId: noteId))
         }
     }
 
