@@ -116,8 +116,15 @@ struct IOSRichTextEditor: UIViewRepresentable {
 /// narrow, so `copy(_:)` writes the clipboard itself rather than filtering what AppKit would.
 class MarkdownTextView: UITextView, NSTextStorageDelegate {
     /// How this view draws, and which of the two shapes its buffer is in. Display only — none of
-    /// it is ever stored.
-    private(set) var styling = MarkdownStyling.Appearance(
+    /// it is ever stored. `nil` until something configures it; see the macOS twin for why that
+    /// is what makes the first `configure` do anything.
+    private var configuredStyling: MarkdownStyling.Appearance?
+
+    /// What the view draws as now: what it was last configured with, or what a bare text view is
+    /// before anything has.
+    var styling: MarkdownStyling.Appearance { configuredStyling ?? Self.unconfigured }
+
+    private static let unconfigured = MarkdownStyling.Appearance(
         plainText: false, fontSize: AppConstants.Layout.defaultFontSize)
 
     /// The note as it would be stored: markdown, whichever mode this view is in.
@@ -178,11 +185,11 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
 
     /// Applies a mode and a zoom level. See the macOS twin for why a mode step is a conversion.
     func apply(_ appearance: MarkdownStyling.Appearance) {
-        guard appearance != styling else { return }
+        guard appearance != configuredStyling else { return }
 
         let source = markdown
         let switchingMode = appearance.plainText != styling.plainText
-        styling = appearance
+        configuredStyling = appearance
 
         if switchingMode {
             load(markdown: source)

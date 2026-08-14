@@ -78,11 +78,11 @@ struct NoteEditorCoordinatorTests {
     /// A new view is built, then configured, then loaded — and the coordinator already names the
     /// incoming note by the time it is configured.
     ///
-    /// Every step of that order is load-bearing. `configure` flattens what is already in the
-    /// view, so running it before `load` is what leaves the note's own attributes intact.
-    /// `configure` also reports its edit through `textDidChange`, which resolves the saver by the
-    /// showing note — so with `currentNoteId` still naming the note being left, opening a plain
-    /// note would write it over that one.
+    /// On a view with nothing in it yet, the only surviving effect of `configure` is that it
+    /// records the appearance — and that is what `load` renders the note through. Reversed, the
+    /// note is rendered in whatever the view was before and the mode arrives one paint late.
+    /// `currentNoteId` is set ahead of both so nothing under them can act on a stale answer to
+    /// "which note is showing".
     @Test(.bug(id: 103))
     func aNewViewIsConfiguredBeforeItsContentIsLoaded() {
         coordinator.setup(container: container, notes: notes, selectedIndex: 1)

@@ -54,9 +54,9 @@ class NoteEditorCoordinator: NSObject {
     /// colour, all three looked up here rather than threaded down alongside the note.
     ///
     /// A note with no recorded palette index gets no tint rather than someone else's. It cannot
-    /// happen — `update` records one for every note before anything is configured — and `nil` is
-    /// deliberately not a value this can otherwise return: it is what the text views' initial
-    /// `styling` carries, and what makes their first `configure` do anything at all.
+    /// happen — `update` records one for every note before anything is configured — and an
+    /// untinted appearance is no longer a value the text views need this never to produce: they
+    /// hold their own as `nil` until configured, so the first call lands whatever it carries.
     func appearance(forNoteId id: Int) -> MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
             plainText: modes[id] ?? false, fontSize: EditorFontSize.current(defaults),
@@ -104,10 +104,12 @@ class NoteEditorCoordinator: NSObject {
             oldView.removeFromSuperview()
         }
 
-        // Before anything below can build a view: `load` puts text into one, and any report that
-        // reaches `textDidChange` looks the saver up by the *current* note. Set at the end of
-        // this method instead, that lookup would find the note being left and write the incoming
-        // note's text into it.
+        // Before anything below can build a view, so nothing under it can act on a stale answer
+        // to "which note is showing". Measured: neither `configure` nor `load` reports through
+        // `textDidChange` — both go through `setAttributedString`, which tells the storage
+        // delegate and no one else — so the cross-note write this used to claim to prevent
+        // cannot happen. Kept because a lookup naming the note being left is a bad shape, not
+        // because anything is currently reaching for one.
         currentNoteId = note.id
 
         let editorView: PlatformView
@@ -143,8 +145,11 @@ class NoteEditorCoordinator: NSObject {
 
     /// Builds the note's editor view and its saver, and caches both.
     ///
-    /// `configure` before `load`: the view has to know how it draws before there is anything in
-    /// it to draw, or the first paint would use the wrong mode until the next keystroke.
+    /// `configure` before `load`, and the reason is narrower than "the first paint would be
+    /// wrong": on an empty buffer `apply`'s whole body is inert — the normalize returns on a
+    /// zero length, and the typing attributes it sets are overwritten by `load` two lines later.
+    /// What survives is that it records the appearance, which is what `load` then renders
+    /// through. Reverse the two and the note is rendered in whatever the view was before.
     private func makeCachedEditorView(for note: NoteItem) -> PlatformView {
         let editorView = makeEditorView(for: note)
         editorViews[note.id] = editorView
