@@ -86,6 +86,22 @@ struct EditorFormattingTests {
         #expect(textView.markdown == " b", "and nothing is left in the note to look at")
     }
 
+    /// One press, on the buffer a note switch produces rather than a freshly typed line.
+    ///
+    /// The direction is decided by asking whether the selection already carries the trait, and a
+    /// reloaded note has bare newlines between its runs — so the terminator answered "no", the
+    /// press re-applied bold that was already there, and nothing appeared to happen until the
+    /// second press. Single-line selections never showed it.
+    @Test(arguments: [("**a**\n**b**", "a\nb"), ("**a**\n\n**b**", "a\n\nb")])
+    func takingEmphasisOffAReloadedMultiLineRunTakesOnePress(source: String, stripped: String) {
+        textView.load(markdown: source)
+        textView.setSelectedRange(NSRange(location: 0, length: (textView.string as NSString).length))
+
+        manager.toggleEmphasis(.strong, on: textView)
+
+        #expect(textView.markdown == stripped)
+    }
+
     /// With nothing selected the command arms the caret, so ⌘B then typing comes out bold —
     /// without putting a single character in the note for a press the user then thinks better of.
     @Test func togglingEmphasisWithoutSelectionArmsTheCaret() {

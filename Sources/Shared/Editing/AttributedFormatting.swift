@@ -20,18 +20,29 @@ import Foundation
 /// is the one trait `MarkdownWriting` cannot spell there, and a command that leaves the buffer in
 /// a state the writer has to drop is a command that loses work.
 enum AttributedFormatting {
-    /// Whether every character in `range` already carries `emphasis`.
+    /// Whether every character in `range` that could carry `emphasis` already does.
     ///
-    /// Vacuously true for an empty buffer, which never matters: an empty selection reads the
-    /// typing attributes instead, and an empty note has nothing to toggle.
+    /// Line terminators are not asked, because no answer they give is meaningful: a construct
+    /// never spans lines, so the writer refuses a trait on a terminator and every note that has
+    /// been through one save comes back with bare newlines between its runs. Counting them made
+    /// the first ⌘B on a paragraph that was already bold when the note opened *re-apply* the
+    /// bold — nothing visibly happened, and the user had to press twice.
+    ///
+    /// False for a range with nothing spellable in it, which never matters: an empty selection
+    /// reads the typing attributes instead, and an empty note has nothing to toggle.
     static func isApplied(
         _ emphasis: Emphasis, over range: NSRange,
         in storage: NSAttributedString
     ) -> Bool {
         guard range.length > 0 else { return false }
+        let text = storage.string as NSString
 
+        var asked = false
         var applied = true
-        storage.enumerateAttributes(in: range, options: []) { attributes, _, stop in
+        storage.enumerateAttributes(in: range, options: []) { attributes, subrange, stop in
+            guard isSpellable(subrange, in: text) else { return }
+            asked = true
+
             guard emphasis.isOn(attributes) else {
                 applied = false
                 stop.pointee = true
@@ -39,7 +50,14 @@ enum AttributedFormatting {
             }
         }
 
-        return applied
+        return asked && applied
+    }
+
+    /// Whether `range` holds anything but line terminators.
+    private static func isSpellable(_ range: NSRange, in text: NSString) -> Bool {
+        (range.location..<NSMaxRange(range)).contains {
+            !MarkdownSyntax.isNewline(text.character(at: $0))
+        }
     }
 
     /// Toggles `emphasis` over `range`, and answers with what typing should continue in.

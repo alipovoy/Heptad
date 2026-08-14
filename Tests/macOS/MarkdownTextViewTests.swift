@@ -35,6 +35,19 @@ struct MarkdownTextViewTests {
         #expect(textView.markdown == "**one**\nplain here\n_three_")
     }
 
+    /// The shape every command downstream of a note switch actually meets, pinned once here.
+    ///
+    /// A construct never spans lines, so the writer cannot spell a trait on a terminator
+    /// (`aRunAcrossLinesIsWrittenLineByLine`) — and the renderer must not draw one either, or the
+    /// buffer would claim formatting the next save is bound to drop.
+    @Test func aReloadedNoteCarriesNoTraitOnItsLineTerminators() throws {
+        try fixture.loaded("**a**\n**b**")
+
+        #expect(try fixture.font(at: 0).isBold)
+        #expect(try fixture.font(at: 1).isBold == false, "the terminator between them is bare")
+        #expect(try fixture.font(at: 2).isBold)
+    }
+
     /// Typing is no longer a parse: an edit only has to arrive normalized, so what is typed into
     /// a note is in the note's own font whatever the caret was carrying.
     @Test func typingLandsInTheNotesOwnFont() throws {
