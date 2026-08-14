@@ -65,6 +65,32 @@ struct NoteSeedingTests {
         #expect(restored.isPlainText, "or reset how it is displayed")
     }
 
+    /// Seven rows is not the same as these seven notes. A store with a hole in it and a stray id
+    /// beside it has the right *count*, and a count check in front of the loop returned early —
+    /// so the hole was never filled, on this launch or any later one.
+    @Test func aStoreWithTheRightCountAndTheWrongIdsIsStillRepaired() throws {
+        let context = try inMemoryContext()
+        for id in [0, 1, 2, 4, 5, 6, 9] { context.insert(NoteItem(id: id, text: "note \(id)")) }
+
+        try HeptadApp.seed(context)
+
+        let ids = try storedIds(context)
+        #expect(ids.contains(3), "The missing note comes back")
+        #expect(Set(0..<AppConstants.noteCount).isSubset(of: Set(ids)))
+        #expect(ids.contains(9), "and a row this app does not address is not deleted to make room")
+    }
+
+    /// A store holding more than the set — what a build with a higher `noteCount` leaves behind —
+    /// is seeded like any other. The extras are the view's problem, not the seeder's.
+    @Test func aStoreHoldingMoreThanTheSetIsStillSeeded() throws {
+        let context = try inMemoryContext()
+        for id in 0...AppConstants.noteCount { context.insert(NoteItem(id: id, text: "note \(id)")) }
+
+        try HeptadApp.seed(context)
+
+        #expect(try storedIds(context) == Array(0...AppConstants.noteCount))
+    }
+
     /// A full store takes the early return — the state every launch after the first is in.
     @Test func afullStoreIsLeftAsItIs() throws {
         let context = try inMemoryContext()

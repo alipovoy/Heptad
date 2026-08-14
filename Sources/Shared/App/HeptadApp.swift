@@ -28,16 +28,23 @@ struct HeptadApp: App {
     ///
     /// Runs on every launch, so leaving what is already there untouched is the whole contract.
     ///
+    /// By id and *only* by id: a count check in front of this loop meant "seven rows" rather than
+    /// "these seven notes", which is a different thing on any store that holds an id outside
+    /// `0..<noteCount`. Seven rows with a hole in them were left unrepaired, and a store the
+    /// count said was full was never looked at — so a build that lowered `noteCount` would leave
+    /// the user's notes on disk and unreachable.
+    ///
     /// Lifted out of the container above purely so it can be tested: the partial-store case is
     /// the one that matters and it cannot be arranged against the app's own on-disk store.
     static func seed(_ context: ModelContext) throws {
-        let fetchDescriptor = FetchDescriptor<NoteItem>()
-        guard try context.fetchCount(fetchDescriptor) < AppConstants.noteCount else { return }
-
-        let existingIds = Set(try context.fetch(fetchDescriptor).map(\.id))
+        let existingIds = Set(try context.fetch(FetchDescriptor<NoteItem>()).map(\.id))
         for noteId in 0..<AppConstants.noteCount where !existingIds.contains(noteId) {
             context.insert(NoteItem(id: noteId, modifiedAt: .now))
         }
+
+        // The launch after the first inserts nothing, and a store with nothing to add is not
+        // written to at all — the fetch above is the only round trip it costs.
+        guard context.hasChanges else { return }
         try context.save()
     }
 
