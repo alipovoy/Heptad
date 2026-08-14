@@ -20,11 +20,19 @@ import Foundation
 /// interleaved, which markdown cannot express at all.
 enum MarkdownWriting {
     /// Writes each line, then checks it: if reading the line back would not give the line that
-    /// went in, it is written again with every escapable character escaped.
+    /// went in, it is written again with every escapable character escaped — and if that is not
+    /// the line either, as the line's own characters with no formatting at all.
     ///
     /// Checked rather than predicted, because what needs escaping depends on what ends up beside
     /// it. Text ending in `*` next to a bold run writes `a***b**`, which reads back as a bold
     /// `*b` — no rule about the plain text alone would have caught that, and the check does.
+    ///
+    /// The last candidate is the one that ends the ladder, and it is written without being
+    /// checked because it cannot be wrong about the characters: it holds no delimiters, and
+    /// everything the parser would act on has a backslash in front of it. Something has to be
+    /// unconditional, or a line the check rejects twice is written rejected — which is how a link
+    /// this app cannot spell used to change the note's own text. **A save may lose formatting; it
+    /// may never lose a character.**
     ///
     /// Per line, because escapes are noise in the source and a note is read in that mode too: a
     /// line that needs them gets them, and the rest of the note stays as clean as it reads.
@@ -32,20 +40,35 @@ enum MarkdownWriting {
         let whole = NSRange(location: 0, length: attributed.length)
 
         return lines(of: whole, in: attributed).reduce(into: "") { markdown, line in
-            let written = emit(line, of: attributed, escaping: false)
-            let readsBack = reads(written, as: attributed.attributedSubstring(from: line))
+            let original = attributed.attributedSubstring(from: line)
 
-            markdown += readsBack ? written : emit(line, of: attributed, escaping: true)
+            for escaping in [false, true] {
+                let written = emit(line, of: attributed, escaping: escaping)
+                guard reads(written, as: original) else { continue }
+
+                markdown += written
+                return
+            }
+
+            markdown += content(line, of: attributed, escaping: true)
         }
     }
 
     // MARK: - Checking
 
-    /// Whether `markdown` reads back as the text it was written from — same characters, same
-    /// emphasis on each of them, same links.
+    /// Whether `markdown` reads back as the text it was written from: the same characters, and no
+    /// formatting on them the text did not already have.
     ///
     /// The characters alone are not enough. `a***b**` has exactly the characters of `a*` followed
     /// by a bold `b`, and reads back as a bold `*b`; only comparing the formatting catches it.
+    ///
+    /// Asymmetric on purpose, and this is the half that is easy to get wrong. Formatting the
+    /// writer *cannot spell* is dropped by design — the whitespace at the edge of a run goes
+    /// outside the pair, a run never spans a line, and a trait covering half a link has nowhere
+    /// to be written. Those are the rules at the top of this file, so a check that called them
+    /// failures would reject the writer's own correct output and send the line to a candidate
+    /// that keeps less. What must never pass is the other direction: emphasis appearing on
+    /// characters that never carried it, which is the whole reason escaping exists.
     private static func reads(_ markdown: String, as original: NSAttributedString) -> Bool {
         let rendered = RichTextRendering.attributed(from: markdown, appearance: reading)
         guard rendered.string == original.string else { return false }
@@ -53,9 +76,10 @@ enum MarkdownWriting {
         for index in 0..<rendered.length {
             let read = rendered.attributes(at: index, effectiveRange: nil)
             let intended = original.attributes(at: index, effectiveRange: nil)
+            let link = destination(read[.link])
 
-            guard Emphasis.allCases.allSatisfy({ $0.isOn(read) == $0.isOn(intended) }),
-                destination(read[.link]) == destination(intended[.link])
+            guard Emphasis.allCases.allSatisfy({ !$0.isOn(read) || $0.isOn(intended) }),
+                link == nil || link == destination(intended[.link])
             else { return false }
         }
 
@@ -166,12 +190,9 @@ enum MarkdownWriting {
         let source = text.string as NSString
         let core = trimmed(line, in: source)
 
-        // Nothing but whitespace, or a spelling the parser would not read back — `_` between two
-        // word characters is an identifier, not italic. Either way the characters are written as
-        // they are: losing the trait beats writing delimiters that come back as literal text.
-        guard core.length > 0, readsBack(trait, around: core, in: source) else {
-            return content(line, of: text, escaping: escaping)
-        }
+        // Nothing to put a pair around: whitespace has to stay outside one, so a run that is all
+        // whitespace is written as the characters it is.
+        guard core.length > 0 else { return content(line, of: text, escaping: escaping) }
 
         let before = NSRange(location: line.location, length: core.location - line.location)
         let after = NSRange(
@@ -182,24 +203,6 @@ enum MarkdownWriting {
             + wrap(core, of: text, in: rest, escaping: escaping)
             + trait.delimiter
             + content(after, of: text, escaping: escaping)
-    }
-
-    /// Whether a pair written around `core` is one `MarkdownSyntax` would read as this trait.
-    /// Only `_` can fail, and only against a word character — see `MarkdownSyntax.isWordCharacter`.
-    private static func readsBack(
-        _ trait: Emphasis, around core: NSRange, in source: NSString
-    ) -> Bool {
-        guard MarkdownSyntax.mindsWordBoundaries(trait.delimiter) else { return true }
-
-        let before = core.location - 1
-        if before >= 0, MarkdownSyntax.isWordCharacter(source.character(at: before)) { return false }
-
-        let after = NSMaxRange(core)
-        if after < source.length, MarkdownSyntax.isWordCharacter(source.character(at: after)) {
-            return false
-        }
-
-        return true
     }
 
     // MARK: - Slicing

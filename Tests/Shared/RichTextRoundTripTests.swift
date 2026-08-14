@@ -206,6 +206,48 @@ struct RichTextRoundTripTests {
         #expect(roundTripIsStable(markdown), "and what it writes parses back to the same thing")
     }
 
+    /// Italic beside another construct.
+    ///
+    /// The writer used to ask whether a `_` pair would read back by looking at the characters
+    /// flanking the run in the *rendered* string — which has no delimiters in it — so the `d` and
+    /// the `w` of `hardware` looked adjacent and the pair was refused. In the markdown being
+    /// written the `**` sits between them, and the parser reads it back exactly.
+    @Test(
+        arguments: [
+            "the **_hard_**ware", "x**_a_**y", "_a_**b**", "**a**_b_", "~~_a_~~b"
+        ])
+    func italicSurvivesBesideAnotherConstruct(_ markdown: String) {
+        #expect(roundTrip(markdown) == markdown)
+    }
+
+    /// And the rule that refusal existed to protect is still kept: `_` inside a word is an
+    /// identifier, not italic, so the parser never reads one and the writer never writes one.
+    @Test(arguments: ["AWS_SECRET_KEY", "snake_case_name", "__init__"])
+    func anUnderscoreInsideAWordIsNotItalic(_ markdown: String) {
+        #expect(roundTrip(markdown) == markdown)
+    }
+
+    // MARK: - The line the check rejects twice
+
+    /// A link this app cannot spell used to be written anyway, permanently changing the note's
+    /// own text: the escaping candidate is byte-identical for a link — `emit` builds the brackets
+    /// and the destination out of raw characters — so the check found the line wrong and had
+    /// nothing else to write.
+    ///
+    /// Now the ladder ends somewhere. The link is lost, which is the most this app can do with a
+    /// destination it has no spelling for, but not one character of the note is.
+    @Test(arguments: ["", "https://en.wikipedia.org/wiki/Foo_(bar)", "x\ny"])
+    func aLinkWithAnUnspellableDestinationLosesTheLinkAndNotTheText(_ destination: String) {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "Foo bar")
+        text.addAttribute(.link, value: destination, range: NSRange(location: 0, length: 7))
+
+        let written = MarkdownWriting.markdown(from: text)
+
+        #expect(rendered(written).string == "Foo bar")
+        #expect(roundTripIsStable(written), "and it is not written differently the second time")
+    }
+
     private func roundTripIsStable(_ markdown: String) -> Bool {
         roundTrip(markdown) == markdown
     }
