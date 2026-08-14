@@ -37,6 +37,7 @@ struct RichTextRoundTripTests {
             "rotate **keys** now",
             "[docs](https://example.com)",
             "see [docs](https://example.com) first",
+            "[wiki](https://en.wikipedia.org/wiki/Foo_(bar))",
             "- one\n- two\n- three",
             "- [ ] rotate **keys**\n- [x] done",
             "1. first\n2. second",
@@ -236,7 +237,7 @@ struct RichTextRoundTripTests {
     ///
     /// Now the ladder ends somewhere. The link is lost, which is the most this app can do with a
     /// destination it has no spelling for, but not one character of the note is.
-    @Test(arguments: ["", "https://en.wikipedia.org/wiki/Foo_(bar)", "x\ny"])
+    @Test(arguments: ["", "https://e.co/a)b", "x\ny"])
     func aLinkWithAnUnspellableDestinationLosesTheLinkAndNotTheText(_ destination: String) {
         let text = rendered("")
         text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "Foo bar")

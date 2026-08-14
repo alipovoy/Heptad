@@ -280,7 +280,7 @@ enum MarkdownSyntax {
             let labelEnd = index(of: "]", in: text, from: start + 1, limit: limit),
             labelEnd > start + 1,
             matches("(", in: text, at: labelEnd + 1, limit: limit),
-            let urlEnd = index(of: ")", in: text, from: labelEnd + 2, limit: limit),
+            let urlEnd = destinationEnd(in: text, from: labelEnd + 2, limit: limit),
             urlEnd > labelEnd + 2
         else { return nil }
 
@@ -291,6 +291,34 @@ enum MarkdownSyntax {
             Span(range: NSRange(location: labelEnd, length: urlEnd - labelEnd + 1), style: .marker))
 
         return urlEnd + 1
+    }
+
+    /// The `)` that ends a link's destination: the first one not closing a `(` opened inside it.
+    ///
+    /// Parentheses in a destination are balanced, as CommonMark balances them, because the
+    /// addresses people paste into notes have them —
+    /// `https://en.wikipedia.org/wiki/Foo_(bar)` is one URL. Taking the first `)` instead gave a
+    /// dead link and left the tail of the address sitting in the note as text.
+    ///
+    /// Unbalanced still means no link: an address holding a lone `)` is one this app has no
+    /// spelling for, and the writer's ladder drops the link rather than the characters.
+    private static func destinationEnd(in text: NSString, from: Int, limit: Int) -> Int? {
+        var depth = 0
+        var cursor = from
+
+        while cursor < limit {
+            defer { cursor += 1 }
+            guard !isEscaped(cursor, in: text) else { continue }
+
+            if matches("(", in: text, at: cursor, limit: limit) {
+                depth += 1
+            } else if matches(")", in: text, at: cursor, limit: limit) {
+                guard depth > 0 else { return cursor }
+                depth -= 1
+            }
+        }
+
+        return nil
     }
 
     // MARK: - Escapes
