@@ -41,7 +41,15 @@ enum EditorFontSize {
         return stepped
     }
 
+    /// `isFinite` first, because `min`/`max` are comparisons and every comparison against NaN is
+    /// false — so a stored NaN fell through both bounds untouched, and it is the one junk value
+    /// that also sticks: `step` bails on `stepped != size`, which NaN never satisfies, so ⌘+ and
+    /// ⌘- both wrote it back and posted, at a size AppKit silently substitutes 13 pt for. There
+    /// was no way back from inside the app. Infinities land on the default for the same reason
+    /// rather than on a bound: neither is a size anyone asked for.
     private static func clamped(_ size: CGFloat) -> CGFloat {
-        min(max(size, AppConstants.Layout.minFontSize), AppConstants.Layout.maxFontSize)
+        guard size.isFinite else { return AppConstants.Layout.defaultFontSize }
+
+        return min(max(size, AppConstants.Layout.minFontSize), AppConstants.Layout.maxFontSize)
     }
 }
