@@ -54,14 +54,7 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     #endif
 
-                    TextStatisticsBar(
-                        statistics: statistics,
-                        lastEditedAt: selectedNote.lastEditedAt,
-                        now: ticker.now,
-                        color: NotePalette.colors[selectedNoteIndex],
-                        isPlainText: selectedNote.isPlainText,
-                        togglePlainText: { selectedNote.isPlainText.toggle() }
-                    )
+                    statisticsBar(for: selectedNote)
                     #if os(macOS)
                         // macOS alone: there is no root background there, so each part of the
                         // stack paints its own. iOS has one below, and painting the bar again
@@ -122,6 +115,24 @@ struct ContentView: View {
                 ticker.stop()
             }
         #endif
+    }
+
+    /// The bar, built against the note itself rather than against `selectedNote`.
+    ///
+    /// `togglePlainText` escapes: `TextStatisticsBar` stores it and a `Button` calls it later, at
+    /// which point reading `selectedNote` would mean reading `@Query` and `@AppStorage` off a
+    /// captured copy of this view, outside the `body` pass that made it — the hazard `selection`
+    /// below is built the way it is to avoid. A `NoteItem` is a reference, so capturing one is
+    /// capturing the note and nothing else.
+    private func statisticsBar(for note: NoteItem) -> some View {
+        TextStatisticsBar(
+            statistics: statistics,
+            lastEditedAt: note.lastEditedAt,
+            now: ticker.now,
+            color: NotePalette.colors[selectedNoteIndex],
+            isPlainText: note.isPlainText,
+            togglePlainText: { note.isPlainText.toggle() }
+        )
     }
 
     /// Asks every `NoteContentSaver` to write its pending text, then commits the context.
