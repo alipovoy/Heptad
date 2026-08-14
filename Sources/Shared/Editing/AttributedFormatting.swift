@@ -15,10 +15,10 @@ import Foundation
 /// bold again produced `**_**hello**_**`, because `⌘B` could only recognise a `**` pair sitting
 /// immediately beside the selection and the italic pair had moved it out of reach (#124).
 ///
-/// One rule survives from the delimiter days: the word boundary. `_` is a word character in
-/// every identifier a scratchpad holds, so italic mid-word is declined rather than applied — it
-/// is the one trait `MarkdownWriting` cannot spell there, and a command that leaves the buffer in
-/// a state the writer has to drop is a command that loses work.
+/// Nothing here declines. Every trait can be spelled wherever the caret is, so `⌘I` behaves like
+/// `⌘B` and `⌘⇧X` — including with nothing selected, where it arms the caret and what is typed
+/// next comes out italic. `⌘I` used to refuse mid-word, because `_` cannot be written against a
+/// word character; `MarkdownWriting` spells those runs `*` instead, and the rule went with it.
 enum AttributedFormatting {
     /// Whether every character in `range` that could carry `emphasis` already does.
     ///
@@ -77,10 +77,6 @@ enum AttributedFormatting {
             return typingAttributes(
                 emphasis, applying: applying, at: range.location, in: storage,
                 appearance: appearance)
-        }
-
-        guard applying == false || canApply(emphasis, over: core, in: storage) else {
-            return storage.attributes(at: min(core.location, storage.length - 1), effectiveRange: nil)
         }
 
         set(emphasis, applying, over: core, in: storage, appearance: appearance)
@@ -159,25 +155,6 @@ enum AttributedFormatting {
     }
 
     // MARK: - Reading
-
-    /// Whether the trait can be written back out at this position. Only `_` can fail, and only
-    /// against a word character: `key_x_store` is a name, not italic text.
-    private static func canApply(
-        _ emphasis: Emphasis, over range: NSRange, in storage: NSAttributedString
-    ) -> Bool {
-        guard MarkdownSyntax.mindsWordBoundaries(emphasis.delimiter) else { return true }
-        let text = storage.string as NSString
-
-        let before = range.location - 1
-        if before >= 0, MarkdownSyntax.isWordCharacter(text.character(at: before)) { return false }
-
-        let after = NSMaxRange(range)
-        if after < text.length, MarkdownSyntax.isWordCharacter(text.character(at: after)) {
-            return false
-        }
-
-        return true
-    }
 
     /// `range` with leading and trailing whitespace dropped, so a selection with a trailing space
     /// formats the word and not the space — the writer would put the space outside the pair

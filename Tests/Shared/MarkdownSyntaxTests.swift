@@ -151,15 +151,26 @@ struct MarkdownSyntaxTests {
         #expect(styled("**one**\nplain\n_two_").map(\.0) == ["one", "two"])
     }
 
-    /// `*` is not a delimiter at all now that italic is `_`, so a bold pair is one construct and
-    /// there is no shorter delimiter for it to be mistaken for.
+    /// `*` is a prefix of `**`, so `**` is matched first: a bold pair is one construct, never two
+    /// italic ones around an empty run.
     @Test func boldIsOneConstructRatherThanTwo() {
         #expect(styled("**bold**").map(\.1) == [.strong])
     }
 
-    /// `*` is an ordinary character, which is what makes arithmetic and shell globs safe to type.
-    @Test(arguments: ["*italic*", "2 * 3 * 4", "SELECT * FROM notes", "chmod +x *.sh"])
-    func asterisksOnTheirOwnStyleNothing(text: String) {
+    /// The second spelling of italic, which is what `MarkdownWriting` falls back to where `_`
+    /// cannot be written — against a word character.
+    @Test(arguments: ["*italic*", "Test*ing*", "foo*bar*"])
+    func asterisksSpellItalicToo(text: String) {
+        #expect(styled(text).map(\.1) == [.emphasis])
+    }
+
+    /// And a loose one is still an ordinary character, which is what makes arithmetic and shell
+    /// globs safe to type: a delimiter never opens against whitespace or closes against it, and
+    /// one with no partner opens nothing at all.
+    @Test(arguments: [
+        "2 * 3 * 4", "SELECT * FROM notes", "chmod +x *.sh", "*.txt and *.md", "a * b * c"
+    ])
+    func looseAsterisksStyleNothing(text: String) {
         #expect(styled(text).isEmpty)
     }
 

@@ -87,28 +87,35 @@ enum MarkdownWriting {
         /// Every character the parser could act on gets a backslash in front of it.
         let escaping: Bool
 
-        /// A `_` pair whose neighbours in the *rendered* text are word characters is not written
-        /// at all, and the trait is dropped instead.
-        ///
-        /// A conservative test, and knowingly so: it is blind to the delimiters the writer is
-        /// about to put between those neighbours, so it refuses pairs that would have read back
-        /// perfectly — `the **_hard_**ware` among them. That is why it cannot be a precondition.
-        /// As a late rung it is the right question, because by then the permissive spelling has
-        /// already been tried and rejected, and the choice left is between dropping this one
-        /// trait and dropping every trait on the line.
-        let cautious: Bool
+        /// What to do about an italic run whose neighbours in the *rendered* text would refuse a
+        /// `_` pair. Every other trait is spelled one way and has no choice to make.
+        let italic: Italic
+
+        enum Italic {
+            /// Write `_` regardless. First, because the test that refuses it is a lower bound —
+            /// blind to the delimiters about to be written between the run and those neighbours,
+            /// so it refuses pairs that read back perfectly, `the **_hard_**ware` among them.
+            case preferred
+
+            /// Write `*`, which minds no boundaries and so can be written anywhere `_` cannot.
+            case fallback
+
+            /// Write no pair, and lose the trait. What is left when `*` will not read back
+            /// either — which is the corner where the pair lands inside a `**` one, since
+            /// `**Test*ing***` is a run of asterisks no parser resolves the way this meant it.
+            /// The choice by then is between dropping this one trait and dropping every trait on
+            /// the line.
+            case dropped
+        }
 
         /// Most faithful first. `markdown(from:)` writes the first that reads back, and its own
         /// unconditional fallback is what happens when none of them does.
-        static let ladder = [
-            Self(escaping: false, cautious: false),
-            Self(escaping: true, cautious: false),
-            Self(escaping: false, cautious: true),
-            Self(escaping: true, cautious: true)
-        ]
+        static let ladder = [Italic.preferred, .fallback, .dropped].flatMap {
+            [Self(escaping: false, italic: $0), Self(escaping: true, italic: $0)]
+        }
 
         /// The characters alone, escaped. No delimiters are written under this one.
-        static let plain = Self(escaping: true, cautious: true)
+        static let plain = Self(escaping: true, italic: .dropped)
     }
 
     // MARK: - Checking
@@ -277,10 +284,11 @@ enum MarkdownWriting {
         let core = MarkdownSlicing.trimmed(line, in: source)
 
         // Nothing to put a pair around: whitespace has to stay outside one, so a run that is all
-        // whitespace is written as the characters it is. On a cautious spelling, the same is done
-        // with a `_` pair the rendered text says would not read back — losing the one trait rather
-        // than the whole line.
-        guard core.length > 0, !spelling.cautious || mayClose(trait, around: core, in: source) else {
+        // whitespace is written as the characters it is. A `.dropped` spelling ends up here too,
+        // for the italics it has given up on.
+        guard core.length > 0,
+            let delimiter = delimiter(for: trait, around: core, in: source, as: spelling)
+        else {
             return content(line, of: text, as: spelling)
         }
 
@@ -289,19 +297,39 @@ enum MarkdownWriting {
             location: NSMaxRange(core), length: NSMaxRange(line) - NSMaxRange(core))
 
         return content(before, of: text, as: spelling)
-            + trait.delimiter
+            + delimiter
             + wrap(core, of: text, in: rest, as: spelling)
-            + trait.delimiter
+            + delimiter
             + content(after, of: text, as: spelling)
     }
 
-    /// Whether a pair written around `core` could be one `MarkdownSyntax` reads as this trait,
-    /// judged on the neighbours it has in the rendered text. Only `_` can fail, and only against
-    /// a word character — see `MarkdownSyntax.isWordCharacter`.
+    /// Which pair to write around `core`, or nil to write no pair and drop the trait.
+    ///
+    /// Only italic ever has a choice to make, and only where `_` would not read back. `_` is the
+    /// quieter character and the one the parser guards with the word-boundary rule that keeps
+    /// `AWS_SECRET_KEY` a name, so the ladder spends both of its permissive rungs on it before
+    /// reaching for `*`. Before `*` was written at all, those runs were dropped — which is why
+    /// `⌘I` mid-word showed italic that the next save took away.
+    private static func delimiter(
+        for trait: Emphasis, around core: NSRange, in source: NSString, as spelling: Spelling
+    ) -> String? {
+        guard !mayClose(trait, around: core, in: source) else { return trait.delimiter }
+
+        switch spelling.italic {
+        case .preferred: return trait.delimiter
+        case .fallback: return MarkdownSyntax.emphasisAlternate
+        case .dropped: return nil
+        }
+    }
+
+    /// Whether a `_` pair written around `core` could be one `MarkdownSyntax` reads as italic,
+    /// judged on the neighbours it has in the rendered text. True for every other trait, whose
+    /// delimiters mind no boundaries — see `MarkdownSyntax.isWordCharacter`.
     ///
     /// A lower bound, not an answer: the delimiters this writer is about to put between `core`
     /// and those neighbours are not here to be seen, so a pair that would have read back can
-    /// still be refused. `Spelling.cautious` is where that is the right trade and says why.
+    /// still be refused. Which is why refusing it decides nothing on its own — `Spelling.Italic`
+    /// is what a refusal costs, and each rung of the ladder pays more for it than the last.
     private static func mayClose(
         _ trait: Emphasis, around core: NSRange, in source: NSString
     ) -> Bool {

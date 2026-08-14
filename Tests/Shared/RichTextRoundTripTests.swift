@@ -43,6 +43,8 @@ struct RichTextRoundTripTests {
             "1. first\n2. second",
             "**one**\nplain\n_two_",
             "AWS_SECRET_KEY=abc",
+            "Test*ing* here",
+            "foo*bar*",
             "2 * 3 * 4",
             "chmod +x *.sh here",
             "trailing spaces   \nand a tab\tinside",
@@ -246,6 +248,38 @@ struct RichTextRoundTripTests {
     @Test(arguments: ["AWS_SECRET_KEY", "snake_case_name", "__init__"])
     func anUnderscoreInsideAWordIsNotItalic(_ markdown: String) {
         #expect(roundTrip(markdown) == markdown)
+    }
+
+    /// Which is what `*` is for. Italic against a word character has no `_` spelling at all, so
+    /// the writer used to drop it — ⌘I mid-word showed italic the next save took away.
+    @Test(arguments: [
+        (NSRange(location: 4, length: 3), "Test*ing*"),  // against the word behind it
+        (NSRange(location: 0, length: 4), "*Test*ing"),  // and the word ahead
+        (NSRange(location: 2, length: 3), "Te*sti*ng")  // and both
+    ])
+    func italicAgainstAWordCharacterIsWrittenWithAsterisks(run: NSRange, expected: String) {
+        let text = rendered("Testing")
+        MarkdownStyling.restyle(text, over: run) { $0.italicized() }
+
+        #expect(MarkdownWriting.markdown(from: text) == expected)
+        #expect(roundTripIsStable(expected), "and it reads back as what it was written from")
+    }
+
+    /// `_` stays the preferred spelling wherever it reads back, including where the conservative
+    /// test says it would not — the `**` between the run and the word is what makes it fine.
+    @Test(arguments: ["_keys_", "the **_hard_**ware", "x**_a_**y", "_a_**b**"])
+    func underscoreIsKeptWhereverItReadsBack(_ markdown: String) {
+        #expect(roundTrip(markdown) == markdown)
+    }
+
+    /// A loose asterisk is still an ordinary character. The writer escapes only where it must,
+    /// which is decided by writing the line and reading it again.
+    @Test(arguments: ["2 * 3 * 4", "chmod +x *.sh", "*.txt and *.md", "SELECT * FROM notes"])
+    func aLooseAsteriskIsLeftAsItIs(typed: String) {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: typed)
+
+        #expect(MarkdownWriting.markdown(from: text) == typed)
     }
 
     /// A run boundary inside a character costs neither the character nor the line's formatting.

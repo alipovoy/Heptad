@@ -133,7 +133,7 @@ struct PlainTextModeTests {
     /// one failure mode this design has that drawing the source did not.
     @Test(.bug(id: 124)) func switchingModesIsReversibleIndefinitely() throws {
         let textView = try fixture.textView()
-        let source = "- [ ] rotate ~~the~~ *keys*"
+        let source = "- [ ] rotate ~~the~~ _keys_"
         fixture.configure(plainText: false)
         textView.load(markdown: source)
 
@@ -144,8 +144,7 @@ struct PlainTextModeTests {
 
         #expect(textView.markdown == source, "Five round trips, character for character")
 
-        // "- [ ] rotate the *keys*" — `*keys*` is literal, since italic is spelled `_`.
-        #expect(textView.string == "- [ ] rotate the *keys*")
+        #expect(textView.string == "- [ ] rotate the keys", "with every delimiter gone from it")
         let storage = try #require(textView.textStorage)
         #expect(
             storage.attribute(.strikethroughStyle, at: 13, effectiveRange: nil) as? Int

@@ -12,8 +12,8 @@ import Testing
 /// The toggle itself, without a text view around it.
 ///
 /// `EditorFormattingTests` drives these through ⌘B and the real editor; this pins the decisions
-/// the rule makes on its own — which direction a mixed selection goes, and when a command
-/// declines rather than leaving the note in a state the writer would have to drop.
+/// the rule makes on its own — which direction a mixed selection goes, and that every trait is
+/// applied wherever it is asked for, since every one of them now has a spelling.
 struct AttributedFormattingTests {
 
     private let appearance = MarkdownStyling.Appearance(
@@ -74,18 +74,29 @@ struct AttributedFormattingTests {
 
     // MARK: - What it declines
 
-    /// The one rule carried over from the delimiter days. `_` is a word character in every
-    /// identifier a scratchpad holds, so italic mid-word has no spelling this app could write
-    /// back — and a command that applies one is a command whose work vanishes on save.
-    @Test func italicIsDeclinedInTheMiddleOfAWord() {
+    /// Nothing, any more. `_` cannot be written against a word character — `key_sto_re` is an
+    /// identifier to the parser, not italic — so the command used to refuse mid-word rather than
+    /// leave the note in a state the writer would drop. The writer spells that run `*` now, so
+    /// ⌘I is an ordinary toggle wherever the caret is, the way ⌘B always was.
+    @Test func italicIsAppliedInTheMiddleOfAWord() {
         let text = storage("keystore")
 
         toggle(.emphasis, over: NSRange(location: 3, length: 3), in: text)
 
-        #expect(MarkdownWriting.markdown(from: text) == "keystore")
+        #expect(MarkdownWriting.markdown(from: text) == "key*sto*re")
     }
 
-    /// Bold has no such rule: `**` is nobody's identifier.
+    /// And taking it off part of an italic word leaves the rest italic, which is the same rule
+    /// seen from the other side: `foo_bar_` has no spelling, `foo*bar*` does.
+    @Test func takingItalicOffPartOfAWordLeavesTheRest() {
+        let text = storage("_foobar_")
+
+        toggle(.emphasis, over: NSRange(location: 0, length: 3), in: text)
+
+        #expect(MarkdownWriting.markdown(from: text) == "foo*bar*")
+    }
+
+    /// Bold never needed the rule: `**` is nobody's identifier.
     @Test func boldIsAppliedInTheMiddleOfAWord() {
         let text = storage("keystore")
 
