@@ -203,15 +203,26 @@ private enum PlainTextPasteboardTestError: Error {
         #expect(styled.markdownRepresentation() == "[docs](https://example.com)")
     }
 
-    /// `MarkdownSyntax` does not parse inside a link's label, so emphasis written there could
-    /// never be read back — it would sit in the note as literal asterisks with no command able to
-    /// remove them. The link wins and the traits are dropped, which is the rule the whole
-    /// conversion exists to hold.
-    @Test func aBoldLinkKeepsTheLinkAndDropsTheBold() throws {
+    /// `MarkdownSyntax` does not parse inside a link's label, so emphasis over a link is written
+    /// *around* it. That is a spelling the parser reads (`MarkdownSyntaxTests`
+    /// `aLinkNestsButItsLabelIsNotParsed`), so the trait survives the save it used to be dropped
+    /// by — and ⌘B can take it off again, which is the rule the whole conversion exists to hold.
+    @Test func aBoldLinkKeepsBothTheLinkAndTheBold() throws {
         let url = try #require(URL(string: "https://example.com"))
         let styled = NSAttributedString(
             string: "docs",
             attributes: [.link: url, .font: NSFont.boldSystemFont(ofSize: 13)])
+
+        #expect(styled.markdownRepresentation() == "**[docs](https://example.com)**")
+    }
+
+    /// The pair has to go around the whole link — the label is not parsed, so there is nowhere
+    /// else to put it. A trait covering only part of one has no spelling and is dropped.
+    @Test func boldOverPartOfALinkIsDropped() throws {
+        let url = try #require(URL(string: "https://example.com"))
+        let styled = NSMutableAttributedString(string: "docs", attributes: [.link: url])
+        styled.addAttribute(
+            .font, value: NSFont.boldSystemFont(ofSize: 13), range: NSRange(location: 0, length: 2))
 
         #expect(styled.markdownRepresentation() == "[docs](https://example.com)")
     }

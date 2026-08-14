@@ -71,6 +71,9 @@ enum MarkdownWriting {
 
     /// Links first, because a link's label is not parsed: `[**a**](b)` is a link whose label
     /// reads literally, so whatever is inside one is written as plain characters.
+    ///
+    /// Emphasis over a link is written *around* it — `**[docs](url)**` — which is the spelling
+    /// the parser already reads. Inside the brackets there is nowhere to put it.
     private static func emit(
         _ range: NSRange, of text: NSAttributedString, escaping: Bool
     ) -> String {
@@ -90,10 +93,34 @@ enum MarkdownWriting {
             // The destination is written as it is: a URL holding a bracket of its own is a link
             // this app cannot spell either way, and escaping inside one would only move the
             // problem into the address.
-            markdown += "[" + label + "](" + destination + ")"
+            let traits = uniform(over: subrange, in: text)
+            markdown += traits.map(\.delimiter).joined()
+                + "[" + label + "](" + destination + ")"
+                + traits.reversed().map(\.delimiter).joined()
         }
 
         return markdown
+    }
+
+    /// The traits carried by every character of `range`, in nesting order.
+    ///
+    /// A pair can only be written around the whole of a link, so a trait covering part of one
+    /// cannot be spelled at all — the label is not parsed, and there is no second place to put
+    /// the delimiters. Those are dropped here, and the per-line check above sees it.
+    private static func uniform(over range: NSRange, in text: NSAttributedString) -> [Emphasis] {
+        Emphasis.allCases.filter { trait in
+            var carried = true
+
+            text.enumerateAttributes(in: range, options: []) { attributes, _, stop in
+                guard trait.isOn(attributes) else {
+                    carried = false
+                    stop.pointee = true
+                    return
+                }
+            }
+
+            return carried
+        }
     }
 
     private static func destination(_ value: Any?) -> String? {
