@@ -135,7 +135,15 @@ enum MarkdownWriting {
     /// characters that never carried it, which is the whole reason escaping exists.
     private static func reads(_ markdown: String, as original: NSAttributedString) -> Bool {
         let rendered = RichTextRendering.attributed(from: markdown, appearance: reading)
-        guard rendered.string == original.string else { return false }
+
+        // Lengths as well as characters, and the lengths first: `String ==` is canonical
+        // equivalence while `length` counts UTF-16 units, and the two disagree — `\u{1100}\u{1161}`
+        // equals `\u{AC00}` at lengths 2 and 1. Nothing on this path renormalizes, so the loop
+        // below was never actually reading past the end of `original`; this is what makes its
+        // bound correct by construction rather than by that argument.
+        guard rendered.length == original.length, rendered.string == original.string else {
+            return false
+        }
 
         for index in 0..<rendered.length {
             let read = rendered.attributes(at: index, effectiveRange: nil)

@@ -19,13 +19,10 @@ import SwiftUI
 enum NotePalette {
     static let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]
 
-    /// The colour bold text is drawn in on note `index`, in formatted mode.
-    ///
-    /// Clamped rather than trusted. Its one production caller passes a position in the notes
-    /// array, so there is nothing out of range for it to catch there — but `colors` is fixed at
-    /// seven and an index is a plain `Int`, and a scratchpad should not trap over a colour.
+    /// The colour bold text is drawn in on note `index`, in formatted mode. `BoldTint` does the
+    /// clamping; this is here so callers read the palette rather than the type behind it.
     static func boldTint(forNoteIndex index: Int) -> BoldTint {
-        BoldTint(noteIndex: NoteSelection.clamped(index, noteCount: colors.count))
+        BoldTint(noteIndex: index)
     }
 }
 
@@ -37,6 +34,19 @@ enum NotePalette {
 /// so holding one would have re-normalized the whole buffer on every keystroke.
 struct BoldTint: Equatable {
     let noteIndex: Int
+
+    /// Clamped in the initializer rather than at the palette's door.
+    ///
+    /// The memberwise one is internal, so `BoldTint(noteIndex: 99)` compiled anywhere in the
+    /// module and `color` trapped on it — a scratchpad taken down over a colour, through the one
+    /// door the clamp beside `NotePalette.boldTint` did not cover. `BoldTintTests` reads as though
+    /// it closed this; it drove the other door.
+    ///
+    /// Clamping rather than failing for the same reason every other reader of `colors` clamps:
+    /// the index arrives from a stored selection, and `colors` is fixed at seven.
+    init(noteIndex: Int) {
+        self.noteIndex = NoteSelection.clamped(noteIndex, noteCount: NotePalette.colors.count)
+    }
 
     var color: PlatformColor { Self.tints[noteIndex] }
 

@@ -128,11 +128,17 @@ struct BoldTintTests {
 
     /// The index comes from a stored selection by the time it reaches here, the same as every
     /// other read of the palette — so it is clamped rather than trapped on.
-    @Test func anOutOfRangeNoteIndexClampsRatherThanCrashing() {
-        #expect(NotePalette.boldTint(forNoteIndex: -1) == NotePalette.boldTint(forNoteIndex: 0))
-        #expect(
-            NotePalette.boldTint(forNoteIndex: 99)
-                == NotePalette.boldTint(forNoteIndex: AppConstants.noteCount - 1))
+    ///
+    /// Both doors. `BoldTint`'s memberwise initializer is internal, so the type could be built
+    /// out of range without going past the palette function at all, and `color` subscripted a
+    /// seven-entry array with whatever it was handed.
+    @Test(arguments: [-1, 99])
+    func anOutOfRangeNoteIndexClampsRatherThanCrashing(index: Int) {
+        let expected = index < 0 ? 0 : AppConstants.noteCount - 1
+
+        #expect(NotePalette.boldTint(forNoteIndex: index) == NotePalette.boldTint(forNoteIndex: expected))
+        #expect(BoldTint(noteIndex: index).noteIndex == expected)
+        #expect(BoldTint(noteIndex: index).color == BoldTint(noteIndex: expected).color)
     }
 
     /// Every tint clears WCAG AA for body text against its own note's background, in both
