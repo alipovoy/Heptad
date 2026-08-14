@@ -35,10 +35,14 @@ enum AppConstants {
         /// Font size of the statistics line beneath the editor.
         static let statisticsFontSize: CGFloat = 11
 
-        /// Icon sizes in the macOS window chrome: the title-bar close button, and the pin
-        /// toggle, which is sized against the statistics text it sits beside rather than
-        /// against the title bar. Deliberately fixed rather than Dynamic Type — the panel is
-        /// a fixed-size menubar popover and accessibility sizes would break its layout.
+        /// The title-bar close button, and the toggles in the statistics bar — the pin, and the
+        /// plain-text switch beside it, both sized against that text rather than the title bar.
+        ///
+        /// These are the *base* sizes, not the drawn ones. On macOS they are drawn as they stand:
+        /// the panel is a fixed menubar popover and accessibility text sizes would break the
+        /// layout built around them. iOS is a full-screen window with a text size the user sets,
+        /// so its readers scale these with `@ScaledMetric` — the licence above was always about a
+        /// window iOS does not have.
         static let titleBarIconSize: CGFloat = 18
         static let pinToggleIconSize: CGFloat = 13
 

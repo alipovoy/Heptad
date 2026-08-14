@@ -24,6 +24,18 @@ struct TextStatisticsBar: View {
         /// including when the state changes by ⌘P, by dragging the panel away, or by the window
         /// hiding, which reattaches it.
         @Environment(WindowState.self) private var windowState
+
+        /// Fixed: the panel is a menubar popover and accessibility text sizes would break the
+        /// layout it is built around.
+        private let statisticsFontSize = AppConstants.Layout.statisticsFontSize
+        private let toggleIconSize = AppConstants.Layout.pinToggleIconSize
+    #else
+        /// Scaled: iOS is a full-screen window, not a popover, and its text size is one the user
+        /// sets and expects to be honoured. The same numbers, so nothing moves at the default.
+        @ScaledMetric(relativeTo: .caption2) private var statisticsFontSize =
+            AppConstants.Layout.statisticsFontSize
+        @ScaledMetric(relativeTo: .body) private var toggleIconSize =
+            AppConstants.Layout.pinToggleIconSize
     #endif
 
     var body: some View {
@@ -38,9 +50,7 @@ struct TextStatisticsBar: View {
                 pinToggle
             #endif
         }
-        .font(
-            .system(
-                size: AppConstants.Layout.statisticsFontSize, weight: .medium, design: .rounded))
+        .font(.system(size: statisticsFontSize, weight: .medium, design: .rounded))
         .padding(.vertical, 8)
         .padding(.horizontal, 14)
         .background(color.opacity(0.2))
@@ -53,7 +63,7 @@ struct TextStatisticsBar: View {
     private var plainTextToggle: some View {
         Button(action: togglePlainText) {
             Image(systemName: isPlainText ? "curlybraces" : "textformat")
-                .font(.system(size: AppConstants.Layout.pinToggleIconSize))
+                .font(.system(size: toggleIconSize))
         }
         .buttonStyle(.plain)
         #if os(macOS)
@@ -105,7 +115,7 @@ struct TextStatisticsBar: View {
                 NotificationCenter.default.post(name: .toggleWindowPin, object: nil)
             } label: {
                 Image(systemName: windowState.isPinned ? "pin.fill" : "pin.slash")
-                    .font(.system(size: AppConstants.Layout.pinToggleIconSize))
+                    .font(.system(size: toggleIconSize))
             }
             .buttonStyle(.plain)
             .focusable(false)

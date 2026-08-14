@@ -17,9 +17,17 @@ struct ColorCircle: View {
     /// rather than only the selected one, which is the same argument the label below makes.
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
-    private var size: CGFloat {
-        AppConstants.Layout.defaultFontSize * AppConstants.Layout.ColorCircle.sizeMultiplier
-    }
+    #if os(macOS)
+        /// Fixed, because the panel is a menubar popover built around these sizes.
+        private let size =
+            AppConstants.Layout.defaultFontSize * AppConstants.Layout.ColorCircle.sizeMultiplier
+    #else
+        /// Scaled, because iOS is a full-screen window whose text size the user sets — and this
+        /// row is the note switcher, the one control there is no keyboard alternative to on iOS.
+        @ScaledMetric(relativeTo: .body) private var size =
+            AppConstants.Layout.defaultFontSize * AppConstants.Layout.ColorCircle.sizeMultiplier
+    #endif
+
     private var lineWidth: CGFloat {
         AppConstants.Layout.ColorCircle.strokeLineWidth
     }
