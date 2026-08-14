@@ -102,6 +102,51 @@ struct NoteContentSaverTests {
         #expect(note.modifiedAt == firstEdit)
     }
 
+    /// Typing without a pause still reaches the store.
+    ///
+    /// Every keystroke restarts the debounce and nothing bounded how often, so at the production
+    /// interval fifty characters over three seconds produced zero writes: the paragraph existed
+    /// only in the text view, and a crash took all of it. The debounce here is longer than the
+    /// test could ever wait, so only the ceiling can satisfy this.
+    @Test func aBurstOfTypingIsWrittenAtTheCeiling() async throws {
+        let note = NoteItem(id: 0)
+        let center = NotificationCenter()
+        let saver = NoteContentSaver(
+            note: note, debounce: .seconds(30), maxDelay: .milliseconds(200),
+            notificationCenter: center)
+
+        let typing = Task { @MainActor in
+            for length in 1...100 {
+                saver.save(text: String(repeating: "a", count: length))
+                try await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        defer { typing.cancel() }
+
+        try await waitUntil("the ceiling to write the note mid-burst") { note.text.isEmpty == false }
+    }
+
+    /// And the ceiling is a ceiling, not a period: a pause resets it, so an idle editor is not
+    /// writing to the store on a timer.
+    @Test func theCeilingStartsAgainAfterASave() async throws {
+        let note = NoteItem(id: 0)
+        let center = NotificationCenter()
+        let saver = NoteContentSaver(
+            note: note, debounce: .milliseconds(50), maxDelay: .milliseconds(200),
+            notificationCenter: center)
+
+        saver.save(text: "first")
+        try await waitUntil("the debounced save to write the note") { note.text.isEmpty == false }
+
+        // Well past the ceiling measured from the first keystroke, so a burst clock that was
+        // never reset would fire this one immediately instead of debouncing it.
+        try await Task.sleep(for: .milliseconds(250))
+        saver.save(text: "second")
+
+        #expect(note.text == "first")
+        try await waitUntil("the second save to land") { note.text == "second" }
+    }
+
     @Test func flushImmediatelySavesPending() {
         let note = NoteItem(id: 0)
         let center = NotificationCenter()

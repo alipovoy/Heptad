@@ -10,6 +10,10 @@ class NoteContentSaver {
     private var saveTask: Task<Void, Never>?
     private let note: NoteItem
     private let debounce: Duration
+    private let maxDelay: Duration
+
+    /// When the current run of unbroken typing began, or nil when there is no save pending.
+    private var burstStartedAt: ContinuousClock.Instant?
 
     /// How to read the text when the debounce is up, rather than the text itself. In formatted
     /// mode producing it means writing the whole buffer out as markdown, and a keystroke should
@@ -19,10 +23,12 @@ class NoteContentSaver {
     init(
         note: NoteItem,
         debounce: Duration = AppConstants.Timing.debounceSave,
+        maxDelay: Duration = AppConstants.Timing.maxSaveDelay,
         notificationCenter: NotificationCenter = .default
     ) {
         self.note = note
         self.debounce = debounce
+        self.maxDelay = maxDelay
 
         // No removeObserver needed: selector-based observers auto-unregister on deinit.
         notificationCenter.addObserver(
@@ -39,13 +45,24 @@ class NoteContentSaver {
     }
 
     /// Debounces a write, reading the text when the write actually happens.
+    ///
+    /// The debounce is what keeps a save from being paid per keystroke, and the ceiling is what
+    /// keeps it from never being paid at all: every keystroke restarts the timer, so typing
+    /// faster than the debounce leaves the whole burst in the text view and nowhere else. The
+    /// wait is whichever of the two comes first.
     func save(_ text: @escaping @MainActor () -> String?) {
         saveTask?.cancel()
         pendingText = text
 
+        let started = burstStartedAt ?? .now
+        burstStartedAt = started
+        let wait = min(debounce, maxDelay - started.duration(to: .now))
+
         saveTask = Task {
-            try? await Task.sleep(for: debounce)
+            try? await Task.sleep(for: max(wait, .zero))
             guard !Task.isCancelled else { return }
+
+            burstStartedAt = nil
             flushPending()
         }
     }
@@ -60,6 +77,7 @@ class NoteContentSaver {
         MainActor.assumeIsolated {
             saveTask?.cancel()
             saveTask = nil
+            burstStartedAt = nil
             flushPending()
         }
     }
