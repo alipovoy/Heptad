@@ -104,6 +104,29 @@ struct PlainTextModeTests {
                 == fixture.baseFont(plainText: true))
     }
 
+    /// Toggling the showing note's mode moves the statistics bar with it.
+    ///
+    /// The toggle mutates the note SwiftUI is already showing, so `update` takes its early return
+    /// — and the conversion behind it reports nothing to `textDidChange`, the only other thing
+    /// that refreshes the counts. The bar kept the other mode's numbers until the next keystroke.
+    ///
+    /// Driven through `update` rather than `configure`, because the early return is the subject.
+    @Test func togglingTheShowingNotesModeMovesTheCountsWithIt() async throws {
+        let container = NSView()
+        let notes = [NoteItem(id: 0, text: "pass: **rotate-me**")]
+        fixture.coordinator.setup(container: container, notes: notes, selectedIndex: 0)
+        try await waitUntil("the formatted note's counts") {
+            fixture.statistics.stats == TextStats(text: "pass: rotate-me")
+        }
+
+        notes[0].isPlainText = true
+        fixture.coordinator.update(notes: notes, selectedIndex: 0)
+
+        try await waitUntil("the counts to follow the mode") {
+            fixture.statistics.stats == TextStats(text: "pass: **rotate-me**")
+        }
+    }
+
     // MARK: - Switching, in both directions
 
     /// The bug this fix exists for, in its second form: switching modes used to clear the

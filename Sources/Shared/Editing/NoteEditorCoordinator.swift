@@ -69,6 +69,13 @@ class NoteEditorCoordinator: NSObject {
             // acts on the note, not on the view, and the view is cached across updates.
             if let editorView = editorViews[note.id] {
                 configure(editorView, appearance: appearance(forNoteId: note.id))
+
+                // A mode step rewrites the buffer, and the counters describe what is on screen.
+                // Nothing else refreshes them on this path: the conversion goes through
+                // `setAttributedString`, which reports to the storage delegate and not to
+                // `textDidChange`, so the bar kept the other mode's numbers until the next
+                // keystroke.
+                updateStats(plainText: plainText(of: editorView), for: note.id)
             }
             return
         }

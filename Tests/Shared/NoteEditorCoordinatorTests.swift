@@ -32,6 +32,9 @@ struct NoteEditorCoordinatorTests {
 
         #expect(coordinator.resignedViews.isEmpty)
         #expect(coordinator.madeViewNoteIds == [0])  // and so no second saver: same guard
+        #expect(
+            coordinator.configuredNoteIds == [0, 0],
+            "but it is repainted: this is the only path a mode change on the showing note takes")
         #expect(container.subviews.count == 1)
         #expect(container.subviews.first === showing)
         #expect(container.constraints.count == 4)  // not pinned a second time either

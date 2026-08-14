@@ -14,8 +14,14 @@ final class MarkdownEditorFixture {
     let coordinator: MacRichTextEditor.Coordinator
     let scrollView: NSScrollView
 
+    /// The same object the coordinator reports counts into, so a test can read the numbers the
+    /// statistics bar would be showing.
+    let statistics: EditorStatistics
+
     init() throws {
-        coordinator = makeTestCoordinator()
+        let statistics = EditorStatistics()
+        self.statistics = statistics
+        coordinator = makeTestCoordinator(statistics: statistics)
         scrollView = try #require(
             coordinator.makeEditorView(for: NoteItem(id: 0)) as? NSScrollView)
     }
