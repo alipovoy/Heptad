@@ -39,7 +39,7 @@ enum MarkdownWriting {
     static func markdown(from attributed: NSAttributedString) -> String {
         let whole = NSRange(location: 0, length: attributed.length)
 
-        return lines(of: whole, in: attributed).reduce(into: "") { markdown, line in
+        return MarkdownSlicing.lines(of: whole, in: attributed).reduce(into: "") { markdown, line in
             let original = attributed.attributedSubstring(from: line)
 
             for spelling in Spelling.ladder {
@@ -108,15 +108,36 @@ enum MarkdownWriting {
 
         for index in 0..<rendered.length {
             let read = rendered.attributes(at: index, effectiveRange: nil)
-            let intended = original.attributes(at: index, effectiveRange: nil)
+            let intended = intent(of: original, at: index)
             let link = destination(read[.link])
 
-            guard Emphasis.allCases.allSatisfy({ !$0.isOn(read) || $0.isOn(intended) }),
-                link == nil || link == destination(intended[.link])
+            guard Emphasis.allCases.allSatisfy({ trait in
+                    !trait.isOn(read) || intended.contains(where: trait.isOn)
+                }),
+                link == nil || intended.contains(where: { link == destination($0[.link]) })
             else { return false }
         }
 
         return true
+    }
+
+    /// What the note means the character at `index` to carry — both halves of it, when it has two.
+    ///
+    /// A surrogate pair is one character across two indices, and an attribute may start between
+    /// them. `MarkdownSlicing.aligned` moves the writer's boundaries off that split, so the lead
+    /// half comes back carrying what the trail half was given; reading that as formatting
+    /// appearing out of nowhere would send the line to a candidate that keeps less.
+    private static func intent(
+        of original: NSAttributedString, at index: Int
+    ) -> [[NSAttributedString.Key: Any]] {
+        var halves = [original.attributes(at: index, effectiveRange: nil)]
+        let source = original.string as NSString
+
+        if index + 1 < source.length, UTF16.isLeadSurrogate(source.character(at: index)) {
+            halves.append(original.attributes(at: index + 1, effectiveRange: nil))
+        }
+
+        return halves
     }
 
     /// The appearance the check reads with. Only the traits are compared, and those do not depend
@@ -143,7 +164,7 @@ enum MarkdownWriting {
             // line, so a link carrying one is a link that reaches the end of its line, not one
             // spanning two — and writing the `\n` inside the brackets is what used to drop it
             // everywhere except the note's last line, where there is no terminator to carry.
-            let core = withoutTerminator(subrange, in: source)
+            let core = MarkdownSlicing.withoutTerminator(subrange, in: source)
 
             guard let destination = destination(value), core.length > 0 else {
                 markdown += wrap(subrange, of: text, in: Emphasis.allCases, as: spelling)
@@ -164,17 +185,6 @@ enum MarkdownWriting {
         }
 
         return markdown
-    }
-
-    /// `range` without the line terminator it ends with, if it ends with one.
-    private static func withoutTerminator(_ range: NSRange, in source: NSString) -> NSRange {
-        var end = NSMaxRange(range)
-
-        while end > range.location, MarkdownSyntax.isNewline(source.character(at: end - 1)) {
-            end -= 1
-        }
-
-        return NSRange(location: range.location, length: end - range.location)
     }
 
     /// The traits carried by every character of `range`, in nesting order.
@@ -220,13 +230,13 @@ enum MarkdownWriting {
         let rest = Array(traits.dropFirst())
 
         var markdown = ""
-        for section in sections(of: range, in: text, carrying: trait) {
+        for section in MarkdownSlicing.sections(of: range, in: text, carrying: trait) {
             guard section.isOn else {
                 markdown += wrap(section.range, of: text, in: rest, as: spelling)
                 continue
             }
 
-            for line in lines(of: section.range, in: text) {
+            for line in MarkdownSlicing.lines(of: section.range, in: text) {
                 markdown += delimited(line, of: text, with: trait, then: rest, as: spelling)
             }
         }
@@ -240,7 +250,7 @@ enum MarkdownWriting {
         as spelling: Spelling
     ) -> String {
         let source = text.string as NSString
-        let core = trimmed(line, in: source)
+        let core = MarkdownSlicing.trimmed(line, in: source)
 
         // Nothing to put a pair around: whitespace has to stay outside one, so a run that is all
         // whitespace is written as the characters it is. On a cautious spelling, the same is done
@@ -284,57 +294,6 @@ enum MarkdownWriting {
         return true
     }
 
-    // MARK: - Slicing
-
-    /// `range` split into stretches that do and do not carry `trait`, in order.
-    private static func sections(
-        of range: NSRange, in text: NSAttributedString, carrying trait: Emphasis
-    ) -> [(range: NSRange, isOn: Bool)] {
-        var sections: [(range: NSRange, isOn: Bool)] = []
-
-        text.enumerateAttributes(in: range, options: []) { attributes, subrange, _ in
-            let isOn = trait.isOn(attributes)
-
-            // Runs differing in something this trait does not care about are one stretch.
-            if var last = sections.last, last.isOn == isOn {
-                last.range = NSUnionRange(last.range, subrange)
-                sections[sections.count - 1] = last
-            } else {
-                sections.append((subrange, isOn))
-            }
-        }
-
-        return sections
-    }
-
-    /// `range` split at its line breaks, each newline kept with the line it ends.
-    private static func lines(of range: NSRange, in text: NSAttributedString) -> [NSRange] {
-        let source = text.string as NSString
-        var lines: [NSRange] = []
-        var cursor = range.location
-
-        while cursor < NSMaxRange(range) {
-            let line = source.lineRange(for: NSRange(location: cursor, length: 0))
-            let clipped = NSIntersectionRange(line, range)
-            guard clipped.length > 0 else { break }
-
-            lines.append(clipped)
-            cursor = NSMaxRange(line)
-        }
-
-        return lines
-    }
-
-    private static func trimmed(_ range: NSRange, in source: NSString) -> NSRange {
-        var start = range.location
-        var end = NSMaxRange(range)
-
-        while start < end, MarkdownSyntax.isWhitespace(source.character(at: start)) { start += 1 }
-        while end > start, MarkdownSyntax.isWhitespace(source.character(at: end - 1)) { end -= 1 }
-
-        return NSRange(location: start, length: end - start)
-    }
-
     // MARK: - Characters
 
     /// The user's own characters, with a backslash in front of every one that would otherwise be
@@ -352,11 +311,12 @@ enum MarkdownWriting {
     private static func content(
         _ range: NSRange, of text: NSAttributedString, as spelling: Spelling
     ) -> String {
-        guard range.length > 0 else { return "" }
         let source = text.string as NSString
+        let range = MarkdownSlicing.aligned(range, in: source)
+        guard range.length > 0 else { return "" }
         guard spelling.escaping else { return source.substring(with: range) }
 
-        let marker = markerPrefix(of: range, in: source)
+        let marker = MarkdownSlicing.markerPrefix(of: range, in: source)
         let rest = NSRange(
             location: range.location + marker, length: range.length - marker)
 
@@ -365,19 +325,5 @@ enum MarkdownWriting {
                 if MarkdownSyntax.isEscapable(character) { escaped.append(MarkdownSyntax.escape) }
                 escaped.append(character)
             }
-    }
-
-    /// How much of `range` is the leading list marker of the line it starts on, in UTF-16 units.
-    ///
-    /// Asked of the line rather than of `range`, because `range` is whatever slice of it the run
-    /// boundaries produced — the marker is only ever at the head of the line, and only the part
-    /// of it this slice holds is left alone.
-    private static func markerPrefix(of range: NSRange, in source: NSString) -> Int {
-        let line = source.lineRange(for: NSRange(location: range.location, length: 0))
-        guard let length = ListContinuation.markerLength(on: source.substring(with: line)) else {
-            return 0
-        }
-
-        return max(0, min(line.location + length, NSMaxRange(range)) - range.location)
     }
 }

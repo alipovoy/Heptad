@@ -248,6 +248,21 @@ struct RichTextRoundTripTests {
         #expect(roundTrip(markdown) == markdown)
     }
 
+    /// A run boundary inside a character costs neither the character nor the line's formatting.
+    ///
+    /// Nothing stops an attribute from starting between the two halves of a surrogate pair, and
+    /// `substring(with:)` bridges a half to U+FFFD — `a🔑b` was stored with two replacement
+    /// characters in it, which no later edit undoes. The ladder now keeps the characters
+    /// whatever happens, so what this pins is the rest: the boundary moves off the pair, and the
+    /// line keeps the run it was carrying.
+    @Test func aRunBoundaryInsideACharacterDoesNotCostTheCharacter() {
+        // The bold starts on the second half of the pair, which is an offset nothing prevents.
+        let text = rendered("a🔑b")
+        MarkdownStyling.restyle(text, over: NSRange(location: 2, length: 2)) { $0.bolded() }
+
+        #expect(MarkdownWriting.markdown(from: text) == "a**🔑b**")
+    }
+
     // MARK: - The line the check rejects twice
 
     /// A link this app cannot spell used to be written anyway, permanently changing the note's
