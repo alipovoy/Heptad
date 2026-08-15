@@ -112,6 +112,12 @@ struct ContentView: View {
                 ticker.start()
             }
             .onReceive(NotificationCenter.default.publisher(for: .windowDidHide)) { _ in
+                // `WindowManager.hide` has already asked the savers to flush — this is the half it
+                // cannot do, having no model context. The second post is inert (nothing is pending
+                // by now) and keeps one name for "make the notes durable". Without it, a dismissal
+                // was durable only because SwiftData's autosave happens to fire on the
+                // deactivation that follows.
+                flushPendingSaves()
                 ticker.stop()
             }
         #endif
