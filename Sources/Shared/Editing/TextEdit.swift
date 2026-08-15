@@ -8,27 +8,18 @@ import Foundation
 
 /// A replacement to make in a text view, in the view's own UTF-16 coordinates.
 ///
-/// Shared by every command that edits text rather than attributes: list continuation,
-/// checkboxes, and the markdown formatting commands. The rule that produces one is pure string
-/// work and is what the tests drive; applying it belongs to the platform text views, which are
-/// what put it on the per-note undo stack.
+/// Shared by every command that edits text rather than attributes: list continuation and
+/// checkboxes. The rule that produces one is pure string work and is what the tests drive;
+/// applying it belongs to the platform text views, which are what put it on the per-note undo
+/// stack.
+///
+/// The caret is left where the text system puts it, at the end of the replacement, which is where
+/// both commands want it. There used to be a `selection` here to override that, described as
+/// load-bearing for `⌘B` — it was, before #124 made formatting an attribute toggle that changes no
+/// characters and so has no selection to repair. Nothing had set it since.
 struct TextEdit: Equatable {
     let range: NSRange
     let replacement: String
-
-    /// Where the selection should land afterwards, in post-edit coordinates, or nil to leave
-    /// the caret where the text system puts it — at the end of the replacement.
-    ///
-    /// Load-bearing for the formatting commands: `⌘B` over a selection has to leave that same
-    /// text selected so a second `⌘B` unwraps it, and `⌘B` on a bare caret has to land *between*
-    /// the two markers it just inserted rather than after them.
-    let selection: NSRange?
-
-    init(range: NSRange, replacement: String, selection: NSRange? = nil) {
-        self.range = range
-        self.replacement = replacement
-        self.selection = selection
-    }
 }
 
 // Both branches insert with attributes the caller names, and this is the reason. Every edit that
@@ -59,10 +50,6 @@ struct TextEdit: Equatable {
 
             typingAttributes = attributes
             replace(range, withText: edit.replacement)
-
-            if let selection = edit.selection {
-                selectedRange = selection
-            }
         }
     }
 #else
@@ -80,10 +67,6 @@ struct TextEdit: Equatable {
             didChangeText()
 
             typingAttributes = attributes
-
-            if let selection = edit.selection {
-                setSelectedRange(selection)
-            }
         }
     }
 #endif
