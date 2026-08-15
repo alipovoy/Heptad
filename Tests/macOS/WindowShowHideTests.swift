@@ -194,5 +194,33 @@ extension WindowServerTests {
                 fixture.activation.activatedCurrentAppCount == activationsBefore + 1,
                 "Raising the window is useless without activation — typing would go elsewhere")
         }
+
+        /// A resized window comes back the size the user left it, across launches — the claim
+        /// `frameAutosaveName` is there for, and one nothing could check, because every fixture
+        /// turns autosaving off to stay out of the installed app's own defaults.
+        ///
+        /// This one asks for a UUID name instead and hands what AppKit wrote to a second manager,
+        /// which is a fresh launch as far as AppKit is concerned. The *origin* is deliberately not
+        /// asserted: every show starts as the panel, so it is re-anchored under the status item
+        /// whatever was saved — measured, and it is why `openingContentSize` names only a size.
+        @Test func aResizedWindowComesBackTheSizeItWasLeft() throws {
+            let resized = CGSize(width: 480, height: 360)
+
+            let first = try WindowManagerFixture(autosaving: true)
+            let window = try first.showWindow()
+            window.setContentSize(resized)
+            _ = first.manager.windowShouldClose(window)
+            let saved = try #require(
+                first.persistedFrameDescription, "AppKit wrote the frame out")
+
+            let second = try WindowManagerFixture(autosaving: true)
+            UserDefaults.standard.set(saved, forKey: "NSWindow Frame \(second.autosaveName)")
+
+            let restored = try second.showWindow()
+
+            #expect(
+                restored.contentRect(forFrameRect: restored.frame).size == resized,
+                "a new launch opens at the size the last one was left, not at the default")
+        }
     }
 }
