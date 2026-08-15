@@ -29,7 +29,8 @@ import Foundation
 /// alignment and a 24pt font, and `normalize` takes the whole lot back off. What is left is the
 /// vocabulary the commands can reach, which is the only thing `MarkdownWriting` can spell.
 enum MarkdownStyling {
-    /// The two things that decide how a note looks: its mode, and the app-wide zoom.
+    /// What decides how a note looks: its mode, the app-wide zoom, and — on iOS — the system text
+    /// size the zoom is scaled by, which arrives through `baseFont` rather than as a field.
     struct Appearance: Equatable {
         /// Monospaced, and every character of the markdown left exactly as typed — for
         /// credentials and keys, where a proportional font gets in the way, and for reading the
@@ -47,13 +48,25 @@ enum MarkdownStyling {
         /// what a caller with no note in hand gets: `MarkdownWriting` reads traits, never draws.
         let tintedNoteIndex: Int?
 
+        /// The font every attribute in the note is derived from — resolved when the appearance is
+        /// built rather than each time it is read, which is what puts the *drawn* size into this
+        /// type's identity.
+        ///
+        /// That matters because `fontSize` is not the size on screen. On iOS `editorBody` scales
+        /// it by Settings › Text Size, and none of the three fields above move when that setting
+        /// does: an appearance carrying only them compared equal across the change, so both
+        /// editors' `apply` guard swallowed the repaint and notes stayed at the old size until the
+        /// app was relaunched. Resolving here means a new appearance built after the change
+        /// differs, and every path that reconfigures — the notification, and a cached view coming
+        /// back in — repaints.
+        let baseFont: PlatformFont
+
         init(plainText: Bool, fontSize: CGFloat, tintedNoteIndex: Int? = nil) {
             self.plainText = plainText
             self.fontSize = fontSize
             self.tintedNoteIndex = tintedNoteIndex
+            self.baseFont = .editorBody(plainText: plainText, size: fontSize)
         }
-
-        var baseFont: PlatformFont { .editorBody(plainText: plainText, size: fontSize) }
 
         /// Whether this mode draws formatting rather than the characters that describe it.
         var isStyled: Bool { !plainText }

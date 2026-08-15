@@ -18,6 +18,14 @@ struct DynamicTypeTests {
     /// The base every note starts from, which the metrics scale rather than replace.
     private let base = AppConstants.Layout.defaultFontSize
 
+    /// Only the end-to-end test below needs it — a real coordinator reads the zoom from defaults,
+    /// and never from the app's own suite in a test.
+    private let scratchDefaults: ScratchDefaults
+
+    init() throws {
+        scratchDefaults = try ScratchDefaults(name: "DynamicTypeTests")
+    }
+
     private func editorPointSize(
         at category: UIContentSizeCategory, plainText: Bool = false
     ) -> CGFloat {
@@ -91,6 +99,47 @@ struct DynamicTypeTests {
                 #expect(body.italicized().pointSize == body.pointSize)
                 #expect(body.bolded().italicized().pointSize == body.pointSize)
             }
+    }
+
+    /// The whole path, on the real views: the setting changes and the characters already on screen
+    /// are redrawn at the new size.
+    ///
+    /// Everything above this measures `PlatformFont.editorBody` on its own, and all of it passed
+    /// while the feature was inert — the notification reached the coordinator, the coordinator
+    /// reconfigured the showing view, and `apply`'s `appearance != configuredStyling` guard threw
+    /// the repaint away, because none of the three fields the appearance carried had moved. Only an
+    /// assertion on the font in the text storage can see that, which is why this one goes through
+    /// the real `Coordinator` and a real `MarkdownTextView` rather than a spy.
+    ///
+    /// Posted inside `performAsCurrent` because the post is synchronous: the appearance the
+    /// coordinator builds in response is resolved under the category set here.
+    @Test func aSystemTextSizeChangeRedrawsTheNoteAlreadyOnScreen() throws {
+        let coordinator = IOSRichTextEditor.Coordinator(
+            statistics: EditorStatistics(), defaults: scratchDefaults.defaults,
+            notificationCenter: NotificationCenter())
+        let container = UIView()
+        coordinator.setup(
+            container: container, notes: [NoteItem(id: 0, text: "**pass**: rotate-me")],
+            selectedIndex: 0)
+
+        let view = try #require(container.subviews.first as? MarkdownTextView)
+        let before = try #require(font(in: view))
+
+        UITraitCollection(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge)
+            .performAsCurrent {
+                NotificationCenter.default.post(
+                    name: UIContentSizeCategory.didChangeNotification, object: nil)
+            }
+
+        let after = try #require(font(in: view))
+
+        #expect(after.pointSize > before.pointSize)
+        #expect(view.text == "pass: rotate-me", "and the text itself is untouched")
+    }
+
+    private func font(in view: MarkdownTextView) -> UIFont? {
+        guard view.textStorage.length > 0 else { return nil }
+        return view.textStorage.attribute(.font, at: 0, effectiveRange: nil) as? UIFont
     }
 
     /// The zoom stored in defaults stays the base the scaling starts from, rather than being

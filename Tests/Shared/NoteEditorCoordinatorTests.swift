@@ -196,8 +196,12 @@ struct NoteEditorCoordinatorTests {
         /// `.default` because that is where UIKit posts it and so where the coordinator listens —
         /// the one observer in this class that is not on an injected centre.
         ///
-        /// A note's font is written into its text storage when it is configured, so without this
-        /// the notes stayed at the old size until something else happened to reconfigure them.
+        /// What this pins is the routing and nothing more: the notification arrives, and the
+        /// showing note — only the showing note — is reconfigured. The spy's `configure` records
+        /// the call and paints nothing, so whether the *text* actually changes size is invisible
+        /// here, and was in fact false while this passed. `DynamicTypeTests`
+        /// `.aSystemTextSizeChangeRedrawsTheNoteAlreadyOnScreen` is the assertion that can see it,
+        /// on a real view.
         @Test func aSystemTextSizeChangeRepaintsTheShowingNote() throws {
             coordinator.setup(container: container, notes: notes, selectedIndex: 0)
             coordinator.update(notes: notes, selectedIndex: 1)
