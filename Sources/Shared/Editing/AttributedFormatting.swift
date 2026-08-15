@@ -71,14 +71,13 @@ enum AttributedFormatting {
         in storage: NSMutableAttributedString, appearance: MarkdownStyling.Appearance
     ) -> [NSAttributedString.Key: Any] {
         let core = trimmed(range, in: storage.string as NSString)
-        let applying = !isApplied(emphasis, over: core, in: storage)
 
         guard core.length > 0 else {
             return typingAttributes(
-                emphasis, applying: applying, at: range.location, in: storage,
-                appearance: appearance)
+                emphasis, at: range.location, in: storage, appearance: appearance)
         }
 
+        let applying = !isApplied(emphasis, over: core, in: storage)
         set(emphasis, applying, over: core, in: storage, appearance: appearance)
         return storage.attributes(at: core.location, effectiveRange: nil)
     }
@@ -141,8 +140,11 @@ enum AttributedFormatting {
     ///
     /// `⌘B` then typing is bold, the way it is in every other editor. Nothing is written to the
     /// buffer, so nothing is left behind if the user presses it and types nothing.
+    ///
+    /// The direction is the caret's own run inverted, decided here rather than passed in: there is
+    /// no selection to read, and `isApplied` over an empty range is false whatever the run says.
     private static func typingAttributes(
-        _ emphasis: Emphasis, applying: Bool, at caret: Int,
+        _ emphasis: Emphasis, at caret: Int,
         in storage: NSAttributedString, appearance: MarkdownStyling.Appearance
     ) -> [NSAttributedString.Key: Any] {
         let current =
