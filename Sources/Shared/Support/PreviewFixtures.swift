@@ -18,6 +18,13 @@ enum PreviewFixtures {
     /// notes below are stamped relative to the real clock instead.
     static let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
 
+    /// A ticker parked at `now`, which is what the bar takes. Never started, so the previews
+    /// measure against that anchor rather than drifting onto the real clock.
+    @MainActor
+    static func ticker() -> RelativeTimeTicker {
+        RelativeTimeTicker(now: now)
+    }
+
     /// Seven notes with a realistic mix: two with content, the rest never written to.
     static func notes() -> [NoteItem] {
         let content = [

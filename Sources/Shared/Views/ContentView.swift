@@ -128,7 +128,7 @@ struct ContentView: View {
         TextStatisticsBar(
             statistics: statistics,
             lastEditedAt: note.lastEditedAt,
-            now: ticker.now,
+            ticker: ticker,
             color: NotePalette.colors[selectedNoteIndex],
             isPlainText: note.isPlainText,
             togglePlainText: { note.isPlainText.toggle() }
