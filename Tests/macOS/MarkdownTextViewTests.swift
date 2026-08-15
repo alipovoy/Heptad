@@ -147,10 +147,12 @@ struct MarkdownTextViewTests {
             "Typing after the undo is the note's own size, not the clipboard's")
         // The clipboard's red is gone. What is there instead is the note's bold tint, because the
         // caret is still bold — a colour this app derives from the note, not one it was handed.
+        // Both sides required: two `NSColor?` compared equal vacuously if the conversion returned
+        // nil on each, which is a pass that means nothing about the colour.
         let caretColor = try #require(textView.typingAttributes[.foregroundColor] as? NSColor)
-        #expect(
-            caretColor.usingColorSpace(.sRGB)
-                == NotePalette.boldTint(forNoteIndex: 0).usingColorSpace(.sRGB))
+        let drawn = try #require(caretColor.usingColorSpace(.sRGB))
+        let tint = try #require(NotePalette.boldTint(forNoteIndex: 0).usingColorSpace(.sRGB))
+        #expect(drawn == tint)
         #expect(textView.typingAttributes[.paragraphStyle] == nil, "No alignment is left behind")
     }
 

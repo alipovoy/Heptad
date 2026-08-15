@@ -68,9 +68,25 @@ class NoteEditorCoordinator: NSObject {
     /// untinted appearance is no longer a value the text views need this never to produce: they
     /// hold their own as `nil` until configured, so the first call lands whatever it carries.
     func appearance(forNoteId id: Int) -> MarkdownStyling.Appearance {
+        appearance(plainText: modes[id] ?? false, tintedNoteIndex: paletteIndices[id])
+    }
+
+    /// The same answer for a note the caller is holding, rather than one this class has been told
+    /// about. Nothing in the app needs it — every production path arrives by id — but the test
+    /// fixture builds views without going through `update`, and hand-copying the three fields
+    /// there meant every field added to `Appearance` had to be added twice.
+    func appearance(for note: NoteItem, at index: Int) -> MarkdownStyling.Appearance {
+        appearance(plainText: note.isPlainText, tintedNoteIndex: index)
+    }
+
+    /// The one place an appearance is built: what the note asks for, plus the app-wide zoom, which
+    /// is neither caller's to know about.
+    private func appearance(
+        plainText: Bool, tintedNoteIndex: Int?
+    ) -> MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
-            plainText: modes[id] ?? false, fontSize: EditorFontSize.current(defaults),
-            tintedNoteIndex: paletteIndices[id])
+            plainText: plainText, fontSize: EditorFontSize.current(defaults),
+            tintedNoteIndex: tintedNoteIndex)
     }
 
     func setup(container: PlatformView, notes: [NoteItem], selectedIndex: Int) {

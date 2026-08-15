@@ -55,17 +55,11 @@ struct BoldTintTests {
     /// Two dynamic platform colours are never `==` to each other even when built from identical
     /// inputs, so every comparison below is made on resolved values. It is also the only way to
     /// ask what the tint actually *looks* like, which is the half of this feature that matters.
+    ///
+    /// `PlatformColor.resolved(dark:)` is the app's own — this used to fork on the platform itself,
+    /// in the same shape `NotePalette` did, so the two could have drifted while both looked right.
     private func resolved(_ color: PlatformColor, dark: Bool) -> PlatformColor {
-        #if canImport(UIKit)
-            return color.resolvedColor(
-                with: UITraitCollection(userInterfaceStyle: dark ? .dark : .light))
-        #else
-            var flattened: NSColor?
-            NSAppearance(named: dark ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance {
-                flattened = color.usingColorSpace(.sRGB)
-            }
-            return flattened ?? color
-        #endif
+        color.resolved(dark: dark) ?? color
     }
 
     /// The paper the tint is read against: `ContentView.backgroundFill` — the note's colour at
@@ -216,7 +210,9 @@ struct BoldTintTests {
     @Test(arguments: ["**_bold italic_**", "~~**struck**~~", "- **item**"])
     func everyRunCarryingBoldIsTinted(_ markdown: String) throws {
         let text = rendered(markdown, appearance)
-        let bold = text.string.count - 1
+        // `length`, not `string.count`: the attribute index is UTF-16, and the two agree only
+        // while every argument stays ASCII.
+        let bold = text.length - 1
 
         #expect(try #require(text.attribute(.font, at: bold, effectiveRange: nil) as? PlatformFont)
             .isBold)

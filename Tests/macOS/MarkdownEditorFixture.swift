@@ -54,15 +54,14 @@ final class MarkdownEditorFixture {
             sourceLocation: sourceLocation)
     }
 
-    /// The appearance the coordinator would build for a note in this mode, at the default zoom.
+    /// The appearance the coordinator would build for note 0 in this mode.
     ///
-    /// Carries note 0's bold tint, because the coordinator's does — the view under test is built
-    /// for `NoteItem(id: 0)` above. Leaving it out would let a bold run come up in the body-text
-    /// colour here and in the note's own colour in the app.
+    /// Asked of the coordinator rather than assembled here. It used to restate all three fields —
+    /// mode, zoom and tint — which is a copy that has to be updated by hand every time `Appearance`
+    /// gains one: the tint was added to it by hand, months after the field existed, and until then
+    /// a bold run came up in the body-text colour here and in the note's own colour in the app.
     func appearance(plainText: Bool) -> MarkdownStyling.Appearance {
-        MarkdownStyling.Appearance(
-            plainText: plainText, fontSize: AppConstants.Layout.defaultFontSize,
-            tintedNoteIndex: 0)
+        coordinator.appearance(for: NoteItem(id: 0, isPlainText: plainText), at: 0)
     }
 
     func baseFont(plainText: Bool) -> NSFont {

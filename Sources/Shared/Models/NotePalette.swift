@@ -69,7 +69,7 @@ enum NotePalette {
     /// The conversion does not fail for the system colours the palette holds. If it ever did,
     /// every note would tint red — wrong, but not worth taking a scratchpad down over.
     private static func hue(of color: Color) -> CGFloat {
-        guard let rgb = lightVariant(of: PlatformColor(color)) else { return 0 }
+        guard let rgb = PlatformColor(color).resolved(dark: false) else { return 0 }
 
         var hue: CGFloat = 0
         var saturation: CGFloat = 0
@@ -79,20 +79,4 @@ enum NotePalette {
 
         return hue
     }
-
-    #if canImport(UIKit)
-        private static func lightVariant(of color: PlatformColor) -> PlatformColor? {
-            color.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
-        }
-    #else
-        /// `getHue` traps on a colour that is not already in an RGB space, and a dynamic `NSColor`
-        /// is in none until it is resolved — hence both steps, inside an explicit aqua appearance.
-        private static func lightVariant(of color: PlatformColor) -> PlatformColor? {
-            var resolved: PlatformColor?
-            NSAppearance(named: .aqua)?.performAsCurrentDrawingAppearance {
-                resolved = color.usingColorSpace(.sRGB)
-            }
-            return resolved
-        }
-    #endif
 }

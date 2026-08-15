@@ -299,4 +299,22 @@ extension PlatformColor {
             .linkColor
         #endif
     }
+
+    /// This colour flattened against one appearance, in sRGB — nil when the conversion fails.
+    ///
+    /// Both steps and in this order on macOS: `getHue` and `getRed` trap on a colour that is not
+    /// already in an RGB space, and a dynamic `NSColor` is in none until it is resolved inside an
+    /// explicit appearance. The fork was written twice, once in `NotePalette` and once in
+    /// `BoldTintTests`, which is two places for the same platform difference to be got wrong.
+    func resolved(dark: Bool) -> PlatformColor? {
+        #if canImport(UIKit)
+            return resolvedColor(with: UITraitCollection(userInterfaceStyle: dark ? .dark : .light))
+        #else
+            var flattened: PlatformColor?
+            NSAppearance(named: dark ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance {
+                flattened = self.usingColorSpace(.sRGB)
+            }
+            return flattened
+        #endif
+    }
 }
