@@ -26,6 +26,9 @@ extension NSPasteboard {
         return plainTextForPaste()
     }
 
+    /// The most markup ⌘V will decode before falling back to pasting the clipboard's characters.
+    static let richPasteByteLimit = 1 << 20
+
     /// Whether the clipboard's markup is small enough to be worth decoding, which is the one
     /// thing standing between ⌘V and an unbounded main-thread stall.
     ///
@@ -44,7 +47,7 @@ extension NSPasteboard {
             total + (types.compactMap { item.data(forType: $0)?.count }.max() ?? 0)
         }
 
-        return markup <= AppConstants.richPasteByteLimit
+        return markup <= Self.richPasteByteLimit
     }
 
     /// The clipboard as plain text, whichever flavor it arrived in: what ⌘⇧V inserts.

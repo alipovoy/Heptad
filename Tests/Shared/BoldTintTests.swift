@@ -68,11 +68,15 @@ struct BoldTintTests {
         #endif
     }
 
-    /// The paper the tint is read against: `ContentView.backgroundFill` — the note's colour at one
-    /// tenth — composited over the window. Computed rather than measured off a rendered view: the
-    /// ratio being defended is a property of two colours, not of any layout.
+    /// The paper the tint is read against: `ContentView.backgroundFill` — the note's colour at
+    /// `Layout.noteTintOpacity` — composited over the window. Computed rather than measured off a
+    /// rendered view: the ratio being defended is a property of two colours, not of any layout.
+    ///
+    /// The opacity is read from the app rather than copied here, so raising the wash cannot leave
+    /// this suite passing against a background the app no longer paints.
     private func background(forNoteIndex index: Int, dark: Bool) -> PlatformColor {
         let paper: CGFloat = dark ? 0.11 : 1.0
+        let wash = CGFloat(AppConstants.Layout.noteTintOpacity)
         let note = resolved(PlatformColor(NotePalette.colors[index]), dark: dark)
 
         var red: CGFloat = 0
@@ -82,8 +86,8 @@ struct BoldTintTests {
         note.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
 
         return PlatformColor(
-            red: 0.1 * red + 0.9 * paper, green: 0.1 * green + 0.9 * paper,
-            blue: 0.1 * blue + 0.9 * paper, alpha: 1)
+            red: wash * red + (1 - wash) * paper, green: wash * green + (1 - wash) * paper,
+            blue: wash * blue + (1 - wash) * paper, alpha: 1)
     }
 
     /// WCAG relative luminance, and the ratio between two of them.

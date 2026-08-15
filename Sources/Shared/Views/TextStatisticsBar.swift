@@ -33,21 +33,29 @@ struct TextStatisticsBar: View {
 
         /// Fixed: the panel is a menubar popover and accessibility text sizes would break the
         /// layout it is built around.
-        private let statisticsFontSize = AppConstants.Layout.statisticsFontSize
-        private let toggleIconSize = AppConstants.Layout.pinToggleIconSize
+        private let statisticsFontSize = Self.baseStatisticsFontSize
+        private let toggleIconSize = Self.baseToggleIconSize
     #else
         /// Scaled: iOS is a full-screen window, not a popover, and its text size is one the user
         /// sets and expects to be honoured. The same numbers, so nothing moves at the default.
         @ScaledMetric(relativeTo: .caption2) private var statisticsFontSize =
-            AppConstants.Layout.statisticsFontSize
-        @ScaledMetric(relativeTo: .body) private var toggleIconSize =
-            AppConstants.Layout.pinToggleIconSize
+            Self.baseStatisticsFontSize
+        @ScaledMetric(relativeTo: .body) private var toggleIconSize = Self.baseToggleIconSize
     #endif
+
+    /// The sizes the two `#if` branches above start from: drawn as they stand on macOS, scaled
+    /// with Dynamic Type on iOS. Base sizes, not drawn ones — which is why they are named so.
+    private static let baseStatisticsFontSize: CGFloat = 11
+    private static let baseToggleIconSize: CGFloat = 13
 
     var body: some View {
         // What the note is on the left, what you can do to it on the right. The counts take
         // the leftover width and truncate into it, so the buttons keep the same place at every
         // window size instead of being shunted about by the length of the text beside them.
+        //
+        // The 8 here is the gap between the counts and the buttons, not the bar's own padding
+        // below — the same number twice by coincidence, so reading either from the other would
+        // tie two unrelated measurements together.
         HStack(spacing: 8) {
             countsText
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -57,11 +65,16 @@ struct TextStatisticsBar: View {
             #endif
         }
         .font(.system(size: statisticsFontSize, weight: .medium, design: .rounded))
-        .padding(.vertical, 8)
-        .padding(.horizontal, 14)
-        .background(color.opacity(0.2))
+        .padding(.vertical, AppConstants.Layout.rowInset)
+        .padding(.horizontal, AppConstants.Layout.edgeInset)
+        .background(color.opacity(Self.tintOpacity))
         .foregroundStyle(.secondary)  // Vivid text color relying on the background
     }
+
+    /// Twice the window's own wash, so the bar reads as a band across the bottom of the note
+    /// rather than as more of the note. Not the same value as `Layout.noteTintOpacity` and not
+    /// derived from it: one is the paper, this is the band on it.
+    private static let tintOpacity: Double = 0.2
 
     /// The per-note plain-text switch. It sits here rather than in the macOS title bar the
     /// issue suggested: the two icons are different widths, and anything of variable width up

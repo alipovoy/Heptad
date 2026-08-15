@@ -51,7 +51,8 @@ class WindowManager: NSObject, NSWindowDelegate {
     private(set) var anchorOrigin: NSPoint = .zero
 
     /// Distance (in points) the panel must travel from its anchor to become a pinned window.
-    private let dragToPinThreshold: CGFloat = AppConstants.Window.dragToPinThreshold
+    /// Not in `AppConstants`: this class is the only thing that measures against it.
+    static let dragToPinThreshold: CGFloat = 20
 
     /// Global event monitor for click-outside-to-dismiss, live only in panel mode.
     private var globalClickMonitor: EventMonitor?
@@ -267,16 +268,15 @@ class WindowManager: NSObject, NSWindowDelegate {
         guard movedWindow === window, isPanelMode, !isPositioningPanel else { return }
 
         // When threshold is exceeded, wait for mouse-up before transitioning.
-        if panelDragDistance(of: movedWindow) > dragToPinThreshold && pendingPinMonitor == nil {
+        if panelDragDistance(of: movedWindow) > Self.dragToPinThreshold, pendingPinMonitor == nil {
             pendingPinMonitor = EventMonitor(local: true, mask: .leftMouseUp) { [weak self] event in
-                guard let self = self else { return event }
-                // Remove the one-shot monitor
+                guard let self else { return event }
                 self.pendingPinMonitor?.stop()
                 self.pendingPinMonitor = nil
 
                 // Verify we're still in the drag-away state
                 if self.isPanelMode, let window = self.window,
-                    self.panelDragDistance(of: window) > self.dragToPinThreshold {
+                    self.panelDragDistance(of: window) > Self.dragToPinThreshold {
                     self.setPinned(true)
                 }
                 return event
@@ -366,7 +366,7 @@ class WindowManager: NSObject, NSWindowDelegate {
 
         let buttonRect = buttonWindow.convertToScreen(sender.frame)
         let xPos = buttonRect.midX - (window.frame.width / 2)
-        let yPos = buttonRect.minY - window.frame.height - 5
+        let yPos = buttonRect.minY - window.frame.height - AppConstants.Window.statusItemGap
 
         window.setFrameOrigin(NSPoint(x: xPos, y: yPos))
     }

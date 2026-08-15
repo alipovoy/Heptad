@@ -17,20 +17,31 @@ struct ColorCircle: View {
     /// rather than only the selected one, which is the same argument the label below makes.
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
+    /// A bouncy spring is exactly the shape this setting exists to suppress. What it animates is
+    /// mild — the window's wash cross-fading and the number appearing — but "mild" is the user's
+    /// call, not this view's.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The diameter, written as the number it is.
+    ///
+    /// It used to be `defaultFontSize * 1.2`, which tied the note switcher to how big *editor*
+    /// text is: raising the editor default resized the title-bar chrome, and nothing about this
+    /// row depends on the text in the note below it.
+    private static let diameter: CGFloat = 19.2
+
+    /// The number on the selected circle, as a fraction of the diameter above.
+    private static let numberScale: CGFloat = 0.8
+
+    private let lineWidth: CGFloat = 3
+
     #if os(macOS)
         /// Fixed, because the panel is a menubar popover built around these sizes.
-        private let size =
-            AppConstants.Layout.defaultFontSize * AppConstants.Layout.ColorCircle.sizeMultiplier
+        private let size = Self.diameter
     #else
         /// Scaled, because iOS is a full-screen window whose text size the user sets — and this
         /// row is the note switcher, the one control there is no keyboard alternative to on iOS.
-        @ScaledMetric(relativeTo: .body) private var size =
-            AppConstants.Layout.defaultFontSize * AppConstants.Layout.ColorCircle.sizeMultiplier
+        @ScaledMetric(relativeTo: .body) private var size = Self.diameter
     #endif
-
-    private var lineWidth: CGFloat {
-        AppConstants.Layout.ColorCircle.strokeLineWidth
-    }
 
     var body: some View {
         let isSelected = selectedNoteIndex == index
@@ -39,7 +50,7 @@ struct ColorCircle: View {
         // and a gesture is not an activation to assistive technology. macOS has ⌘1–⌘7 to fall
         // back on; iOS has nothing else at all.
         Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.6)) {
                 selectedNoteIndex = index
             }
         } label: {
@@ -86,9 +97,7 @@ struct ColorCircle: View {
             if isSelected || differentiateWithoutColor {
                 Text("\(index + 1)")
                     .font(
-                        .system(
-                            size: size * AppConstants.Layout.ColorCircle.selectedNumberFontScale,
-                            weight: .bold)
+                        .system(size: size * Self.numberScale, weight: .bold)
                     )
                     .foregroundStyle(isSelected || isEmpty ? Color.white : assignedColor)
             }

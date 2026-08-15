@@ -14,6 +14,14 @@ extension Notification.Name {
 /// no markdown spelling — and so the one piece that could not survive the swap to a text buffer
 /// (#117). A zoom level is what it always really was for a scratchpad.
 enum EditorFontSize {
+    /// What `⌘+` and `⌘-` step between. Both ends matter: without the ceiling a held `⌘+` grows the
+    /// font without limit, and without the floor `⌘-` walks it down through zero.
+    ///
+    /// Here rather than in `AppConstants` because `clamped` below is the only thing that reads
+    /// them, and its comment is already the explanation they need.
+    static let minimumSize: CGFloat = 8
+    static let maximumSize: CGFloat = 72
+
     /// The current size, clamped on read: the value is plain `UserDefaults` and is writable from
     /// outside the app, and a junk one would otherwise reach text layout.
     ///
@@ -56,6 +64,6 @@ enum EditorFontSize {
     private static func clamped(_ size: CGFloat) -> CGFloat {
         guard size.isFinite else { return AppConstants.Layout.defaultFontSize }
 
-        return min(max(size, AppConstants.Layout.minFontSize), AppConstants.Layout.maxFontSize)
+        return min(max(size, minimumSize), maximumSize)
     }
 }

@@ -37,7 +37,7 @@ struct WindowDragToPinTests {
         let buttonRect = try #require(edgeButton.window?.convertToScreen(edgeButton.frame))
         try #require(
             abs(window.frame.origin.x - (buttonRect.midX - window.frame.width / 2))
-                > AppConstants.Window.dragToPinThreshold,
+                > WindowManager.dragToPinThreshold,
             "AppKit has to have corrected the frame for this to be testing the correction at all")
 
         #expect(
@@ -64,7 +64,7 @@ struct WindowDragToPinTests {
         #expect(manager.panelDragDistance(of: window) == 0)
         #expect(
             hypot(window.frame.origin.x, window.frame.origin.y)
-                > AppConstants.Window.dragToPinThreshold,
+                > WindowManager.dragToPinThreshold,
             "Measuring from the screen origin would have armed the gesture already")
 
         let anchor = manager.anchorOrigin
@@ -76,8 +76,8 @@ struct WindowDragToPinTests {
     @Test(
         .bug(id: 44),
         arguments: [
-            (AppConstants.Window.dragToPinThreshold - 5, false),
-            (AppConstants.Window.dragToPinThreshold + 30, true)
+            (WindowManager.dragToPinThreshold - 5, false),
+            (WindowManager.dragToPinThreshold + 30, true)
         ])
     func theThresholdDecidesWhetherADragArmsThePinTransition(
         travelled: CGFloat, arms: Bool
@@ -119,7 +119,7 @@ struct WindowDragToPinTests {
         // gesture if `windowDidMove` did not check which window actually moved.
         let other = fixture.makeStandInWindow()
         try #require(
-            manager.panelDragDistance(of: other) > AppConstants.Window.dragToPinThreshold,
+            manager.panelDragDistance(of: other) > WindowManager.dragToPinThreshold,
             "This window has to be past the threshold for the identity guard to be under test")
 
         manager.windowDidMove(fixture.moveNotification(for: other))

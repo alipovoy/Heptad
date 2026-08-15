@@ -170,7 +170,7 @@ struct NoteEditorCoordinatorTests {
         let scratch = try ScratchDefaults(name: "NoteEditorCoordinatorTests")
         let center = NotificationCenter()
         scratch.defaults.set(
-            Double(AppConstants.Layout.maxFontSize), forKey: AppConstants.editorFontSizeKey)
+            Double(EditorFontSize.maximumSize), forKey: AppConstants.editorFontSizeKey)
         let zoomed = SpyEditorCoordinator(defaults: scratch.defaults, notificationCenter: center)
 
         zoomed.setup(container: container, notes: notes, selectedIndex: 0)

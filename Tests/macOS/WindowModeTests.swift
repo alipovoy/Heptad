@@ -18,6 +18,12 @@ struct WindowModeTests {
         fixture = try WindowManagerFixture()
     }
 
+    /// Where the panel's bottom edge belongs when it is hanging under the status item — read from
+    /// the same constant the manager positions with, rather than restating its arithmetic.
+    private func anchoredY(of window: NSWindow, under button: CGRect) -> CGFloat {
+        button.minY - window.frame.height - AppConstants.Window.statusItemGap
+    }
+
     @Test func toggleWindowCreatesPanel() throws {
         let window = try fixture.showWindow()
 
@@ -102,7 +108,7 @@ struct WindowModeTests {
         #expect(manager.isPanelMode, "Should be back in panel mode")
         #expect(window.frame.origin == manager.anchorOrigin, "measured from where it was parked")
         #expect(
-            manager.panelDragDistance(of: window) <= AppConstants.Window.dragToPinThreshold,
+            manager.panelDragDistance(of: window) <= WindowManager.dragToPinThreshold,
             "so unpinning in place does not read as a drag away")
     }
 
@@ -146,7 +152,7 @@ struct WindowModeTests {
 
         let buttonRect = try #require(button.window?.convertToScreen(button.frame))
         #expect(
-            abs(window.frame.origin.y - (buttonRect.minY - window.frame.height - 5)) <= 1,
+            abs(window.frame.origin.y - anchoredY(of: window, under: buttonRect)) <= 1,
             "A reattached window is anchored under the status item, not left where it was parked")
     }
 
@@ -172,6 +178,6 @@ struct WindowModeTests {
         let idealX = buttonRect.midX - window.frame.width / 2
         let expectedX = min(idealX, screen.visibleFrame.maxX - window.frame.width)
         #expect(abs(window.frame.origin.x - expectedX) <= 1)
-        #expect(abs(window.frame.origin.y - (buttonRect.minY - window.frame.height - 5)) <= 1)
+        #expect(abs(window.frame.origin.y - anchoredY(of: window, under: buttonRect)) <= 1)
     }
 }
