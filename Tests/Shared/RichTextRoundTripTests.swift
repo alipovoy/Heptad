@@ -237,6 +237,21 @@ struct RichTextRoundTripTests {
         #expect(roundTrip(markdown) == markdown)
     }
 
+    /// And it survives there on a line the ladder has already left.
+    ///
+    /// The retreat is per *line*, not per run: one `_` the writer cannot spell — ⌘I mid-word, the
+    /// case `*` exists for — costs every run on the line its `.preferred` spelling. `.fallback` then
+    /// respelled these pairs `*` too, and `***hard***` is a run of asterisks no parser resolves, so
+    /// that rung failed as well and `.dropped` took the italic off *both* runs: `the **hard**ware`,
+    /// a save removing formatting the rung above it could spell. Only the link half of this was
+    /// fixed first, which is the more exotic path by far — `x*i*y the **_hard_**ware` is one press
+    /// of ⌘I away from any note. The `~~` row lost nothing and churned the stored spelling from `_`
+    /// to `*`, which a reader in plain mode sees.
+    @Test(arguments: ["x*i*y the **_hard_**ware", "x*i*y a **_b_**c", "x*i*y ~~_a_~~b"])
+    func italicSurvivesBesideAnotherConstructOnALineTheLadderHasLeft(_ markdown: String) {
+        #expect(roundTrip(markdown) == markdown)
+    }
+
     /// And the rule that refusal existed to protect is still kept: `_` inside a word is an
     /// identifier, not italic, so the parser never reads one and the writer never writes one.
     @Test(arguments: ["AWS_SECRET_KEY", "snake_case_name", "__init__"])

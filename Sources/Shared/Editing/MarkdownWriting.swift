@@ -226,19 +226,27 @@ enum MarkdownWriting {
     /// Nothing here splits by line: `markdown(from:)` did that and calls `emit` once per line, so
     /// no section reaching this can span a terminator. A second split used to sit on the `isOn`
     /// branch — instrumented at 9 of 9 sections returning a single range.
+    ///
+    /// `shielded` travels on to the section that *is* the whole of `range`, and to no other: only
+    /// that one has the caller's pair against both of its ends with none of this range's own
+    /// characters in between. See `delimiter(for:around:in:as:shielded:)`.
     private static func wrap(
         _ range: NSRange, of text: NSAttributedString, in traits: [Emphasis],
-        as spelling: Spelling
+        as spelling: Spelling, shielded: Bool = false
     ) -> String {
         guard let trait = traits.first else { return content(range, of: text, as: spelling) }
         let rest = Array(traits.dropFirst())
 
         return MarkdownSlicing.sections(of: range, in: text, carrying: trait)
             .reduce(into: "") { markdown, section in
+                let flush = shielded && NSEqualRanges(section.range, range)
+
                 markdown +=
                     section.isOn
-                    ? delimited(section.range, of: text, with: trait, then: rest, as: spelling)
-                    : wrap(section.range, of: text, in: rest, as: spelling)
+                    ? delimited(
+                        section.range, of: text, with: trait, then: rest, as: spelling,
+                        shielded: flush)
+                    : wrap(section.range, of: text, in: rest, as: spelling, shielded: flush)
             }
     }
 
@@ -251,7 +259,7 @@ enum MarkdownWriting {
     /// Return no longer continues it and `⌘⇧U` finds nothing to toggle.
     private static func delimited(
         _ line: NSRange, of text: NSAttributedString, with trait: Emphasis, then rest: [Emphasis],
-        as spelling: Spelling
+        as spelling: Spelling, shielded: Bool = false
     ) -> String {
         let source = text.string as NSString
         let marker = MarkdownSlicing.markerPrefix(of: line, in: source)
@@ -261,8 +269,12 @@ enum MarkdownWriting {
         // Nothing to put a pair around: whitespace has to stay outside one, so a run that is all
         // whitespace is written as the characters it is. A `.dropped` spelling ends up here too,
         // for the italics it has given up on.
+        // The caller's shield reaches this pair only when the pair goes where the line does: a
+        // marker or trimmed whitespace written before it puts a character of the note in between.
         guard core.length > 0,
-            let delimiter = delimiter(for: trait, around: core, in: source, as: spelling)
+            let delimiter = delimiter(
+                for: trait, around: core, in: source, as: spelling,
+                shielded: shielded && NSEqualRanges(core, line))
         else {
             return content(line, of: text, as: spelling)
         }
@@ -271,9 +283,11 @@ enum MarkdownWriting {
         let after = NSRange(
             location: NSMaxRange(core), length: NSMaxRange(line) - NSMaxRange(core))
 
+        // Whatever `rest` writes around the whole of `core` is written between this pair, so it is
+        // shielded by it — the `_` of `the **_hard_**ware` is against an asterisk, not the `e`.
         return content(before, of: text, as: spelling)
             + delimiter
-            + wrap(core, of: text, in: rest, as: spelling)
+            + wrap(core, of: text, in: rest, as: spelling, shielded: true)
             + delimiter
             + content(after, of: text, as: spelling)
     }
@@ -287,9 +301,15 @@ enum MarkdownWriting {
     /// `⌘I` mid-word showed italic that the next save took away.
     ///
     /// `shielded` is the caller saying it has already written a pair immediately outside this one,
-    /// which settles the boundary question `mayClose` can only guess at. It buys `.fallback`
-    /// nothing to reach for `*` there — `***` is the one place `*` reads *worse* than `_` — and it
-    /// deliberately does not reprieve `.dropped`: the retreat has to stay monotone, or a shielded
+    /// which settles the boundary question `mayClose` can only guess at — the delimiter beside this
+    /// one is not a word character, whatever the rendered text had there. It buys `.fallback`
+    /// nothing to reach for `*` in that position: `***hard***` is the one place `*` reads *worse*
+    /// than `_`, since no parser resolves the run of three as this meant it. So the rung failed too
+    /// and the line retreated to `.dropped`, which is how `the **_hard_**ware` — this codebase's own
+    /// example of a `_` that reads back perfectly — came out as `the **hard**ware` whenever some
+    /// *other* run on its line was one `_` could not spell.
+    ///
+    /// It deliberately does not reprieve `.dropped`: the retreat has to stay monotone, or a shielded
     /// pair that still fails to read back would be written again by every rung and take the line
     /// all the way to `Spelling.plain`, where a link loses its destination.
     private static func delimiter(
