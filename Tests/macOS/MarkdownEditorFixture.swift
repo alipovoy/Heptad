@@ -22,8 +22,7 @@ final class MarkdownEditorFixture {
         let statistics = EditorStatistics()
         self.statistics = statistics
         coordinator = makeTestCoordinator(statistics: statistics)
-        scrollView = try #require(
-            coordinator.makeEditorView(for: NoteItem(id: 0)) as? NSScrollView)
+        scrollView = try #require(coordinator.makeEditorView() as? NSScrollView)
     }
 
     func textView() throws -> MarkdownTextView {

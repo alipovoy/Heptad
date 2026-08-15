@@ -31,7 +31,7 @@ struct IOSRichTextEditor: UIViewRepresentable {
             super.init()
         }
 
-        override func makeEditorView(for note: NoteItem) -> UIView {
+        override func makeEditorView() -> UIView {
             let textView = MarkdownTextView()
 
             textView.delegate = self

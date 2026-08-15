@@ -20,9 +20,9 @@ class NoteEditorCoordinator: NSObject {
     /// Each note's mode, by id, so `appearance(forNoteId:)` can answer with no `NoteItem` in
     /// hand — the zoom repaint has an id and nothing else.
     ///
-    /// Modes rather than the notes themselves: `configure` asks a note for `isPlainText` and
-    /// nothing else, so keeping the models alive only to look one flag up would retain seven
-    /// managed objects for the coordinator's lifetime as a lookup table.
+    /// Two flags rather than the notes themselves, which is a smaller table and not a lighter one:
+    /// `savers` holds a `NoteItem` per visited note for the coordinator's whole life anyway. This
+    /// used to claim it avoided that retention.
     private var modes: [Int: Bool] = [:]
 
     /// Each note's palette index — its position in the array everything above this class
@@ -154,7 +154,7 @@ class NoteEditorCoordinator: NSObject {
     /// What survives is that it records the appearance, which is what `load` then renders
     /// through. Reverse the two and the note is rendered in whatever the view was before.
     private func makeCachedEditorView(for note: NoteItem) -> PlatformView {
-        let editorView = makeEditorView(for: note)
+        let editorView = makeEditorView()
         editorViews[note.id] = editorView
         savers[note.id] = NoteContentSaver(note: note)
 
@@ -235,11 +235,13 @@ class NoteEditorCoordinator: NSObject {
 
     // MARK: - Platform hooks
 
-    /// Creates the view to install for the given note: the editor's chrome, in the state a new
-    /// text view starts in. The note's own mode and content arrive through `configure` and
-    /// `load`, which is what keeps either of them from having a second implementation here.
-    func makeEditorView(for note: NoteItem) -> PlatformView {
-        fatalError("Subclasses must override makeEditorView(for:)")
+    /// Creates the view to install: the editor's chrome, in the state a new text view starts in.
+    ///
+    /// Takes no note, and that is the contract rather than an omission — a note's mode and
+    /// content arrive through `configure` and `load`, which is what keeps either of them from
+    /// having a second implementation here. It used to take one that neither platform read.
+    func makeEditorView() -> PlatformView {
+        fatalError("Subclasses must override makeEditorView()")
     }
 
     /// Applies a note's mode, and the app-wide zoom, to a view.
