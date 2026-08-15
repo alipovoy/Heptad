@@ -78,26 +78,20 @@ enum MarkdownSyntax {
     }
 
     /// Every styled run in `text`, in source order.
-    static func spans(in text: NSString) -> [Span] {
-        spans(in: text, over: NSRange(location: 0, length: text.length))
-    }
-
-    /// Every styled run on the lines `range` touches.
     ///
-    /// Line-scoped parsing is what makes this range safe to ask for: a construct never spans
-    /// lines, so a line's styling depends on that line and nothing else, and repainting after an
-    /// edit never has to look further than the lines the edit landed on.
+    /// Parsed line by line, because a construct never spans lines — which is also what would make
+    /// a range-scoped overload safe, if anything wanted one. Nothing does: rendering repaints the
+    /// whole note. One was carried here for the incremental repaint that was never written, along
+    /// with the clamping arithmetic its empty range needed; when that caller arrives it can come
+    /// back, with a test.
     ///
     /// Spans may overlap, because constructs nest — an emphasis run inside a strong one is two
     /// spans over the same characters, the outer appended first.
-    static func spans(in text: NSString, over range: NSRange) -> [Span] {
+    static func spans(in text: NSString) -> [Span] {
         var spans: [Span] = []
-        var lineStart = range.location
+        var lineStart = 0
 
-        // An empty range still means the line it sits on, so a deletion repaints something.
-        let limit = min(max(NSMaxRange(range), range.location + 1), text.length)
-
-        while lineStart < limit {
+        while lineStart < text.length {
             let lineRange = text.lineRange(for: NSRange(location: lineStart, length: 0))
 
             // `lineRange(for:)` on an in-bounds location always covers at least one character,
