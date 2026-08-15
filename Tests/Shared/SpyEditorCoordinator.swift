@@ -26,9 +26,6 @@ final class SpyEditorCoordinator: NoteEditorCoordinator {
         let superviewAtCall: PlatformView?
     }
 
-    /// The note showing at each `makeEditorView`, in call order. The length is the assertion that
-    /// matters: view creation and saver creation sit behind the same `editorViews[id] == nil`
-    /// check, so a second entry here would mean a second saver for that note too.
     /// A statistics delivery, plus where it landed.
     ///
     /// `statsDidChange` is declared on a `@MainActor` class, so the compiler already forces
@@ -39,6 +36,9 @@ final class SpyEditorCoordinator: NoteEditorCoordinator {
         let arrivedOnMainThread: Bool
     }
 
+    /// The note showing at each `makeEditorView`, in call order. The length is the assertion that
+    /// matters: view creation and saver creation sit behind the same `editorViews[id] == nil`
+    /// check, so a second entry here would mean a second saver for that note too.
     private(set) var madeViewNoteIds: [Int] = []
     private(set) var resignedViews: [ResignedView] = []
     private(set) var reportedStats: [ReportedStats] = []
@@ -64,13 +64,12 @@ final class SpyEditorCoordinator: NoteEditorCoordinator {
 
     private var noteIdsByView: [ObjectIdentifier: Int] = [:]
 
-    /// Forwards the coordinator's own injection seams. Without them `appearance(forNoteId:)`
-    /// reads `UserDefaults.standard` and the zoom repaint listens on `NotificationCenter.default`,
-    /// so a test that stepped the zoom in a scratch suite would be watching a notification the
-    /// coordinator never hears — the "half an injection seam" its initializer warns about.
-    override init(
-        defaults: UserDefaults = .standard, notificationCenter: NotificationCenter = .default
-    ) {
+    /// Forwards the coordinator's own injection seams, with no defaults of its own. Without them
+    /// `appearance(forNoteId:)` reads `UserDefaults.standard` — the shipping app's domain, under
+    /// `TEST_HOST` — and the zoom repaint listens on `NotificationCenter.default`, where a test
+    /// that stepped the zoom in a scratch suite would be watching a notification the coordinator
+    /// never hears. Defaulting them here made both mistakes the easy ones to make.
+    override init(defaults: UserDefaults, notificationCenter: NotificationCenter) {
         super.init(defaults: defaults, notificationCenter: notificationCenter)
     }
 

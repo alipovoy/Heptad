@@ -12,7 +12,7 @@ private enum PlainTextPasteboardTestError: Error {
 /// The suite exists because `NSTextView.pasteAsPlainText` read exactly one of them and came back
 /// empty on every clipboard below that lacks it, while ⌘V pasted the same clipboards fine (#114).
 /// Each case is one of those clipboards.
-@Suite struct PlainTextPasteboardTests {
+struct PlainTextPasteboardTests {
     /// Bold, so a case can tell "the rich flavor was decoded" from "some plain flavor was
     /// already there" — only the characters ever survive this call.
     private static let formatted = NSAttributedString(

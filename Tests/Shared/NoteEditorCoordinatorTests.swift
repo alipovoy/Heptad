@@ -12,9 +12,17 @@ import Testing
 @MainActor
 struct NoteEditorCoordinatorTests {
 
-    private let coordinator = SpyEditorCoordinator()
+    private let coordinator: SpyEditorCoordinator
+    private let scratchDefaults: ScratchDefaults
+    private let notificationCenter = NotificationCenter()
     private let container = PlatformView()
     private let notes = [NoteItem(id: 0), NoteItem(id: 1)]
+
+    init() throws {
+        scratchDefaults = try ScratchDefaults(name: "NoteEditorCoordinatorTests")
+        coordinator = SpyEditorCoordinator(
+            defaults: scratchDefaults.defaults, notificationCenter: notificationCenter)
+    }
 
     // MARK: - Selection
 

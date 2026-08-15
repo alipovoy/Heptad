@@ -112,9 +112,12 @@ final class WindowManagerFixture {
     // MARK: - Showing the window
 
     /// Shows the window and returns it, failing the test when either step doesn't work out.
-    func showWindow() throws -> NSPanel {
+    /// `sourceLocation` threaded through, because 20 tests across four files call this: without it
+    /// every failure in here names this line instead of the test that got there.
+    func showWindow(sourceLocation: SourceLocation = #_sourceLocation) throws -> NSPanel {
         manager.toggleWindow(sender: statusBarButton)
-        return try #require(manager.window, "Window was not created")
+        return try #require(
+            manager.window, "Window was not created", sourceLocation: sourceLocation)
     }
 
     /// Shows the panel well inside the screen with the drag gesture disarmed.
@@ -196,10 +199,13 @@ final class WindowManagerFixture {
     }
 
     /// The other application the `.requiresAnotherRunningApp` trait has already checked for.
-    func otherRunningApplication() throws -> NSRunningApplication {
+    func otherRunningApplication(
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) throws -> NSRunningApplication {
         try #require(
             anyOtherRunningApplication(),
-            "Expected at least one other running application to hand activation to")
+            "Expected at least one other running application to hand activation to",
+            sourceLocation: sourceLocation)
     }
 
     func postActivation(of app: NSRunningApplication) {
@@ -216,9 +222,12 @@ final class WindowManagerFixture {
     func expectingNotification(
         _ name: Notification.Name,
         count: Int = 1,
+        sourceLocation: SourceLocation = #_sourceLocation,
         during action: @MainActor () throws -> Void
     ) async rethrows {
-        try await confirmation("\(name.rawValue) is posted", expectedCount: count) { posted in
+        try await confirmation(
+            "\(name.rawValue) is posted", expectedCount: count, sourceLocation: sourceLocation
+        ) { posted in
             let observer = notificationCenter.addObserver(
                 forName: name, object: nil, queue: nil
             ) { _ in posted() }
@@ -230,9 +239,15 @@ final class WindowManagerFixture {
 
     /// Runs `action` with observers on both `.flushPendingSaves` and `.windowDidHide` and
     /// confirms each fired exactly once.
-    func expectingFlushAndHide(during action: @MainActor () throws -> Void) async throws {
-        try await confirmation(".flushPendingSaves is posted") { flushed in
-            try await confirmation(".windowDidHide is posted") { hidden in
+    func expectingFlushAndHide(
+        sourceLocation: SourceLocation = #_sourceLocation,
+        during action: @MainActor () throws -> Void
+    ) async throws {
+        let flush: Comment = ".flushPendingSaves is posted"
+        let hide: Comment = ".windowDidHide is posted"
+
+        try await confirmation(flush, sourceLocation: sourceLocation) { flushed in
+            try await confirmation(hide, sourceLocation: sourceLocation) { hidden in
                 let flushObserver = notificationCenter.addObserver(
                     forName: .flushPendingSaves, object: nil, queue: nil
                 ) { _ in flushed() }

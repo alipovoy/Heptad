@@ -33,8 +33,8 @@ final class MarkdownEditorFixture {
         scrollView = try #require(coordinator.makeEditorView() as? NSScrollView)
     }
 
-    func textView() throws -> MarkdownTextView {
-        try #require(scrollView.documentView as? MarkdownTextView)
+    func textView(sourceLocation: SourceLocation = #_sourceLocation) throws -> MarkdownTextView {
+        try #require(scrollView.documentView as? MarkdownTextView, sourceLocation: sourceLocation)
     }
 
     /// Which characters of the buffer carry `emphasis` — see `NSAttributedString.carrying(_:)` for
@@ -43,9 +43,15 @@ final class MarkdownEditorFixture {
         try #require(try textView().textStorage).carrying(emphasis)
     }
 
-    func font(at location: Int) throws -> NSFont {
-        let storage = try #require(try textView().textStorage)
-        return try #require(storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont)
+    func font(
+        at location: Int, sourceLocation: SourceLocation = #_sourceLocation
+    ) throws -> NSFont {
+        let storage = try #require(
+            try textView(sourceLocation: sourceLocation).textStorage,
+            sourceLocation: sourceLocation)
+        return try #require(
+            storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont,
+            sourceLocation: sourceLocation)
     }
 
     /// The appearance the coordinator would build for a note in this mode, at the default zoom.
