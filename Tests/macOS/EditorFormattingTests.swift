@@ -19,6 +19,13 @@ struct EditorFormattingTests {
     private let textView: MarkdownTextView
     private let manager: EditorShortcutManager
 
+    /// What the buffer carries, which is what the user is looking at — see `carrying(_:)`. Every
+    /// command assertion below reads this beside the markdown, because the writer can correct on
+    /// the way to the store exactly what a broken command got wrong.
+    private func carrying(_ emphasis: Emphasis) throws -> String {
+        try #require(textView.textStorage).carrying(emphasis)
+    }
+
     init() throws {
         // A scratch suite rather than `.standard`, so a killed run can never leave the real app's
         // stored state behind it — ⌘+ and ⌘- write to whichever suite they are given.
@@ -38,24 +45,26 @@ struct EditorFormattingTests {
         (.emphasis, "_Test_ Text"),
         (.strikethrough, "~~Test~~ Text")
     ])
-    func togglingEmphasisAppliesItToTheSelection(emphasis: Emphasis, stored: String) {
+    func togglingEmphasisAppliesItToTheSelection(emphasis: Emphasis, stored: String) throws {
         textView.setSelectedRange(NSRange(location: 0, length: 4))  // "Test"
 
         manager.toggleEmphasis(emphasis, on: textView)
 
         #expect(textView.string == "Test Text", "The buffer holds no delimiters")
+        #expect(try carrying(emphasis) == "####.....", "the trait is on `Test` and nothing else")
         #expect(textView.markdown == stored, "and the note stores them")
     }
 
     /// Every command is its own inverse. Under delimiters this held only when the second press
     /// found its own pair still sitting beside the selection; a trait needs no such luck.
     @Test(arguments: Emphasis.allCases)
-    func togglingEmphasisTwiceLeavesTheNoteAsItWas(emphasis: Emphasis) {
+    func togglingEmphasisTwiceLeavesTheNoteAsItWas(emphasis: Emphasis) throws {
         textView.setSelectedRange(NSRange(location: 0, length: 4))
 
         manager.toggleEmphasis(emphasis, on: textView)
         manager.toggleEmphasis(emphasis, on: textView)
 
+        #expect(try carrying(emphasis) == ".........", "and takes it off the buffer, not just the store")
         #expect(textView.markdown == "Test Text")
         #expect(textView.selectedRange() == NSRange(location: 0, length: 4))
     }
@@ -63,14 +72,16 @@ struct EditorFormattingTests {
     /// The reported bug in #124, in the order that produced it: bold, then italic, then bold off
     /// again. Under delimiters the second ⌘B could not see the `**` — the italic pair had moved
     /// it out of reach — so it wrapped a second time and left `**_**hello**_**` on screen.
-    @Test(.bug(id: 124)) func emphasisCommandsComposeInAnyOrder() {
+    @Test(.bug(id: 124)) func emphasisCommandsComposeInAnyOrder() throws {
         textView.setSelectedRange(NSRange(location: 0, length: 4))
 
         manager.toggleEmphasis(.strong, on: textView)
         manager.toggleEmphasis(.emphasis, on: textView)
         manager.toggleEmphasis(.strong, on: textView)
 
-        #expect(textView.markdown == "_Test_ Text", "Taking the bold off leaves the italic alone")
+        #expect(try carrying(.emphasis) == "####.....", "Taking the bold off leaves the italic on")
+        #expect(try carrying(.strong) == ".........")
+        #expect(textView.markdown == "_Test_ Text")
         #expect(textView.string == "Test Text")
     }
 
@@ -93,25 +104,37 @@ struct EditorFormattingTests {
     /// press re-applied bold that was already there, and nothing appeared to happen until the
     /// second press. Single-line selections never showed it.
     @Test(arguments: [("**a**\n**b**", "a\nb"), ("**a**\n\n**b**", "a\n\nb")])
-    func takingEmphasisOffAReloadedMultiLineRunTakesOnePress(source: String, stripped: String) {
+    func takingEmphasisOffAReloadedMultiLineRunTakesOnePress(
+        source: String, stripped: String
+    ) throws {
         textView.load(markdown: source)
         textView.setSelectedRange(NSRange(location: 0, length: (textView.string as NSString).length))
 
         manager.toggleEmphasis(.strong, on: textView)
 
+        // On the buffer, because this is the press that used to be a no-op: the store was right
+        // one press late, so a store-only assertion saw the correct answer and not the bug.
+        #expect(
+            try carrying(.strong).allSatisfy { $0 == "." },
+            "one press, and nothing is left bold")
         #expect(textView.markdown == stripped)
     }
 
     /// With nothing selected the command arms the caret, so ⌘B then typing comes out bold —
     /// without putting a single character in the note for a press the user then thinks better of.
-    @Test func togglingEmphasisWithoutSelectionArmsTheCaret() {
+    @Test func togglingEmphasisWithoutSelectionArmsTheCaret() throws {
         textView.setSelectedRange(NSRange(location: 9, length: 0))
 
         manager.toggleEmphasis(.strong, on: textView)
 
         #expect(textView.string == "Test Text", "Nothing typed yet, nothing written")
+        #expect(try carrying(.strong) == ".........", "and nothing already there turned bold")
 
         textView.insertText(" more", replacementRange: NSRange(location: 9, length: 0))
+        // All five typed characters are bold, the leading space included — the writer is what
+        // puts that space outside the pair on the way to the store. The two lines disagreeing is
+        // the normal case, not a bug: one is what the user sees, the other is what is stored.
+        #expect(try carrying(.strong) == ".........#####")
         #expect(textView.markdown == "Test Text **more**")
     }
 
@@ -145,17 +168,6 @@ struct EditorFormattingTests {
 
         textView.undoManager?.undo()
 
-        #expect(textView.markdown == "Test Text")
-    }
-
-    /// ⌘⇧X is the same path as ⌘B and ⌘I, which is the point of it being one line.
-    @Test func strikethroughTogglesBothWays() {
-        textView.setSelectedRange(NSRange(location: 0, length: 4))
-
-        manager.toggleStrikethrough(on: textView)
-        #expect(textView.markdown == "~~Test~~ Text")
-
-        manager.toggleStrikethrough(on: textView)
         #expect(textView.markdown == "Test Text")
     }
 

@@ -127,9 +127,11 @@ struct RichTextRoundTripTests {
 
     /// Only the lines that need escaping get them. A note is read in plain mode too, and a
     /// backslash in front of every glob would be its own kind of damage.
-    @Test(.bug(id: 124), arguments: [
-        "2 * 3 * 4", "chmod +x *.sh", "AWS_SECRET_KEY=abc", "C:\\Users\\admin", "50% * 2"
-    ])
+    ///
+    /// Two arguments, not five: the other three are in `markdownSurvivesTheRoundTrip`'s list and
+    /// reach the buffer identically either way — verified byte-for-byte. These two are the ones
+    /// that carry information this test alone has.
+    @Test(.bug(id: 124), arguments: ["chmod +x *.sh", "50% * 2"])
     func textThatReadsBackAsItselfIsLeftAlone(typed: String) {
         let text = rendered("")
         text.replaceCharacters(in: NSRange(location: 0, length: 0), with: typed)

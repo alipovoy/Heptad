@@ -29,6 +29,12 @@ final class MarkdownEditorFixture {
         try #require(scrollView.documentView as? MarkdownTextView)
     }
 
+    /// Which characters of the buffer carry `emphasis` — see `NSAttributedString.carrying(_:)` for
+    /// why a command's assertion belongs here rather than on what the note stores.
+    func carrying(_ emphasis: Emphasis) throws -> String {
+        try #require(try textView().textStorage).carrying(emphasis)
+    }
+
     func font(at location: Int) throws -> NSFont {
         let storage = try #require(try textView().textStorage)
         return try #require(storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont)

@@ -93,17 +93,9 @@ struct EditorShortcutManagerTests {
                 isARepeat: false, keyCode: 40))
     }
 
-    /// The font on the first character, where every formatting assertion below looks.
-    private func selectionFont() throws -> NSFont {
-        let storage = try #require(textView.textStorage, "Missing text storage")
-        return try #require(
-            storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont,
-            "Missing font attribute")
-    }
-
-    private func selectionStrikethrough() throws -> Int {
-        let storage = try #require(textView.textStorage, "Missing text storage")
-        return (storage.attribute(.strikethroughStyle, at: 0, effectiveRange: nil) as? Int) ?? 0
+    /// Which characters of the buffer carry `emphasis` — see `NSAttributedString.carrying(_:)`.
+    private func carrying(_ emphasis: Emphasis) throws -> String {
+        try #require(textView.textStorage, "Missing text storage").carrying(emphasis)
     }
 
     /// A scratch store, so the ⌘0 path never opens — let alone reads — the developer's notes.
@@ -159,14 +151,18 @@ struct EditorShortcutManagerTests {
     /// they are checked by what they did — to the note for the emphasis commands, and to the
     /// stored zoom for ⌘+/⌘-, which stopped being a text edit when notes became markdown.
     ///
-    /// Read back as markdown: the buffer holds rich text, so the delimiters are in what the note
-    /// *stores* rather than in what is on screen (#124).
+    /// Which trait landed, and nothing about how the note spells it: that is
+    /// `EditorFormattingTests`, and this test asserting it too made that one a strict subset of
+    /// this one. The trait on the buffer is the cheapest witness that the key reached *this*
+    /// command rather than merely reaching one.
     @Test(
         arguments: [
-            ("b", false, "**Test** Text"), ("i", false, "_Test_ Text"),
-            ("x", true, "~~Test~~ Text"), ("X", false, "~~Test~~ Text")
+            ("b", false, Emphasis.strong), ("i", false, .emphasis),
+            ("x", true, .strikethrough), ("X", false, .strikethrough)
         ])
-    func emphasisShortcutsFormatTheSelection(chars: String, hasShift: Bool, stored: String) throws {
+    func emphasisShortcutsFormatTheSelection(
+        chars: String, hasShift: Bool, emphasis: Emphasis
+    ) throws {
         textView.setSelectedRange(NSRange(location: 0, length: 4))  // "Test"
 
         let result = manager.handleTextViewShortcut(
@@ -174,7 +170,7 @@ struct EditorShortcutManagerTests {
 
         #expect(result == nil, "A format that applied means the key was consumed")
         #expect(textView.string == "Test Text", "and put no delimiters on screen")
-        #expect(textView.markdown == stored)
+        #expect(try carrying(emphasis) == "####.....", "the selection got this trait")
         #expect(
             textView.commands.isEmpty,
             "⌘⇧X strikes through; cutting here would destroy the selection instead")
@@ -230,6 +226,9 @@ struct EditorShortcutManagerTests {
             chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
 
         #expect(result == nil, "A paste that ran means the key was consumed")
+        #expect(
+            try carrying(.strong) == (expected.hasPrefix("**") ? "#########" : "........."),
+            "⌘V brings the bold in as bold; ⌘⇧V brings none in at all")
         #expect(textView.markdown == expected)
         #expect(textView.commands.isEmpty, "Neither paste reaches NSTextView.paste any more")
     }
