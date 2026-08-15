@@ -149,7 +149,7 @@ struct MarkdownTextViewTests {
         #expect(caretColor != .systemRed, "The clipboard's colour is not left behind")
         #expect(
             caretColor.usingColorSpace(.sRGB)
-                == fixture.appearance(plainText: false).boldTint?.color.usingColorSpace(.sRGB))
+                == NotePalette.boldTint(forNoteIndex: 0).usingColorSpace(.sRGB))
         #expect(textView.typingAttributes[.paragraphStyle] == nil, "No alignment is left behind")
     }
 

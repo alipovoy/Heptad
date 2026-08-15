@@ -107,9 +107,9 @@ struct NoteEditorCoordinatorTests {
         coordinator.update(notes: sparse, selectedIndex: 1)
 
         #expect(coordinator.configuredAppearances.count == 2)
-        #expect(coordinator.configuredAppearances.first?.boldTint == NotePalette.boldTint(forNoteIndex: 0))
+        #expect(coordinator.configuredAppearances.first?.tintedNoteIndex == 0)
         #expect(
-            coordinator.configuredAppearances.last?.boldTint == NotePalette.boldTint(forNoteIndex: 1),
+            coordinator.configuredAppearances.last?.tintedNoteIndex == 1,
             "Note 9 is the second note, so it takes the second tint — not the clamped seventh")
     }
 

@@ -43,7 +43,7 @@ final class MarkdownEditorFixture {
     func appearance(plainText: Bool) -> MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
             plainText: plainText, fontSize: AppConstants.Layout.defaultFontSize,
-            boldTint: NotePalette.boldTint(forNoteIndex: 0))
+            tintedNoteIndex: 0)
     }
 
     func baseFont(plainText: Bool) -> NSFont {

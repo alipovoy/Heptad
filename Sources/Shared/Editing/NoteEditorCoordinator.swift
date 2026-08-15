@@ -63,7 +63,7 @@ class NoteEditorCoordinator: NSObject {
     func appearance(forNoteId id: Int) -> MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
             plainText: modes[id] ?? false, fontSize: EditorFontSize.current(defaults),
-            boldTint: paletteIndices[id].map(NotePalette.boldTint(forNoteIndex:)))
+            tintedNoteIndex: paletteIndices[id])
     }
 
     func setup(container: PlatformView, notes: [NoteItem], selectedIndex: Int) {

@@ -45,12 +45,12 @@ enum MarkdownStyling {
         /// The colour bold runs are drawn in, and only in formatted mode — plain mode is one
         /// font in one colour by definition. `nil` leaves bold in the body-text colour, which is
         /// what a caller with no note in hand gets: `MarkdownWriting` reads traits, never draws.
-        let boldTint: BoldTint?
+        let tintedNoteIndex: Int?
 
-        init(plainText: Bool, fontSize: CGFloat, boldTint: BoldTint? = nil) {
+        init(plainText: Bool, fontSize: CGFloat, tintedNoteIndex: Int? = nil) {
             self.plainText = plainText
             self.fontSize = fontSize
-            self.boldTint = boldTint
+            self.tintedNoteIndex = tintedNoteIndex
         }
 
         var baseFont: PlatformFont { .editorBody(plainText: plainText, size: fontSize) }
@@ -124,11 +124,12 @@ enum MarkdownStyling {
     ) -> [NSAttributedString.Key: Any] {
         guard appearance.isStyled else { return baseAttributes(appearance) }
 
+        let existing = attributes[.font] as? PlatformFont
+        let isBold = existing?.isBold == true
+
         var font = appearance.baseFont
-        if let existing = attributes[.font] as? PlatformFont {
-            if existing.isBold { font = font.bolded() }
-            if existing.isItalic { font = font.italicized() }
-        }
+        if isBold { font = font.bolded() }
+        if existing?.isItalic == true { font = font.italicized() }
 
         var kept: [NSAttributedString.Key: Any] = [.font: font]
 
@@ -137,7 +138,8 @@ enum MarkdownStyling {
             kept[.underlineStyle] = NSUnderlineStyle.single.rawValue
         }
 
-        kept[.foregroundColor] = foregroundColor(for: kept, in: appearance)
+        kept[.foregroundColor] = foregroundColor(
+            isLink: attributes[.link] != nil, isBold: isBold, in: appearance)
 
         if attributes[.strikethroughStyle] != nil {
             kept[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
@@ -146,22 +148,59 @@ enum MarkdownStyling {
         return kept
     }
 
-    /// What a run carrying `attributes` is drawn in.
+    /// What a run is drawn in.
     ///
     /// A link wins over bold: its colour is the one that already carried meaning, and a bold link
     /// that stopped looking like a link would trade one signal for another. Bold takes the note's
     /// tint, which is the delimiter formatted mode no longer has.
-    static func foregroundColor(
-        for attributes: [NSAttributedString.Key: Any], in appearance: Appearance
+    ///
+    /// Told what the run is rather than handed the run. It used to take the dictionary and dig the
+    /// font back out to ask `symbolicTraits` — an answer both callers had already computed, at the
+    /// price of a fresh `NSFontDescriptor` per run on every normalize, twice per keystroke. Worse,
+    /// it made the call site's position load-bearing with nothing to say so: it read `.font` and
+    /// `.link` out of the dictionary being built, so moving it up a few lines silently stopped
+    /// tinting anything.
+    private static func foregroundColor(
+        isLink: Bool, isBold: Bool, in appearance: Appearance
     ) -> PlatformColor {
-        guard appearance.isStyled else { return .adaptiveEditorText }
-        if attributes[.link] != nil { return .editorLink }
+        if isLink { return .editorLink }
 
-        guard let tint = appearance.boldTint,
-            (attributes[.font] as? PlatformFont)?.isBold == true
-        else { return .adaptiveEditorText }
+        guard isBold, let index = appearance.tintedNoteIndex else { return .adaptiveEditorText }
 
-        return tint.color
+        return NotePalette.boldTint(forNoteIndex: index)
+    }
+
+    /// Paints the note's tint onto its bold runs, and nothing else.
+    ///
+    /// What `RichTextRendering` needs after its span loop, in place of a whole-buffer `normalize`
+    /// whose only net effect was this colour: the loop starts from `baseAttributes` and writes
+    /// nothing outside the vocabulary, so every font that pass rebuilt was byte-identical to the
+    /// one already there. It was not free — `MarkdownWriting.reads` renders once per line on every
+    /// save, ⌘C and mode switch, which made it 300 full rebuilds per save of a 300-line note.
+    ///
+    /// Order-independence survives, and is stated more plainly than it was: this runs after every
+    /// span, and skips runs carrying a link, so the link colour wins whichever order the parser
+    /// emitted the two in.
+    static func tintBold(_ appearance: Appearance, in storage: NSMutableAttributedString) {
+        guard appearance.isStyled, let index = appearance.tintedNoteIndex else { return }
+
+        let tint = NotePalette.boldTint(forNoteIndex: index)
+        let whole = NSRange(location: 0, length: storage.length)
+
+        // Collected before anything is written, for the reason `normalize` gives: writing an
+        // attribute splits the runs being enumerated.
+        var tinted: [NSRange] = []
+        storage.enumerateAttributes(in: whole, options: []) { attributes, subrange, _ in
+            guard attributes[.link] == nil,
+                (attributes[.font] as? PlatformFont)?.isBold == true
+            else { return }
+
+            tinted.append(subrange)
+        }
+
+        for subrange in tinted {
+            storage.addAttribute(.foregroundColor, value: tint, range: subrange)
+        }
     }
 
     /// A range brought inside `length`.

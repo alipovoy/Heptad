@@ -19,40 +19,20 @@ import SwiftUI
 enum NotePalette {
     static let colors: [Color] = [.red, .orange, .yellow, .green, .cyan, .blue, .purple]
 
-    /// The colour bold text is drawn in on note `index`, in formatted mode. `BoldTint` does the
-    /// clamping; this is here so callers read the palette rather than the type behind it.
-    static func boldTint(forNoteIndex index: Int) -> BoldTint {
-        BoldTint(noteIndex: index)
-    }
-}
-
-/// The colour bold text is tinted in, carried as the note it belongs to.
-///
-/// A note index rather than a `PlatformColor` because this travels inside
-/// `MarkdownStyling.Appearance`, which is compared on every update pass to decide whether a
-/// repaint is needed. Two dynamic platform colours built from identical inputs are never equal,
-/// so holding one would have re-normalized the whole buffer on every keystroke.
-struct BoldTint: Equatable {
-    let noteIndex: Int
-
-    /// Clamped in the initializer rather than at the palette's door.
+    /// The colour bold text is drawn in on note `index`, in formatted mode.
     ///
-    /// The memberwise one is internal, so `BoldTint(noteIndex: 99)` compiled anywhere in the
-    /// module and `color` trapped on it — a scratchpad taken down over a colour, through the one
-    /// door the clamp beside `NotePalette.boldTint` did not cover. `BoldTintTests` reads as though
-    /// it closed this; it drove the other door.
-    ///
-    /// Clamping rather than failing for the same reason every other reader of `colors` clamps:
-    /// the index arrives from a stored selection, and `colors` is fixed at seven.
-    init(noteIndex: Int) {
-        self.noteIndex = NoteSelection.clamped(noteIndex, noteCount: NotePalette.colors.count)
+    /// Clamped rather than trusted, and clamped here because this is the only door there is. The
+    /// index arrives from a stored selection, `colors` is fixed at seven, and a scratchpad should
+    /// not trap over a colour. It used to be a `BoldTint` value whose memberwise initializer was
+    /// internal, so the subscript could be reached without passing the clamp at all — the type
+    /// carried one `Int`, one computed colour and an `Equatable` conformance `Int?` gives away.
+    static func boldTint(forNoteIndex index: Int) -> PlatformColor {
+        boldTints[NoteSelection.clamped(index, noteCount: colors.count)]
     }
-
-    var color: PlatformColor { Self.tints[noteIndex] }
 
     /// One dynamic colour per note, derived once. The derivation resolves an appearance and
-    /// converts a colour space, and `color` is read once per text run on every normalize.
-    private static let tints: [PlatformColor] = NotePalette.colors.map(tint(of:))
+    /// converts a colour space, and this is read once per bold run on every repaint.
+    private static let boldTints: [PlatformColor] = colors.map(tint(of:))
 
     #if !canImport(UIKit)
         /// The two appearances the tint below chooses between, hoisted out of the resolve.

@@ -21,7 +21,7 @@ struct BoldTintTests {
 
     private var appearance: MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
-            plainText: false, fontSize: AppConstants.Layout.defaultFontSize, boldTint: tint)
+            plainText: false, fontSize: AppConstants.Layout.defaultFontSize, tintedNoteIndex: 0)
     }
 
     private var untinted: MarkdownStyling.Appearance {
@@ -31,7 +31,7 @@ struct BoldTintTests {
 
     private var plain: MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
-            plainText: true, fontSize: AppConstants.Layout.defaultFontSize, boldTint: tint)
+            plainText: true, fontSize: AppConstants.Layout.defaultFontSize, tintedNoteIndex: 0)
     }
 
     private func rendered(
@@ -102,14 +102,14 @@ struct BoldTintTests {
     }
 
     private func contrast(forNoteIndex index: Int, dark: Bool) -> CGFloat {
-        let tint = luminance(of: NotePalette.boldTint(forNoteIndex: index).color, dark: dark)
+        let tint = luminance(of: NotePalette.boldTint(forNoteIndex: index), dark: dark)
         let paper = luminance(of: background(forNoteIndex: index, dark: dark), dark: dark)
         return (max(tint, paper) + 0.05) / (min(tint, paper) + 0.05)
     }
 
     private func isTint(_ color: PlatformColor) -> Bool {
         [true, false].allSatisfy {
-            resolved(color, dark: $0) == resolved(tint.color, dark: $0)
+            resolved(color, dark: $0) == resolved(tint, dark: $0)
         }
     }
 
@@ -120,7 +120,7 @@ struct BoldTintTests {
     @Test func everyNoteGetsItsOwnTint() {
         for dark in [false, true] {
             let drawn = (0..<AppConstants.noteCount).map {
-                resolved(NotePalette.boldTint(forNoteIndex: $0).color, dark: dark)
+                resolved(NotePalette.boldTint(forNoteIndex: $0), dark: dark)
             }
             #expect(Set(drawn).count == AppConstants.noteCount, "dark: \(dark)")
         }
@@ -129,16 +129,16 @@ struct BoldTintTests {
     /// The index comes from a stored selection by the time it reaches here, the same as every
     /// other read of the palette — so it is clamped rather than trapped on.
     ///
-    /// Both doors. `BoldTint`'s memberwise initializer is internal, so the type could be built
-    /// out of range without going past the palette function at all, and `color` subscripted a
-    /// seven-entry array with whatever it was handed.
+    /// One door now. This used to be reachable past the clamp through `BoldTint`'s internal
+    /// memberwise initializer, which subscripted the seven-entry table with whatever it was
+    /// handed; the type is gone and the palette function is the only way in.
     @Test(arguments: [-1, 99])
     func anOutOfRangeNoteIndexClampsRatherThanCrashing(index: Int) {
         let expected = index < 0 ? 0 : AppConstants.noteCount - 1
 
-        #expect(NotePalette.boldTint(forNoteIndex: index) == NotePalette.boldTint(forNoteIndex: expected))
-        #expect(BoldTint(noteIndex: index).noteIndex == expected)
-        #expect(BoldTint(noteIndex: index).color == BoldTint(noteIndex: expected).color)
+        #expect(
+            NotePalette.boldTint(forNoteIndex: index)
+                == NotePalette.boldTint(forNoteIndex: expected))
     }
 
     /// Every tint clears WCAG AA for body text against its own note's background, in both
@@ -258,20 +258,18 @@ struct BoldTintTests {
         #expect(MarkdownWriting.markdown(from: rendered(markdown, appearance)) == markdown)
     }
 
-    /// `Appearance` is compared on every update pass to decide whether to repaint, and a repaint
-    /// is a normalize of the whole buffer. Carrying a live platform colour here would have made
-    /// two appearances for the same note unequal and rebuilt every run on every keystroke.
+    /// `Appearance` is compared on every update pass to decide whether to repaint. Carrying a live
+    /// platform colour here would have made two appearances for the same note unequal and rebuilt
+    /// every run on every keystroke; it carries the note's index, which compares by value.
     @Test func twoAppearancesForTheSameNoteAreEqual() {
         func appearance(forNoteIndex index: Int) -> MarkdownStyling.Appearance {
-            MarkdownStyling.Appearance(
-                plainText: false, fontSize: 16,
-                boldTint: NotePalette.boldTint(forNoteIndex: index))
+            MarkdownStyling.Appearance(plainText: false, fontSize: 16, tintedNoteIndex: index)
         }
 
         let built = (0..<AppConstants.noteCount).map(appearance(forNoteIndex:))
         let rebuilt = (0..<AppConstants.noteCount).map(appearance(forNoteIndex:))
 
         #expect(built == rebuilt, "the same note must not look like a change")
-        #expect(Set(built.map(\.boldTint?.noteIndex)).count == AppConstants.noteCount)
+        #expect(Set(built.map(\.tintedNoteIndex)).count == AppConstants.noteCount)
     }
 }
