@@ -54,6 +54,40 @@ struct LinkRoundTripTests {
         #expect(roundTripIsStable(written), "and it is not written differently the second time")
     }
 
+    /// An italic link with no room for `_` is spelled with `*`, rather than costing the note its
+    /// destination.
+    ///
+    /// The pair around a link used to be written from `Emphasis.delimiter` alone, so every rung of
+    /// the ladder produced the same bytes for this line and all six were rejected — and what a
+    /// line the ladder cannot spell falls to is `Spelling.plain`, which writes the label's
+    /// characters and no brackets at all. The URL was gone from the note on the next save, with
+    /// `x*[a](u)*y` sitting right there as a spelling that reads back exactly.
+    @Test(
+        arguments: [
+            "x*[a](u)*y",  // word characters on both sides refuse `_`
+            "x*[a](u)*",  // and on one side is enough
+            // A guard row rather than a regression row: the bold pair is itself the boundary `_`
+            // needs, so this line was already written correctly — what it pins is that a link
+            // carrying two traits still nests them in order once each one is chosen separately.
+            "x**_[a](u)_**y"
+        ])
+    func anItalicLinkKeepsItsDestinationWhereverItSits(_ source: String) throws {
+        let text = rendered(source)
+
+        // The label, wherever the bold around it put it — and rendered as a link carrying italic,
+        // which is the premise the three rows share.
+        let italic = (text.string as NSString).range(of: "a").location
+        #expect(Emphasis.emphasis.isOn(text.attributes(at: italic, effectiveRange: nil)))
+        #expect(text.attribute(.link, at: italic, effectiveRange: nil) != nil)
+
+        let written = MarkdownWriting.markdown(from: text)
+
+        #expect(
+            rendered(written).attribute(.link, at: italic, effectiveRange: nil) != nil,
+            "\(written) — the destination survives the save")
+        #expect(roundTripIsStable(written), "and is not written differently the second time")
+    }
+
     /// A link that reaches the end of its line still gets written.
     ///
     /// The attribute carries the terminator — the shape a link arrives in when it is dragged over
