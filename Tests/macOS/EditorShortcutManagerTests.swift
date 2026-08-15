@@ -264,9 +264,14 @@ struct EditorShortcutManagerTests {
         let storage = try #require(textView.textStorage)
         let font = try #require(storage.attribute(.font, at: 2, effectiveRange: nil) as? NSFont)
         #expect(font.pointSize == AppConstants.Layout.defaultFontSize, "at the note's own size")
+        // The exact colour, not `!= .systemRed`: the clipboard's colour never reaches this buffer
+        // to begin with — ⌘V goes clipboard → markdown → `String` → `insertText`, so no attribute
+        // survives the trip — and `normalize` can only write a colour this app derives. The
+        // negation was true of every possible outcome; this is true of one.
         #expect(
-            storage.attribute(.foregroundColor, at: 2, effectiveRange: nil) as? NSColor != .systemRed,
-            "and not in the clipboard's colour")
+            storage.attribute(.foregroundColor, at: 2, effectiveRange: nil) as? NSColor
+                == .adaptiveEditorText,
+            "in the note's own colour, which is the only kind that reaches a run")
     }
 
     /// An image is not text, and the note is left alone. The key is still consumed — handing it

@@ -58,11 +58,14 @@ struct DeleteToLineStartTests {
         #expect(textView.string == "user: admin\nrotate-me")
     }
 
+    /// And registers nothing to undo, which is the property worth having: an accidental ⌘⌫ at the
+    /// head of a line must not put an empty step on the stack for the next ⌘Z to spend.
     @Test func theCaretAtTheStartOfALineDeletesNothing() {
         textView.setSelectedRange(NSRange(location: 12, length: 0))  // head of line 2
 
         textView.deleteToBeginningOfLine(nil)
 
         #expect(textView.string == "user: admin\npass: rotate-me")
+        #expect(textView.undoManager?.canUndo == false)
     }
 }

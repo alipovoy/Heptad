@@ -146,7 +146,6 @@ struct MarkdownTextViewTests {
         // The clipboard's red is gone. What is there instead is the note's bold tint, because the
         // caret is still bold — a colour this app derives from the note, not one it was handed.
         let caretColor = try #require(textView.typingAttributes[.foregroundColor] as? NSColor)
-        #expect(caretColor != .systemRed, "The clipboard's colour is not left behind")
         #expect(
             caretColor.usingColorSpace(.sRGB)
                 == NotePalette.boldTint(forNoteIndex: 0).usingColorSpace(.sRGB))

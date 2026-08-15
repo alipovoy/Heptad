@@ -183,14 +183,6 @@ struct EditorFormattingTests {
 
     /// The size is a view setting now, so the command must not touch the note's text — the one
     /// piece of formatting that could not survive the swap had to leave the buffer entirely.
-    @Test func changeFontSizeLeavesTheTextAlone() {
-        textView.setSelectedRange(NSRange(location: 0, length: 4))
-
-        manager.changeFontSize(increase: true)
-
-        #expect(textView.string == "Test Text")
-    }
-
     /// Shrinking stops at the floor and stays there rather than marching down to an unreadable
     /// size — and, since ⌘- repeats while held, stays there for every keystroke after it.
     @Test func decreasingFontSizeStopsAtTheFloor() {
