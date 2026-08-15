@@ -37,6 +37,12 @@ class NoteEditorCoordinator: NSObject {
     /// The count in flight, held so the next keystroke can cancel it.
     private var statsTask: Task<Void, Never>?
 
+    /// Which count is the latest one asked for. Cancellation alone does not decide this: a task
+    /// cancelled *after* it passed its check still hops to the main actor, and nothing orders that
+    /// hop against its replacement's, so a superseded count could land last and leave the bar
+    /// showing numbers for text that is no longer there.
+    private var statsGeneration = 0
+
     private let defaults: UserDefaults
 
     /// Held, not merely observed on: the savers below are built with it too. Passing them
@@ -258,17 +264,22 @@ class NoteEditorCoordinator: NSObject {
     /// counts the incoming note's text *before* it becomes the current one.
     private func updateStats(plainText: String, for noteId: Int) {
         statsTask?.cancel()
+        statsGeneration += 1
+        let generation = statsGeneration
+
         statsTask = Task.detached(priority: .utility) { [weak self] in
             let stats = TextStats(text: plainText)
             guard !Task.isCancelled else { return }
 
-            await self?.deliverStats(stats, for: noteId)
+            await self?.deliverStats(stats, for: noteId, generation: generation)
         }
     }
 
-    /// Hands `stats` to the platform hook, unless the note moved on while they were being counted.
-    private func deliverStats(_ stats: TextStats, for noteId: Int) {
-        guard noteId == currentNoteId else { return }
+    /// Hands `stats` to the platform hook, unless the note or the text moved on while they were
+    /// being counted. Both checks are needed: the generation catches a newer count of the same
+    /// note, and `noteId` catches a selection change, which does not always start a count.
+    private func deliverStats(_ stats: TextStats, for noteId: Int, generation: Int) {
+        guard generation == statsGeneration, noteId == currentNoteId else { return }
         statsDidChange(stats)
     }
 
