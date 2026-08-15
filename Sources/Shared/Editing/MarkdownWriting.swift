@@ -27,14 +27,12 @@ enum MarkdownWriting {
     /// it. Text ending in `*` next to a bold run writes `a***b**`, which reads back as a bold
     /// `*b` — no rule about the plain text alone would have caught that, and the check does.
     ///
-    /// The last candidate is the one that ends the ladder, and it is written without being
-    /// checked because it cannot be wrong about the characters: it holds no delimiters, and
-    /// everything the parser would act on has a backslash in front of it. Something has to be
-    /// unconditional, or a line the check rejects twice is written rejected — which is how a link
-    /// this app cannot spell used to change the note's own text. **A save may lose formatting; it
-    /// may never lose a character.** The one exception is the characters a note may not hold at
-    /// all — `NoteCharacters` says which, and they are taken out before any of this runs, so what
-    /// the ladder is reasoning about is text that could be typed.
+    /// The last candidate ends the ladder unchecked, because it cannot be wrong about the
+    /// characters: no delimiters, and a backslash in front of everything the parser would act on.
+    /// Something has to be unconditional, or a line the check rejects twice is written rejected —
+    /// which is how a link this app cannot spell used to change the note's own text. **A save may
+    /// lose formatting; it may never lose a character.** The one exception is what a note may not
+    /// hold at all: `NoteCharacters` says which, taken out before any of this runs.
     ///
     /// Per line, because escapes are noise in the source and a note is read in that mode too: a
     /// line that needs them gets them, and the rest of the note stays as clean as it reads.
@@ -101,10 +99,9 @@ enum MarkdownWriting {
             case fallback
 
             /// Write no pair, and lose the trait. What is left when `*` will not read back
-            /// either — which is the corner where the pair lands inside a `**` one, since
-            /// `**Test*ing***` is a run of asterisks no parser resolves the way this meant it.
-            /// The choice by then is between dropping this one trait and dropping every trait on
-            /// the line.
+            /// either — the corner where the pair lands inside a `**` one, since `**Test*ing***`
+            /// is a run of asterisks no parser resolves as this meant it. The choice by then is
+            /// between dropping this trait and dropping every trait on the line.
             case dropped
         }
 
@@ -127,12 +124,10 @@ enum MarkdownWriting {
     /// by a bold `b`, and reads back as a bold `*b`; only comparing the formatting catches it.
     ///
     /// Asymmetric on purpose, and this is the half that is easy to get wrong. Formatting the
-    /// writer *cannot spell* is dropped by design — the whitespace at the edge of a run goes
-    /// outside the pair, a run never spans a line, and a trait covering half a link has nowhere
-    /// to be written. Those are the rules at the top of this file, so a check that called them
-    /// failures would reject the writer's own correct output and send the line to a candidate
-    /// that keeps less. What must never pass is the other direction: emphasis appearing on
-    /// characters that never carried it, which is the whole reason escaping exists.
+    /// writer *cannot spell* is dropped by design — the rules at the top of this file are all
+    /// losses — so a check that called those failures would reject the writer's own correct
+    /// output and send the line to a candidate that keeps less. What must never pass is the other
+    /// direction: emphasis on characters that never carried it, which is why escaping exists.
     private static func reads(_ markdown: String, as original: NSAttributedString) -> Bool {
         let rendered = RichTextRendering.attributed(from: markdown, appearance: reading)
 
@@ -145,19 +140,41 @@ enum MarkdownWriting {
             return false
         }
 
-        for index in 0..<rendered.length {
-            let read = rendered.attributes(at: index, effectiveRange: nil)
-            let intended = intent(of: original, at: index)
-            let link = destination(read[.link])
+        // Walked by run, not by character: both strings answer alike over the overlap of a run
+        // in each, so asking per UTF-16 unit asked the same two dictionaries over and over —
+        // 63,160 lookups for a 15,790-unit note of ~1,200 runs, 32 ms of a 128 ms save.
+        var index = 0
+        while index < rendered.length {
+            var readRun = NSRange(location: 0, length: 0)
+            let read = rendered.attributes(at: index, effectiveRange: &readRun)
 
-            guard Emphasis.allCases.allSatisfy({ trait in
-                    !trait.isOn(read) || intended.contains(where: trait.isOn)
-                }),
-                link == nil || intended.contains(where: { link == destination($0[.link]) })
-            else { return false }
+            var intendedRun = NSRange(location: 0, length: 0)
+            _ = original.attributes(at: index, effectiveRange: &intendedRun)
+
+            // The last unit of the overlap is asked on its own, because it is the only one whose
+            // *neighbour* can carry something else — and `intent` reads that neighbour, for the
+            // surrogate pair whose halves were given different attributes. Everywhere before it,
+            // the neighbour is inside this same run and adds nothing.
+            let step = min(NSMaxRange(readRun), NSMaxRange(intendedRun))
+            if step - 1 > index, !justifies(intent(of: original, at: index), read) { return false }
+            if !justifies(intent(of: original, at: step - 1), read) { return false }
+
+            index = step
         }
 
         return true
+    }
+
+    /// Whether what the note meant at a position can account for what was read back at it.
+    /// One-way, for the reason `reads` gives.
+    private static func justifies(
+        _ intended: [[NSAttributedString.Key: Any]], _ read: [NSAttributedString.Key: Any]
+    ) -> Bool {
+        let link = destination(read[.link])
+
+        return Emphasis.allCases.allSatisfy { trait in
+            !trait.isOn(read) || intended.contains(where: trait.isOn)
+        } && (link == nil || intended.contains { link == destination($0[.link]) })
     }
 
     /// What the note means the character at `index` to carry — both halves of it, when it has two.
@@ -179,18 +196,16 @@ enum MarkdownWriting {
         return halves
     }
 
-    /// The appearance the check reads with. Only the traits are compared, and those do not depend
-    /// on a size, so the note's own zoom never has to reach this file.
+    /// The appearance the check reads with. Only traits are compared and traits carry no size,
+    /// so the note's own zoom never has to reach this file.
     private static let reading = MarkdownStyling.Appearance(
         plainText: false, fontSize: AppConstants.Layout.defaultFontSize)
 
     // MARK: - Links
 
-    /// Links first, because a link's label is not parsed: `[**a**](b)` is a link whose label
-    /// reads literally, so whatever is inside one is written as plain characters.
-    ///
-    /// Emphasis over a link is written *around* it — `**[docs](url)**` — which is the spelling
-    /// the parser already reads. Inside the brackets there is nowhere to put it.
+    /// Links first, because a label is not parsed: `[**a**](b)` reads literally, so whatever is
+    /// inside one is written as plain characters. Emphasis over a link is written *around* it —
+    /// `**[docs](url)**`, the spelling the parser already reads.
     private static func emit(
         _ range: NSRange, of text: NSAttributedString, as spelling: Spelling
     ) -> String {
@@ -199,10 +214,9 @@ enum MarkdownWriting {
 
         var markdown = ""
         text.enumerateAttribute(.link, in: range, options: []) { value, subrange, _ in
-            // The terminator is not part of the label. `markdown(from:)` has already split by
-            // line, so a link carrying one is a link that reaches the end of its line, not one
-            // spanning two — and writing the `\n` inside the brackets is what used to drop it
-            // everywhere except the note's last line, where there is no terminator to carry.
+            // The terminator is not part of the label. A link carrying one reaches the end of
+            // its line rather than spanning two, and writing the `\n` inside the brackets is what
+            // used to drop it everywhere but the note's last line, which has none to carry.
             let core = MarkdownSlicing.withoutTerminator(subrange, in: source)
 
             guard let destination = destination(value), core.length > 0 else {
@@ -213,9 +227,8 @@ enum MarkdownWriting {
             let terminator = NSRange(
                 location: NSMaxRange(core), length: NSMaxRange(subrange) - NSMaxRange(core))
 
-            // The destination is written as it is: a URL holding a bracket of its own is a link
-            // this app cannot spell either way, and escaping inside one would only move the
-            // problem into the address.
+            // The destination is written as it is: a URL holding a bracket of its own cannot be
+            // spelled either way, and escaping there would move the problem into the address.
             let traits = uniform(over: core, in: text)
             markdown += traits.map(\.delimiter).joined()
                 + "[" + content(core, of: text, as: spelling) + "](" + destination + ")"
@@ -261,6 +274,10 @@ enum MarkdownWriting {
     ///
     /// The order is `Emphasis`'s own case order: bold covering half of an italic run comes out as
     /// `**a _b_** _c_`, never as the interleaved `**a _b**c_` that reads as neither.
+    ///
+    /// Nothing here splits by line: `markdown(from:)` did that and calls `emit` once per line, so
+    /// no section reaching this can span a terminator. A second split used to sit on the `isOn`
+    /// branch — instrumented at 9 of 9 sections returning a single range.
     private static func wrap(
         _ range: NSRange, of text: NSAttributedString, in traits: [Emphasis],
         as spelling: Spelling
@@ -268,19 +285,13 @@ enum MarkdownWriting {
         guard let trait = traits.first else { return content(range, of: text, as: spelling) }
         let rest = Array(traits.dropFirst())
 
-        var markdown = ""
-        for section in MarkdownSlicing.sections(of: range, in: text, carrying: trait) {
-            guard section.isOn else {
-                markdown += wrap(section.range, of: text, in: rest, as: spelling)
-                continue
+        return MarkdownSlicing.sections(of: range, in: text, carrying: trait)
+            .reduce(into: "") { markdown, section in
+                markdown +=
+                    section.isOn
+                    ? delimited(section.range, of: text, with: trait, then: rest, as: spelling)
+                    : wrap(section.range, of: text, in: rest, as: spelling)
             }
-
-            for line in MarkdownSlicing.lines(of: section.range, in: text) {
-                markdown += delimited(line, of: text, with: trait, then: rest, as: spelling)
-            }
-        }
-
-        return markdown
     }
 
     /// One line's worth of a run, with the pair written around its non-whitespace core.
