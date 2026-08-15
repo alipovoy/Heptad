@@ -145,14 +145,29 @@ struct DynamicTypeTests {
     /// The zoom stored in defaults stays the base the scaling starts from, rather than being
     /// replaced by it. Nothing on iOS writes that value today, but the appearance is built by
     /// shared code that reads it, so a size other than the default has to still mean something.
+    /// Built inside `performAsCurrent`, not read inside it: `baseFont` is resolved by
+    /// `Appearance.init` — that is what R1 changed, and what puts the drawn size in the type's
+    /// identity — so an appearance constructed outside the closure has already scaled by whatever
+    /// category was ambient, and moving it in is the difference between naming the category and
+    /// hoping the simulator's default is `.large`.
     @Test func theStoredSizeIsStillTheBase() {
-        let appearance = MarkdownStyling.Appearance(plainText: false, fontSize: 24)
-
         var scaled: CGFloat = 0
         UITraitCollection(preferredContentSizeCategory: .large).performAsCurrent {
-            scaled = appearance.baseFont.pointSize
+            scaled = MarkdownStyling.Appearance(plainText: false, fontSize: 24).baseFont.pointSize
         }
 
         #expect(scaled == 24, "at the default category the base is what is drawn")
+    }
+
+    /// And a category other than the default scales that same stored size, rather than replacing
+    /// it: 24 has to still mean something once the reader has moved the slider.
+    @Test func theStoredSizeIsWhatALargerCategoryScales() {
+        var scaled: CGFloat = 0
+        UITraitCollection(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge)
+            .performAsCurrent {
+                scaled = MarkdownStyling.Appearance(plainText: false, fontSize: 24).baseFont.pointSize
+            }
+
+        #expect(scaled > 24)
     }
 }
