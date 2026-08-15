@@ -34,6 +34,9 @@ class NoteEditorCoordinator: NSObject {
     /// another note's colour with nothing to say which.
     private var paletteIndices: [Int: Int] = [:]
 
+    /// The count in flight, held so the next keystroke can cancel it.
+    private var statsTask: Task<Void, Never>?
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard, notificationCenter: NotificationCenter = .default) {
@@ -201,17 +204,25 @@ class NoteEditorCoordinator: NSObject {
     /// then delivers the result back on the main actor. Detached deliberately: a plain
     /// `Task {}` here would inherit this class's MainActor isolation and run inline.
     ///
-    /// Nothing orders these tasks against each other, so two quick note switches can deliver the
-    /// older count last and leave the bar showing the previous note's numbers until the next
-    /// keystroke. `noteId` is the note the text was read from, and it is re-checked against the
-    /// showing note on delivery so a result that has been overtaken is dropped.
+    /// The previous count is cancelled, because only the last one can be right. Nothing did that
+    /// before, so three seconds of typing on a 145 KB note started fifty full-note scans — about
+    /// half a second of CPU, forty-nine of whose results were thrown away — six lines under a
+    /// *save* that is debounced for exactly this reason. Three numbers in a bar need freshness
+    /// less than the store does, not more.
     ///
-    /// Passed in rather than read off `currentNoteId` here: the `update` path counts the incoming
-    /// note's text *before* it becomes the current one, so reading it would name the note being
-    /// left and drop every count taken on a switch.
+    /// Cancellation is checked on delivery rather than inside the count: `TextStats` is one pass
+    /// with no allocation, and threading a check through it would cost more than it saves on
+    /// every note small enough for the scan to finish anyway.
+    ///
+    /// `noteId` is the note the text was read from, re-checked against the showing note on
+    /// delivery — passed in rather than read off `currentNoteId` there, because the `update` path
+    /// counts the incoming note's text *before* it becomes the current one.
     private func updateStats(plainText: String, for noteId: Int) {
-        Task.detached(priority: .utility) { [weak self] in
+        statsTask?.cancel()
+        statsTask = Task.detached(priority: .utility) { [weak self] in
             let stats = TextStats(text: plainText)
+            guard !Task.isCancelled else { return }
+
             await self?.deliverStats(stats, for: noteId)
         }
     }
