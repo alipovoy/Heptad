@@ -238,10 +238,39 @@ enum MarkdownStyling {
 }
 
 extension PlatformFont {
+    /// The font every note is drawn in, and the one every other cut is derived from — see
+    /// `bolded()`, `italicized()` and `MarkdownStyling.baseAttributes`. So this is the single place
+    /// text size is decided, on either platform.
+    ///
+    /// On iOS `size` is a *base* that Dynamic Type scales, not the final point size. It has to be:
+    /// iOS carries a system-wide text size (Settings › Display & Brightness, and the Accessibility
+    /// larger-text slider), the user has already stated a preference there, and a fixed
+    /// `.systemFont(ofSize:)` overrode it — the notes stayed 16 pt for someone who needs 24, with
+    /// nothing in the app to change them, while `TextStatisticsBar` and `ColorCircle` scaled
+    /// around them (`c80c55b`). At the default content size category the metrics are the identity,
+    /// so nothing moves for anyone who has not changed the setting.
+    ///
+    /// macOS has no such system setting, which is why `⌘+`/`⌘-` and `EditorFontSize` exist there
+    /// and why this stays an exact point size on that platform.
     static func editorBody(plainText: Bool, size: CGFloat) -> PlatformFont {
-        plainText
+        let base: PlatformFont =
+            plainText
             ? .monospacedSystemFont(ofSize: size, weight: .regular)
             : .systemFont(ofSize: size)
+
+        #if canImport(UIKit)
+            // `.body` for both modes: the plain-text note is the same prose at the same size in a
+            // different face, so scaling it as a caption or a footnote would make the two modes
+            // disagree about how big the note is.
+            //
+            // `compatibleWith:` rather than the bare `scaledFont(for:)`, which reads `UIScreen`'s
+            // own category and nothing else — it ignores the trait collection it is called under,
+            // so it could not be driven from a test and would ignore a view whose environment
+            // differs from the screen's.
+            return UIFontMetrics(forTextStyle: .body).scaledFont(for: base, compatibleWith: .current)
+        #else
+            return base
+        #endif
     }
 
     /// The bold and italic cuts of this font, or this font unchanged when it has none.

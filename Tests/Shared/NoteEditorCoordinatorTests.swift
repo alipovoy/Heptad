@@ -189,6 +189,28 @@ struct NoteEditorCoordinatorTests {
         #expect(zoomed.configuredNoteIds.count == configuredBeforeTheStep)
     }
 
+    #if canImport(UIKit)
+        /// The system text size repaints the showing note too, on the same path as a zoom step.
+        ///
+        /// iOS only: the notification is UIKit's, and so is the setting behind it. Posted on
+        /// `.default` because that is where UIKit posts it and so where the coordinator listens —
+        /// the one observer in this class that is not on an injected centre.
+        ///
+        /// A note's font is written into its text storage when it is configured, so without this
+        /// the notes stayed at the old size until something else happened to reconfigure them.
+        @Test func aSystemTextSizeChangeRepaintsTheShowingNote() throws {
+            coordinator.setup(container: container, notes: notes, selectedIndex: 0)
+            coordinator.update(notes: notes, selectedIndex: 1)
+            let configuredBefore = coordinator.configuredNoteIds.count
+
+            NotificationCenter.default.post(
+                name: UIContentSizeCategory.didChangeNotification, object: nil)
+
+            let repainted = coordinator.configuredNoteIds.dropFirst(configuredBefore)
+            #expect(Array(repainted) == [1], "The showing note, once — the same rule as the zoom")
+        }
+    #endif
+
     // MARK: - View swapping
 
     @Test func switchingAwayResignsAndRemovesTheOutgoingView() throws {

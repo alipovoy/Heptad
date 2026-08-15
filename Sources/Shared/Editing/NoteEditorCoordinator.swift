@@ -56,8 +56,22 @@ class NoteEditorCoordinator: NSObject {
         // The same centre the zoom is posted on, and the same defaults it is read from: half an
         // injection seam is worse than none, because it reads as tested when it is not.
         notificationCenter.addObserver(
-            self, selector: #selector(editorFontSizeDidChange),
+            self, selector: #selector(textSizeDidChange),
             name: .editorFontSizeDidChange, object: nil)
+
+        #if canImport(UIKit)
+            // The other way text size moves on iOS, and the one the app does not own: the system
+            // setting `PlatformFont.editorBody` scales against. On `.default` rather than the
+            // injected centre because UIKit posts it there and nowhere else — the same split
+            // `WindowManager` draws between its own notifications and the workspace's.
+            //
+            // Needed rather than assumed: a note's font is baked into its text storage when it is
+            // configured, so nothing repaints on its own, and whether SwiftUI happens to re-run
+            // `updateUIView` for this is not something this class should be resting on.
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(textSizeDidChange),
+                name: UIContentSizeCategory.didChangeNotification, object: nil)
+        #endif
     }
 
     /// How a note should be drawn right now: its own mode, at the app-wide zoom, in its own
@@ -186,7 +200,9 @@ class NoteEditorCoordinator: NSObject {
         return editorView
     }
 
-    /// Repaints the showing note at the new zoom level.
+    /// Repaints the showing note at whatever size it should now be drawn at — the app's own zoom
+    /// on macOS, the system text size on iOS. Both arrive here because both change the same thing:
+    /// what `PlatformFont.editorBody` returns, which every attribute in the note derives from.
     ///
     /// Only the showing one. Every cached view is configured again on its way back in (#103), so
     /// repainting the other six here does work that is thrown away and then done a second time —
@@ -194,9 +210,9 @@ class NoteEditorCoordinator: NSObject {
     /// repeat leaves, six sevenths of it spent on notes nobody was looking at.
     ///
     /// `@objc` selector dispatch (used by `NotificationCenter`) crosses the Swift/ObjC boundary
-    /// without hopping actors, so this can't be `@MainActor`-isolated directly. The poster is
-    /// the key monitor, which is already on the main actor.
-    @objc nonisolated private func editorFontSizeDidChange() {
+    /// without hopping actors, so this can't be `@MainActor`-isolated directly. Both posters are
+    /// already on the main actor: the key monitor, and UIKit.
+    @objc nonisolated private func textSizeDidChange() {
         MainActor.assumeIsolated {
             guard let noteId = currentNoteId, let editorView = editorViews[noteId] else { return }
 
