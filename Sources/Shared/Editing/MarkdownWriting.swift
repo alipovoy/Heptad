@@ -158,8 +158,22 @@ enum MarkdownWriting {
             // line fell to `.plain` — which writes the label's characters and no brackets, losing
             // the destination for good. The neighbours are `core`'s either way, since the pair
             // still lands outside the whole bracketed form.
-            let traits = uniform(over: core, in: text).compactMap {
-                delimiter(for: $0, around: core, in: source, as: spelling)
+            var traits: [String] = []
+
+            for trait in uniform(over: core, in: text) {
+                // Except for the pair this same loop has already written, which is the boundary the
+                // inner one needs: what sits beside `_` in `**_[a](u)_**` is an asterisk, not the
+                // word character `mayClose` found in the rendered text. Told otherwise,
+                // `.fallback` spells this italic `*` and writes `***[a](u)***`, which no parser
+                // resolves — so a line sent past `.preferred` by some *other* run on it retreated
+                // all the way to `.dropped` and lost an italic it could have kept.
+                guard
+                    let delimiter = delimiter(
+                        for: trait, around: core, in: source, as: spelling,
+                        shielded: !traits.isEmpty)
+                else { continue }
+
+                traits.append(delimiter)
             }
 
             markdown += traits.joined()
@@ -271,14 +285,22 @@ enum MarkdownWriting {
     /// `AWS_SECRET_KEY` a name, so the ladder spends both of its permissive rungs on it before
     /// reaching for `*`. Before `*` was written at all, those runs were dropped — which is why
     /// `⌘I` mid-word showed italic that the next save took away.
+    ///
+    /// `shielded` is the caller saying it has already written a pair immediately outside this one,
+    /// which settles the boundary question `mayClose` can only guess at. It buys `.fallback`
+    /// nothing to reach for `*` there — `***` is the one place `*` reads *worse* than `_` — and it
+    /// deliberately does not reprieve `.dropped`: the retreat has to stay monotone, or a shielded
+    /// pair that still fails to read back would be written again by every rung and take the line
+    /// all the way to `Spelling.plain`, where a link loses its destination.
     private static func delimiter(
-        for trait: Emphasis, around core: NSRange, in source: NSString, as spelling: Spelling
+        for trait: Emphasis, around core: NSRange, in source: NSString, as spelling: Spelling,
+        shielded: Bool = false
     ) -> String? {
         guard !mayClose(trait, around: core, in: source) else { return trait.delimiter }
 
         switch spelling.italic {
         case .preferred: return trait.delimiter
-        case .fallback: return MarkdownSyntax.emphasisAlternate
+        case .fallback: return shielded ? trait.delimiter : MarkdownSyntax.emphasisAlternate
         case .dropped: return nil
         }
     }

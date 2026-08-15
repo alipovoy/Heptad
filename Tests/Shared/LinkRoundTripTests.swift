@@ -88,6 +88,36 @@ struct LinkRoundTripTests {
         #expect(roundTripIsStable(written), "and is not written differently the second time")
     }
 
+    /// A bold italic link keeps its italic when something *else* on the line sends the ladder down
+    /// a rung.
+    ///
+    /// The pair around a link is nested inside the bold one, so `_` reads back there whatever its
+    /// neighbours in the rendered text are — which is why rung 1 writes these lines correctly and
+    /// only a line the ladder has already left can get them wrong. The italic `i` is what leaves
+    /// it: `_i_` against a word character does not read back, so the line reaches `.fallback`, and
+    /// `.fallback` used to respell the *link's* `_` as `*` too. `***[a](u)***` is a run of
+    /// asterisks no parser resolves, so that rung failed as well and `.dropped` took the italic
+    /// off both runs — a save quietly removing formatting that the rung above it could spell.
+    @Test(arguments: ["x*i***_[a](u)_**y", "x*i***_[ab](u)_**y", "x*i***_[a](u)_**y z"])
+    func aBoldLinkKeepsItsItalicWhenAnotherRunSendsTheLineDownTheLadder(_ source: String) throws {
+        let text = rendered(source)
+
+        // The label, and the premise the save has to keep all of.
+        let label = (text.string as NSString).range(of: "a").location
+        let traits = text.attributes(at: label, effectiveRange: nil)
+        #expect(Emphasis.emphasis.isOn(traits), "the label is italic")
+        #expect(Emphasis.strong.isOn(traits), "and bold")
+        #expect(traits[.link] != nil, "and a link")
+
+        let written = MarkdownWriting.markdown(from: text)
+        let back = rendered(written).attributes(at: label, effectiveRange: nil)
+
+        #expect(Emphasis.emphasis.isOn(back), "\(written) — italic survives the save")
+        #expect(Emphasis.strong.isOn(back), "\(written) — and bold")
+        #expect(back[.link] != nil, "\(written) — and the destination")
+        #expect(roundTripIsStable(written), "and it is not written differently the second time")
+    }
+
     /// A link that reaches the end of its line still gets written.
     ///
     /// The attribute carries the terminator — the shape a link arrives in when it is dragged over
