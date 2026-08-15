@@ -81,7 +81,9 @@ struct MarkdownTextViewTests {
         EditorShortcutManager(defaults: scratch.defaults).toggleEmphasis(.strong, on: textView)
 
         // What the window does on its way off screen, and what a debounce would do on its own.
-        NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
+        // On the fixture's own centre: the coordinator now builds its savers with the centre it
+        // was given, so this reaches its saver and no one else's.
+        fixture.notificationCenter.post(name: .flushPendingSaves, object: nil)
 
         #expect(note.text == "rotate **keys**")
     }

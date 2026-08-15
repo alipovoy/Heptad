@@ -39,8 +39,15 @@ class NoteEditorCoordinator: NSObject {
 
     private let defaults: UserDefaults
 
+    /// Held, not merely observed on: the savers below are built with it too. Passing them
+    /// `.default` while this class listened on an injected centre made the injection a half
+    /// measure — a test could only flush a coordinator-built saver by posting process-wide, which
+    /// reaches every saver of every coordinator alive anywhere in the process.
+    private let notificationCenter: NotificationCenter
+
     init(defaults: UserDefaults = .standard, notificationCenter: NotificationCenter = .default) {
         self.defaults = defaults
+        self.notificationCenter = notificationCenter
         super.init()
 
         // No removeObserver needed: selector-based observers auto-unregister on deinit. Same
@@ -156,7 +163,7 @@ class NoteEditorCoordinator: NSObject {
     private func makeCachedEditorView(for note: NoteItem) -> PlatformView {
         let editorView = makeEditorView()
         editorViews[note.id] = editorView
-        savers[note.id] = NoteContentSaver(note: note)
+        savers[note.id] = NoteContentSaver(note: note, notificationCenter: notificationCenter)
 
         configure(editorView, appearance: appearance(forNoteId: note.id))
         load(note.text, into: editorView)

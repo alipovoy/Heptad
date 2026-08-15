@@ -26,9 +26,15 @@ struct IOSRichTextEditor: UIViewRepresentable {
     class Coordinator: NoteEditorCoordinator, UITextViewDelegate {
         private let statistics: EditorStatistics
 
-        init(statistics: EditorStatistics) {
+        /// The two seams are the base class's, forwarded so a test can hand this a scratch
+        /// defaults suite and a private notification centre. The app takes the defaults.
+        init(
+            statistics: EditorStatistics,
+            defaults: UserDefaults = .standard,
+            notificationCenter: NotificationCenter = .default
+        ) {
             self.statistics = statistics
-            super.init()
+            super.init(defaults: defaults, notificationCenter: notificationCenter)
         }
 
         override func makeEditorView() -> UIView {

@@ -13,6 +13,7 @@ import Testing
 struct DeleteToLineStartTests {
     private let textView: MarkdownTextView
     private let scratchDefaults: ScratchDefaults
+    private let notificationCenter = NotificationCenter()
     private let manager: EditorShortcutManager
 
     init() throws {
@@ -20,10 +21,12 @@ struct DeleteToLineStartTests {
         textView.allowsUndo = true
         textView.string = "user: admin\npass: rotate-me"
 
-        textView.delegate = makeTestCoordinator()
-
         scratchDefaults = try ScratchDefaults(name: "DeleteToLineStartTests")
-        manager = EditorShortcutManager(defaults: scratchDefaults.defaults)
+        textView.delegate = makeTestCoordinator(
+            defaults: scratchDefaults.defaults, notificationCenter: notificationCenter)
+
+        manager = EditorShortcutManager(
+            notificationCenter: notificationCenter, defaults: scratchDefaults.defaults)
     }
 
     private func commandDelete(shift: Bool = false) throws -> NSEvent {

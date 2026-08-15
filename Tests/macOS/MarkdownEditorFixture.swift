@@ -18,10 +18,18 @@ final class MarkdownEditorFixture {
     /// statistics bar would be showing.
     let statistics: EditorStatistics
 
+    /// The coordinator's own two seams, so a suite can step the zoom or flush the savers without
+    /// touching the shipping defaults domain or every other coordinator in the process.
+    let scratchDefaults: ScratchDefaults
+    let notificationCenter = NotificationCenter()
+
     init() throws {
         let statistics = EditorStatistics()
         self.statistics = statistics
-        coordinator = makeTestCoordinator(statistics: statistics)
+        scratchDefaults = try ScratchDefaults(name: "MarkdownEditorFixture")
+        coordinator = makeTestCoordinator(
+            statistics: statistics, defaults: scratchDefaults.defaults,
+            notificationCenter: notificationCenter)
         scrollView = try #require(coordinator.makeEditorView() as? NSScrollView)
     }
 
