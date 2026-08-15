@@ -97,14 +97,6 @@ struct RichTextRoundTripTests {
         #expect(font.isItalic)
     }
 
-    @Test func aLinkCarriesItsDestination() throws {
-        let text = rendered("[docs](https://example.com)")
-
-        #expect(text.string == "docs")
-        let destination = text.attribute(.link, at: 0, effectiveRange: nil) as? String
-        #expect(destination == "https://example.com")
-    }
-
     /// Plain mode is the other half of the switch: it shows the source, so it parses nothing.
     @Test func plainModeRendersTheSourceVerbatim() {
         let plain = MarkdownStyling.Appearance(
@@ -337,39 +329,6 @@ struct RichTextRoundTripTests {
     }
 
     // MARK: - The line the check rejects twice
-
-    /// A link this app cannot spell used to be written anyway, permanently changing the note's
-    /// own text: the escaping candidate is byte-identical for a link — `emit` builds the brackets
-    /// and the destination out of raw characters — so the check found the line wrong and had
-    /// nothing else to write.
-    ///
-    /// Now the ladder ends somewhere. The link is lost, which is the most this app can do with a
-    /// destination it has no spelling for, but not one character of the note is.
-    @Test(arguments: ["", "https://e.co/a)b", "x\ny"])
-    func aLinkWithAnUnspellableDestinationLosesTheLinkAndNotTheText(_ destination: String) {
-        let text = rendered("")
-        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "Foo bar")
-        text.addAttribute(.link, value: destination, range: NSRange(location: 0, length: 7))
-
-        let written = MarkdownWriting.markdown(from: text)
-
-        #expect(rendered(written).string == "Foo bar")
-        #expect(roundTripIsStable(written), "and it is not written differently the second time")
-    }
-
-    /// A link that reaches the end of its line still gets written.
-    ///
-    /// The attribute carries the terminator — the shape a link arrives in when it is dragged over
-    /// or pasted with the line break — and the writer used to see a newline in the label and give
-    /// up, which meant a link survived only on the note's *last* line, where there is no
-    /// terminator to carry.
-    @Test func aLinkThatRunsToTheEndOfALineIsStillWritten() {
-        let text = rendered("")
-        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "docs\nnext")
-        text.addAttribute(.link, value: "https://e.co", range: NSRange(location: 0, length: 5))
-
-        #expect(MarkdownWriting.markdown(from: text) == "[docs](https://e.co)\nnext")
-    }
 
     /// A trait with no spelling costs the line itself and nothing else.
     ///

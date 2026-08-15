@@ -70,7 +70,7 @@ enum AttributedFormatting {
         _ emphasis: Emphasis, over range: NSRange,
         in storage: NSMutableAttributedString, appearance: MarkdownStyling.Appearance
     ) -> [NSAttributedString.Key: Any] {
-        let core = trimmed(range, in: storage.string as NSString)
+        let core = MarkdownSlicing.trimmed(range, in: storage.string as NSString)
 
         guard core.length > 0 else {
             return typingAttributes(
@@ -154,20 +154,5 @@ enum AttributedFormatting {
 
         return applied(
             emphasis, !emphasis.isOn(current), to: current, appearance: appearance)
-    }
-
-    // MARK: - Reading
-
-    /// `range` with leading and trailing whitespace dropped, so a selection with a trailing space
-    /// formats the word and not the space — the writer would put the space outside the pair
-    /// anyway, and a trait that vanishes on save is worse than one that never went on.
-    private static func trimmed(_ range: NSRange, in text: NSString) -> NSRange {
-        var start = range.location
-        var end = min(NSMaxRange(range), text.length)
-
-        while start < end, MarkdownSyntax.isWhitespace(text.character(at: start)) { start += 1 }
-        while end > start, MarkdownSyntax.isWhitespace(text.character(at: end - 1)) { end -= 1 }
-
-        return NSRange(location: start, length: end - start)
     }
 }
