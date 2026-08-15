@@ -33,7 +33,7 @@ Pasting converts the clipboard's formatting to Markdown, keeping bold, italic, s
 
 Copying gives back the note's own characters — the delimiters are the formatting, so there is nothing else to carry. That also makes `⌘C` then `⌘V` inside the app exact, rather than converting the styling back into a second set of delimiters.
 
-On macOS `⌘⌫` clears the selected note, and the editor's context menu carries the same action. It is a single undo step, so `⌘Z` brings the note back.
+Emptying a note is `⌘A` then `⌫`, one undo step. There is no shortcut of its own: `⌘⌫` is left to `NSTextView`, where it deletes to the beginning of the line as it does in every other editor.
 
 ## Statistics
 
@@ -79,7 +79,6 @@ Tests and contribution details are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 | `⌘B` / `⌘I` / `⌘⇧X` | Bold / italic / strikethrough |
 | `⌘+` / `⌘-` | Increase / decrease the editor's zoom |
 | `⌘⇧U` | Toggle the checkbox on the current line |
-| `⌘⌫` | Clear the selected note |
 | `⌘Z` / `⌘⇧Z` | Undo / redo |
 | `⌘C` / `⌘X` | Copy / cut |
 | `⌘V` | Paste, converting the clipboard's formatting to Markdown (plain-text notes take the characters alone) |
