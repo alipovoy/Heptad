@@ -40,9 +40,8 @@ struct TextEditApplyTests {
 
     /// The replacement carries the attributes it was given, not the ones it lands beside.
     ///
-    /// Both platforms are asserted here because they take different routes to it — UIKit inserts
-    /// through the input system with `typingAttributes`, AppKit replaces with an attributed
-    /// string — and only one of the two was ever verified by hand.
+    /// Asserted on both platforms because they take different routes to it: UIKit inserts through
+    /// the input system with `typingAttributes`, AppKit replaces with an attributed string.
     @Test func theReplacementCarriesTheAttributesItWasGiven() throws {
         let textView = makeTextView(text: "- item", font: body.bolded())
 

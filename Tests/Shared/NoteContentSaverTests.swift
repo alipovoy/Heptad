@@ -104,10 +104,9 @@ struct NoteContentSaverTests {
 
     /// Typing without a pause still reaches the store.
     ///
-    /// Every keystroke restarts the debounce and nothing bounded how often, so at the production
-    /// interval fifty characters over three seconds produced zero writes: the paragraph existed
-    /// only in the text view, and a crash took all of it. The debounce here is longer than the
-    /// test could ever wait, so only the ceiling can satisfy this.
+    /// Every keystroke restarts the debounce, so with nothing bounding it a steady typist produced
+    /// no writes at all and a crash took the paragraph. The debounce here is longer than the test
+    /// could ever wait, so only the ceiling can satisfy it.
     @Test func aBurstOfTypingIsWrittenAtTheCeiling() async throws {
         let note = NoteItem(id: 0)
         let center = NotificationCenter()
@@ -126,17 +125,12 @@ struct NoteContentSaverTests {
         try await waitUntil("the ceiling to write the note mid-burst") { note.text.isEmpty == false }
     }
 
-    /// The same thing at the numbers the app actually ships, which nothing else in `Tests/` reads.
+    /// The same thing at the shipping numbers, which every other case here replaces with a pair of
+    /// its own — so both could be changed to something useless with the suite green.
     ///
-    /// Every other case here supplies its own pair, so both shipping values could be changed to
-    /// something useless — a ceiling below the debounce, or a ceiling of an hour — with the whole
-    /// suite green. This types at half the debounce, which is the shape of real typing (every
-    /// keystroke rearms), for 15 seconds' worth of keystrokes.
-    ///
-    /// The timeout is a literal 4 seconds and deliberately *not* derived from `defaultMaxDelay`: a
-    /// wait computed from the constant under test grows with it, and a ceiling of 2000 seconds then
-    /// passes on the debounce that fires after the burst finally ends. Measured that way round —
-    /// 4 seconds is comfortably past the shipping 2 and nowhere near the burst's own 15.
+    /// The 4-second timeout is a literal rather than derived from `defaultMaxDelay`: a wait computed
+    /// from the constant under test grows with it, and a ceiling of 2000 seconds would then pass on
+    /// the debounce that fires once the burst ends.
     @Test func aBurstAtTheShippingIntervalsIsWrittenBeforeItEnds() async throws {
         let note = NoteItem(id: 0)
         let center = NotificationCenter()

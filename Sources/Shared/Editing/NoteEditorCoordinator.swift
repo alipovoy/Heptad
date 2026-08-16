@@ -20,35 +20,32 @@ class NoteEditorCoordinator: NSObject {
     /// Each note's mode, by id, so `appearance(forNoteId:)` can answer with no `NoteItem` in
     /// hand — the zoom repaint has an id and nothing else.
     ///
-    /// Two flags rather than the notes themselves, which is a smaller table and not a lighter one:
-    /// `savers` holds a `NoteItem` per visited note for the coordinator's whole life anyway. This
-    /// used to claim it avoided that retention.
+    /// A flag rather than the note itself, which is a smaller table and not a lighter one: `savers`
+    /// holds a `NoteItem` per visited note for the coordinator's whole life anyway.
     private var modes: [Int: Bool] = [:]
 
     /// Each note's palette index — its position in the array everything above this class
     /// addresses notes by.
     ///
-    /// Held rather than derived from the id. This is the one component that addresses a note by
-    /// `id`, and the two agree only while the stored ids are exactly `0..<noteCount`; where they
+    /// Held rather than derived from the id: this is the one component that addresses a note by
+    /// `id`, and the two agree only while the stored ids are exactly `0..<noteCount`. Where they
     /// came apart, `NotePalette.boldTint` clamped rather than failed, so bold text came up in
-    /// another note's colour with nothing to say which.
+    /// another note's colour.
     private var paletteIndices: [Int: Int] = [:]
 
     /// The count in flight, held so the next keystroke can cancel it.
     private var statsTask: Task<Void, Never>?
 
-    /// Which count is the latest one asked for. Cancellation alone does not decide this: a task
-    /// cancelled *after* it passed its check still hops to the main actor, and nothing orders that
-    /// hop against its replacement's, so a superseded count could land last and leave the bar
-    /// showing numbers for text that is no longer there.
+    /// Which count is the latest one asked for. Cancellation alone does not decide it: a task
+    /// cancelled after it passed its check still hops to the main actor, and nothing orders that hop
+    /// against its replacement's, so a superseded count could land last.
     private var statsGeneration = 0
 
     private let defaults: UserDefaults
 
-    /// Held, not merely observed on: the savers below are built with it too. Passing them
-    /// `.default` while this class listened on an injected centre made the injection a half
-    /// measure — a test could only flush a coordinator-built saver by posting process-wide, which
-    /// reaches every saver of every coordinator alive anywhere in the process.
+    /// Held, not merely observed on: the savers below are built with it too. Passing them `.default`
+    /// would leave a test able to flush one only by posting process-wide, which reaches every saver
+    /// of every coordinator in the process.
     private let notificationCenter: NotificationCenter
 
     init(defaults: UserDefaults = .standard, notificationCenter: NotificationCenter = .default) {
@@ -66,14 +63,12 @@ class NoteEditorCoordinator: NSObject {
             name: .editorFontSizeDidChange, object: nil)
 
         #if canImport(UIKit)
-            // The other way text size moves on iOS, and the one the app does not own: the system
-            // setting `PlatformFont.editorBody` scales against. On `.default` rather than the
-            // injected centre because UIKit posts it there and nowhere else — the same split
-            // `WindowManager` draws between its own notifications and the workspace's.
+            // The other way text size moves on iOS: the system setting `PlatformFont.editorBody`
+            // scales against. On `.default` rather than the injected centre because UIKit posts it
+            // there and nowhere else.
             //
             // Needed rather than assumed: a note's font is baked into its text storage when it is
-            // configured, so nothing repaints on its own, and whether SwiftUI happens to re-run
-            // `updateUIView` for this is not something this class should be resting on.
+            // configured, so nothing repaints on its own.
             NotificationCenter.default.addObserver(
                 self, selector: #selector(textSizeDidChange),
                 name: UIContentSizeCategory.didChangeNotification, object: nil)
@@ -84,17 +79,14 @@ class NoteEditorCoordinator: NSObject {
     /// colour, all three looked up here rather than threaded down alongside the note.
     ///
     /// A note with no recorded palette index gets no tint rather than someone else's. It cannot
-    /// happen — `update` records one for every note before anything is configured — and an
-    /// untinted appearance is no longer a value the text views need this never to produce: they
-    /// hold their own as `nil` until configured, so the first call lands whatever it carries.
+    /// happen: `update` records one for every note before anything is configured.
     func appearance(forNoteId id: Int) -> MarkdownStyling.Appearance {
         appearance(plainText: modes[id] ?? false, tintedNoteIndex: paletteIndices[id])
     }
 
-    /// The same answer for a note the caller is holding, rather than one this class has been told
-    /// about. Nothing in the app needs it — every production path arrives by id — but the test
-    /// fixture builds views without going through `update`, and hand-copying the three fields
-    /// there meant every field added to `Appearance` had to be added twice.
+    /// The same answer for a note the caller is holding. No production path needs it — they all
+    /// arrive by id — but the test fixture builds views without going through `update`, and
+    /// hand-copying the fields there meant every new one had to be added twice.
     func appearance(for note: NoteItem, at index: Int) -> MarkdownStyling.Appearance {
         appearance(plainText: note.isPlainText, tintedNoteIndex: index)
     }
@@ -132,11 +124,9 @@ class NoteEditorCoordinator: NSObject {
             if let editorView = editorViews[note.id] {
                 configure(editorView, appearance: appearance(forNoteId: note.id))
 
-                // A mode step rewrites the buffer, and the counters describe what is on screen.
-                // Nothing else refreshes them on this path: the conversion goes through
-                // `setAttributedString`, which reports to the storage delegate and not to
-                // `textDidChange`, so the bar kept the other mode's numbers until the next
-                // keystroke.
+                // A mode step rewrites the buffer, and nothing else refreshes the counters on this
+                // path: the conversion goes through `setAttributedString`, which reports to the
+                // storage delegate and not to `textDidChange`.
                 updateStats(plainText: plainText(of: editorView), for: note.id)
             }
             return
@@ -150,12 +140,10 @@ class NoteEditorCoordinator: NSObject {
             oldView.removeFromSuperview()
         }
 
-        // Before anything below can build a view, so nothing under it can act on a stale answer
-        // to "which note is showing". Measured: neither `configure` nor `load` reports through
-        // `textDidChange` — both go through `setAttributedString`, which tells the storage
-        // delegate and no one else — so the cross-note write this used to claim to prevent
-        // cannot happen. Kept because a lookup naming the note being left is a bad shape, not
-        // because anything is currently reaching for one.
+        // Before anything below can build a view, so nothing under it can act on a stale answer to
+        // "which note is showing". Nothing currently does — neither `configure` nor `load` reports
+        // through `textDidChange`, both going through `setAttributedString` — but a lookup naming
+        // the note being left is a bad shape to leave available.
         currentNoteId = note.id
 
         let editorView: PlatformView
@@ -191,11 +179,9 @@ class NoteEditorCoordinator: NSObject {
 
     /// Builds the note's editor view and its saver, and caches both.
     ///
-    /// `configure` before `load`, and the reason is narrower than "the first paint would be
-    /// wrong": on an empty buffer `apply`'s whole body is inert — the normalize returns on a
-    /// zero length, and the typing attributes it sets are overwritten by `load` two lines later.
-    /// What survives is that it records the appearance, which is what `load` then renders
-    /// through. Reverse the two and the note is rendered in whatever the view was before.
+    /// `configure` before `load`, because what survives `configure` on an empty buffer is the
+    /// recorded appearance, and that is what `load` renders through. Reverse the two and the note
+    /// is rendered in whatever the view was before.
     private func makeCachedEditorView(for note: NoteItem) -> PlatformView {
         let editorView = makeEditorView()
         editorViews[note.id] = editorView
@@ -210,10 +196,9 @@ class NoteEditorCoordinator: NSObject {
     /// on macOS, the system text size on iOS. Both arrive here because both change the same thing:
     /// what `PlatformFont.editorBody` returns, which every attribute in the note derives from.
     ///
-    /// Only the showing one. Every cached view is configured again on its way back in (#103), so
-    /// repainting the other six here does work that is thrown away and then done a second time —
-    /// with seven 300-line notes cached that measured 155 ms per `⌘+`, against the 33 ms a key
-    /// repeat leaves, six sevenths of it spent on notes nobody was looking at.
+    /// Only the showing one: every cached view is configured again on its way back in (#103), so
+    /// repainting the rest here is work thrown away and then done a second time — 155 ms per `⌘+`
+    /// with seven 300-line notes cached, against the 33 ms a key repeat leaves.
     ///
     /// `@objc` selector dispatch (used by `NotificationCenter`) crosses the Swift/ObjC boundary
     /// without hopping actors, so this can't be `@MainActor`-isolated directly. Both posters are
@@ -249,15 +234,11 @@ class NoteEditorCoordinator: NSObject {
     /// then delivers the result back on the main actor. Detached deliberately: a plain
     /// `Task {}` here would inherit this class's MainActor isolation and run inline.
     ///
-    /// The previous count is cancelled, because only the last one can be right. Nothing did that
-    /// before, so three seconds of typing on a 145 KB note started fifty full-note scans — about
-    /// half a second of CPU, forty-nine of whose results were thrown away — six lines under a
-    /// *save* that is debounced for exactly this reason. Three numbers in a bar need freshness
-    /// less than the store does, not more.
+    /// The previous count is cancelled, because only the last one can be right: without that, three
+    /// seconds of typing on a 145 KB note started fifty full-note scans and threw away forty-nine.
     ///
     /// Cancellation is checked on delivery rather than inside the count: `TextStats` is one pass
-    /// with no allocation, and threading a check through it would cost more than it saves on
-    /// every note small enough for the scan to finish anyway.
+    /// with no allocation, and threading a check through it would cost more than it saves.
     ///
     /// `noteId` is the note the text was read from, re-checked against the showing note on
     /// delivery — passed in rather than read off `currentNoteId` there, because the `update` path
@@ -287,9 +268,9 @@ class NoteEditorCoordinator: NSObject {
 
     /// Creates the view to install: the editor's chrome, in the state a new text view starts in.
     ///
-    /// Takes no note, and that is the contract rather than an omission — a note's mode and
-    /// content arrive through `configure` and `load`, which is what keeps either of them from
-    /// having a second implementation here. It used to take one that neither platform read.
+    /// Takes no note, and that is the contract rather than an omission: a note's mode and content
+    /// arrive through `configure` and `load`, which is what keeps either of them from having a
+    /// second implementation here.
     func makeEditorView() -> PlatformView {
         fatalError("Subclasses must override makeEditorView()")
     }

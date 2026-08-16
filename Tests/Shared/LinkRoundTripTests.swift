@@ -7,8 +7,7 @@ import Testing
 ///
 /// Split from `RichTextRoundTripTests` because a link is the one construct whose label is not
 /// parsed and whose destination is not drawn: the writer builds the brackets out of raw
-/// characters, so the ladder that rewrites a line it cannot spell has less room here than
-/// anywhere else, and the label is where the parser's escapes and the writer's meet.
+/// characters, so the ladder that rewrites a line it cannot spell has less room here.
 struct LinkRoundTripTests {
 
     private let appearance = MarkdownStyling.Appearance(
@@ -35,13 +34,10 @@ struct LinkRoundTripTests {
         #expect(destination == "https://example.com")
     }
 
-    /// A link this app cannot spell used to be written anyway, permanently changing the note's
-    /// own text: the escaping candidate is byte-identical for a link — `emit` builds the brackets
-    /// and the destination out of raw characters — so the check found the line wrong and had
-    /// nothing else to write.
-    ///
-    /// Now the ladder ends somewhere. The link is lost, which is the most this app can do with a
-    /// destination it has no spelling for, but not one character of the note is.
+    /// The escaping rung is byte-identical for a link — `emit` builds the brackets and the
+    /// destination out of raw characters — so with nothing below it the writer stored a line it had
+    /// found wrong, changing the note's own text. Dropping the link is the rung that ends the
+    /// ladder.
     @Test(arguments: ["", "https://e.co/a)b", "x\ny"])
     func aLinkWithAnUnspellableDestinationLosesTheLinkAndNotTheText(_ destination: String) {
         let text = rendered("")
@@ -55,27 +51,21 @@ struct LinkRoundTripTests {
     }
 
     /// An italic link with no room for `_` is spelled with `*`, rather than costing the note its
-    /// destination.
-    ///
-    /// The pair around a link used to be written from `Emphasis.delimiter` alone, so every rung of
-    /// the ladder produced the same bytes for this line and all six were rejected — and what a
-    /// line the ladder cannot spell falls to is `Spelling.plain`, which writes the label's
-    /// characters and no brackets at all. The URL was gone from the note on the next save, with
-    /// `x*[a](u)*y` sitting right there as a spelling that reads back exactly.
+    /// destination: with the pair around a link written from `Emphasis.delimiter` alone, every rung
+    /// produced the same bytes and the line fell to `Spelling.plain`, which writes the label's
+    /// characters and no brackets at all.
     @Test(
         arguments: [
             "x*[a](u)*y",  // word characters on both sides refuse `_`
             "x*[a](u)*",  // and on one side is enough
-            // A guard row rather than a regression row: the bold pair is itself the boundary `_`
-            // needs, so this line was already written correctly — what it pins is that a link
-            // carrying two traits still nests them in order once each one is chosen separately.
+            // A guard row: the bold pair is itself the boundary `_` needs, so what it pins is that
+            // two traits still nest in order once each is spelled separately.
             "x**_[a](u)_**y"
         ])
     func anItalicLinkKeepsItsDestinationWhereverItSits(_ source: String) throws {
         let text = rendered(source)
 
-        // The label, wherever the bold around it put it — and rendered as a link carrying italic,
-        // which is the premise the three rows share.
+        // The label, wherever the bold around it put it.
         let italic = (text.string as NSString).range(of: "a").location
         #expect(Emphasis.emphasis.isOn(text.attributes(at: italic, effectiveRange: nil)))
         #expect(text.attribute(.link, at: italic, effectiveRange: nil) != nil)
@@ -88,21 +78,17 @@ struct LinkRoundTripTests {
         #expect(roundTripIsStable(written), "and is not written differently the second time")
     }
 
-    /// A bold italic link keeps its italic when something *else* on the line sends the ladder down
-    /// a rung.
+    /// A bold italic link keeps its italic when another run on the line sends the ladder down a
+    /// rung.
     ///
-    /// The pair around a link is nested inside the bold one, so `_` reads back there whatever its
-    /// neighbours in the rendered text are — which is why rung 1 writes these lines correctly and
-    /// only a line the ladder has already left can get them wrong. The italic `i` is what leaves
-    /// it: `_i_` against a word character does not read back, so the line reaches `.fallback`, and
-    /// `.fallback` used to respell the *link's* `_` as `*` too. `***[a](u)***` is a run of
-    /// asterisks no parser resolves, so that rung failed as well and `.dropped` took the italic
-    /// off both runs — a save quietly removing formatting that the rung above it could spell.
+    /// The retreat is per *line*, which is why the input carries an `x*i*` prefix: `_i_` against a
+    /// word character does not read back, so the whole line reaches `.fallback`, which respelled
+    /// the link's `_` as `*` too. `***[a](u)***` resolves in no parser, so that rung failed as well
+    /// and `.dropped` took the italic off both runs.
     @Test(arguments: ["x*i***_[a](u)_**y", "x*i***_[ab](u)_**y", "x*i***_[a](u)_**y z"])
     func aBoldLinkKeepsItsItalicWhenAnotherRunSendsTheLineDownTheLadder(_ source: String) throws {
         let text = rendered(source)
 
-        // The label, and the premise the save has to keep all of.
         let label = (text.string as NSString).range(of: "a").location
         let traits = text.attributes(at: label, effectiveRange: nil)
         #expect(Emphasis.emphasis.isOn(traits), "the label is italic")
@@ -120,10 +106,8 @@ struct LinkRoundTripTests {
 
     /// A link that reaches the end of its line still gets written.
     ///
-    /// The attribute carries the terminator — the shape a link arrives in when it is dragged over
-    /// or pasted with the line break — and the writer used to see a newline in the label and give
-    /// up, which meant a link survived only on the note's *last* line, where there is no
-    /// terminator to carry.
+    /// The attribute carries the terminator — the shape a dragged or pasted link arrives in — and a
+    /// newline in the label stopped the writer, so a link survived only on the note's last line.
     @Test func aLinkThatRunsToTheEndOfALineIsStillWritten() {
         let text = rendered("")
         text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "docs\nnext")
@@ -134,10 +118,9 @@ struct LinkRoundTripTests {
 
     /// A label holding a bracket keeps its link, and its characters.
     ///
-    /// The writer escapes the `]` so the parser finds the right one, and the parser honoured that
-    /// escape without hiding it — so the escaped candidate read back as different characters, the
-    /// ladder dropped the link to get the text right, and the note lost a link on every save. The
-    /// rung below that keeps the characters, which is why this cost a link and not a word.
+    /// The writer escapes the `]` so the parser finds the right one; while the parser honoured that
+    /// escape without hiding it, the candidate read back as different characters and the ladder
+    /// dropped the link to keep the text — a link lost on every save.
     @Test(arguments: ["a]b", "a[b", "a\\b", "]", "a]b]c"])
     func aLabelHoldingSyntaxKeepsItsLink(label: String) {
         let text = rendered("")

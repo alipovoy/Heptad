@@ -48,11 +48,9 @@ struct TextStatisticsTests {
 
     /// The membership tests still answer exactly what `CharacterSet` answered.
     ///
-    /// `.newlines` and `.alphanumerics` were replaced by scalar ranges and a general-category
-    /// check, which halved the cost of counting — the two `contains` calls were the whole of it.
-    /// The cases above pin the contract; this pins that the *rewrite* did not move it, across
-    /// scripts, combining marks, line separators and the astral plane where a hand-written range
-    /// list is easiest to get wrong.
+    /// `.newlines` and `.alphanumerics` were replaced by scalar ranges and a general-category check.
+    /// The cases above pin the contract; this pins that the rewrite did not move it, across scripts,
+    /// combining marks, line separators and the astral plane a hand-written range list gets wrong.
     @Test(arguments: [
         "", "hello", "a\r\nb", "a\u{2028}b", "a\u{2029}b", "a\u{0B}b\u{0C}c", "a\u{85}b",
         "ümlaut ß Straße", "汉字 test", "e\u{0301}mile", "Ⅻ roman Ⅻ", "٣٤٥ arabic digits",

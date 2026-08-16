@@ -2,10 +2,8 @@ import SwiftUI
 
 /// One note in the switcher: a coloured circle, numbered when it is the one showing.
 ///
-/// This control *is* the app's navigation, so what it says about itself matters more than it
-/// would for decoration. The number, the selection and "has content" all used to be carried by
-/// colour alone — the same hue at seven values, with the closest pair a tenth of the RGB cube
-/// apart, and a label that read "Note 3" whether note 3 was the one on screen or not.
+/// This control is the app's navigation, so it never relies on colour alone to say which note is
+/// showing or whether it has content.
 struct ColorCircle: View {
     let index: Int
     let assignedColor: Color
@@ -13,20 +11,14 @@ struct ColorCircle: View {
 
     @Binding var selectedNoteIndex: Int
 
-    /// The system's own answer to "colour is not enough". Turning it on numbers every circle
-    /// rather than only the selected one, which is the same argument the label below makes.
+    /// The system's own answer to "colour is not enough": when set, every circle is numbered.
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
-    /// A bouncy spring is exactly the shape this setting exists to suppress. What it animates is
-    /// mild — the window's wash cross-fading and the number appearing — but "mild" is the user's
-    /// call, not this view's.
+    /// The selection spring is exactly the shape this setting exists to suppress, mild or not.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// The diameter, written as the number it is.
-    ///
-    /// It used to be `defaultFontSize * 1.2`, which tied the note switcher to how big *editor*
-    /// text is: raising the editor default resized the title-bar chrome, and nothing about this
-    /// row depends on the text in the note below it.
+    /// The switcher's own size, deliberately not derived from `defaultFontSize`: nothing in this
+    /// row depends on how big the editor text below it is.
     private static let diameter: CGFloat = 19.2
 
     /// The number on the selected circle, as a fraction of the diameter above.
@@ -38,17 +30,16 @@ struct ColorCircle: View {
         /// Fixed, because the panel is a menubar popover built around these sizes.
         private let size = Self.diameter
     #else
-        /// Scaled, because iOS is a full-screen window whose text size the user sets — and this
-        /// row is the note switcher, the one control there is no keyboard alternative to on iOS.
+        /// Scaled: iOS text size is the user's to set, and this row is the only way to switch
+        /// notes there.
         @ScaledMetric(relativeTo: .body) private var size = Self.diameter
     #endif
 
     var body: some View {
         let isSelected = selectedNoteIndex == index
 
-        // A `Button` rather than `onTapGesture`: nothing here reads a tap's location or count,
-        // and a gesture is not an activation to assistive technology. macOS has ⌘1–⌘7 to fall
-        // back on; iOS has nothing else at all.
+        // A `Button` rather than `onTapGesture`: nothing here reads a tap's location or count, and
+        // a gesture is not an activation to assistive technology.
         Button {
             withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.6)) {
                 selectedNoteIndex = index
@@ -57,8 +48,8 @@ struct ColorCircle: View {
             circle(isSelected: isSelected)
         }
         .buttonStyle(.plain)
-        // The number is drawn on the selected circle alone, so every other one would otherwise
-        // reach assistive technology as an unnamed shape — and all seven as identical ones.
+        // Only the selected circle is numbered, so without this the rest reach assistive
+        // technology as identical unnamed shapes.
         .accessibilityLabel("Note \(index + 1)")
         .accessibilityValue(isEmpty ? "Empty" : "Has content")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -91,9 +82,8 @@ struct ColorCircle: View {
                 )
             }
 
-            // The number: on the selected circle always, and on every circle when the user has
-            // asked not to be told things by colour. Drawn in the note's own colour where there
-            // is no fill behind it to read against.
+            // In the note's own colour on an unselected circle, which has no fill behind it for
+            // white to read against.
             if isSelected || differentiateWithoutColor {
                 Text("\(index + 1)")
                     .font(

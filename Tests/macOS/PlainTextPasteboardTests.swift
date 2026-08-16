@@ -86,9 +86,9 @@ struct PlainTextPasteboardTests {
         #expect(scratch.pasteboard.plainTextForPaste() == expected)
     }
 
-    /// What the clipboard carries that a note may not hold is dropped on the way in, on every
-    /// flavor — ⌘⇧V never goes near the writer, so this reading is the only place to do it.
-    /// U+FFFC is what an image on the clipboard contributes to the text beside it.
+    /// Characters a note may not hold are dropped on the way in: ⌘⇧V never goes near the writer, so
+    /// this read is the only place to do it. U+FFFC is what an image on the clipboard contributes to
+    /// the text beside it.
     @Test(arguments: [("secret\u{FFFC}", "secret"), ("a\u{0}b", "ab"), ("a\r\nb", "a\nb")])
     func charactersANoteMayNotHoldAreDropped(written: String, expected: String) {
         let scratch = ScratchPasteboard()
@@ -228,9 +228,8 @@ struct PlainTextPasteboardTests {
     }
 
     /// `MarkdownSyntax` does not parse inside a link's label, so emphasis over a link is written
-    /// *around* it. That is a spelling the parser reads (`MarkdownSyntaxTests`
-    /// `aLinkNestsButItsLabelIsNotParsed`), so the trait survives the save it used to be dropped
-    /// by — and ⌘B can take it off again, which is the rule the whole conversion exists to hold.
+    /// around it — a spelling the parser reads back
+    /// (`MarkdownSyntaxTests.aLinkNestsButItsLabelIsNotParsed`), so ⌘B can take it off again.
     @Test func aBoldLinkKeepsBothTheLinkAndTheBold() throws {
         let url = try #require(URL(string: "https://example.com"))
         let styled = NSAttributedString(
@@ -283,11 +282,9 @@ struct PlainTextPasteboardTests {
         #expect(scratch.pasteboard.markdownForPaste() == nil)
     }
 
-    /// Past the size limit ⌘V stops decoding the markup and pastes the characters instead.
-    ///
-    /// The decode runs on the main thread inside the key-event monitor and is super-linear —
-    /// 203 KB of HTML measured at 2.9 s, which is where macOS starts calling an app unresponsive.
-    /// Losing the bold on a clipboard nobody would paste into a scratchpad is the better trade.
+    /// Past the size limit ⌘V stops decoding the markup and pastes the characters instead. The
+    /// decode runs on the main thread inside the key-event monitor and is super-linear: 203 KB of
+    /// HTML measured at 2.9 s, well past where macOS calls an app unresponsive.
     @Test func anEnormousRichClipboardIsPastedAsItsCharacters() {
         let scratch = ScratchPasteboard()
         // `<b>keys</b> ` is 12 bytes, so this clears the limit with room to spare — and has to,

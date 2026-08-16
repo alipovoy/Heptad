@@ -86,11 +86,9 @@ struct NoteEditorCoordinatorTests {
     /// A new view is built, then configured, then loaded — and the coordinator already names the
     /// incoming note by the time it is configured.
     ///
-    /// On a view with nothing in it yet, the only surviving effect of `configure` is that it
-    /// records the appearance — and that is what `load` renders the note through. Reversed, the
+    /// `configure` records the appearance that `load` then renders the note through, so reversed the
     /// note is rendered in whatever the view was before and the mode arrives one paint late.
-    /// `currentNoteId` is set ahead of both so nothing under them can act on a stale answer to
-    /// "which note is showing".
+    /// `currentNoteId` is set ahead of both so nothing under them reads a stale showing note.
     @Test(.bug(id: 103))
     func aNewViewIsConfiguredBeforeItsContentIsLoaded() {
         coordinator.setup(container: container, notes: notes, selectedIndex: 1)
@@ -102,10 +100,9 @@ struct NoteEditorCoordinatorTests {
 
     /// Each note is drawn in its own colour, and that colour is its *position* — not its id.
     ///
-    /// This class is the only one that addresses a note by `id`; everything above it, the palette
-    /// included, addresses one by position. The two agree only while the stored ids are exactly
-    /// `0..<noteCount`, and `NotePalette.boldTint` clamps rather than fails — so where they came
-    /// apart, bold text was drawn in another note's colour with nothing to say which.
+    /// This class is the only one that addresses a note by `id`, and the palette addresses one by
+    /// position; the two agree only while the stored ids are exactly `0..<noteCount`, and
+    /// `boldTint` clamps rather than fails, so bold text was drawn in another note's colour.
     ///
     /// Sparse ids rather than `0, 1`, because with those every wrong answer is also the right one.
     @Test func eachNoteIsTintedByItsPositionRatherThanItsId() {
@@ -125,10 +122,9 @@ struct NoteEditorCoordinatorTests {
 
     /// A zoom step repaints the note on screen, and only that one.
     ///
-    /// The other six are configured again on their way back in (#103), so repainting them here
-    /// is work thrown away and then redone — 155 ms per `⌘+` with seven long notes cached,
-    /// against the 33 ms a held key leaves, six sevenths of it for notes nobody is looking at.
-    /// `aCachedNoteComesBackAtTheZoomItMissed` is the other half of this: nothing is left stale.
+    /// The others are configured again on their way back in (#103), so repainting them here is work
+    /// thrown away: 155 ms per `⌘+` with seven long notes cached, against the 33 ms a held key
+    /// leaves. `aCachedNoteComesBackAtTheZoomItMissed` is the half that shows nothing goes stale.
     ///
     /// Driven through the coordinator's own seams rather than `.standard`/`.default`: with the
     /// defaults it reads and the centre it listens on both injected, this covers the whole path
@@ -192,16 +188,12 @@ struct NoteEditorCoordinatorTests {
     #if canImport(UIKit)
         /// The system text size repaints the showing note too, on the same path as a zoom step.
         ///
-        /// iOS only: the notification is UIKit's, and so is the setting behind it. Posted on
-        /// `.default` because that is where UIKit posts it and so where the coordinator listens —
-        /// the one observer in this class that is not on an injected centre.
+        /// iOS only, and posted on `.default` because that is where UIKit posts it and so where the
+        /// coordinator listens — the one observer here not on an injected centre.
         ///
-        /// What this pins is the routing and nothing more: the notification arrives, and the
-        /// showing note — only the showing note — is reconfigured. The spy's `configure` records
-        /// the call and paints nothing, so whether the *text* actually changes size is invisible
-        /// here, and was in fact false while this passed. `DynamicTypeTests`
-        /// `.aSystemTextSizeChangeRedrawsTheNoteAlreadyOnScreen` is the assertion that can see it,
-        /// on a real view.
+        /// This pins the routing only. The spy's `configure` paints nothing, so whether the text
+        /// changes size is invisible here; `DynamicTypeTests`
+        /// `.aSystemTextSizeChangeRedrawsTheNoteAlreadyOnScreen` asserts that on a real view.
         @Test func aSystemTextSizeChangeRepaintsTheShowingNote() throws {
             coordinator.setup(container: container, notes: notes, selectedIndex: 0)
             coordinator.update(notes: notes, selectedIndex: 1)
@@ -238,9 +230,8 @@ struct NoteEditorCoordinatorTests {
     /// appears, just sized wrong, which is the kind of layout bug that only shows up once
     /// the container is resized. Autoresizing must also be off, or the constraints conflict.
     ///
-    /// A loop rather than four parameterized cases, matching its sibling below: the cases each
-    /// paid a full `setup` to assert one constraint, and the loop asserts all four for the cost
-    /// of one — with the same per-edge failure message, which was the reason for splitting them.
+    /// A loop rather than four parameterized cases, matching its sibling below: one `setup` covers
+    /// all four edges, and the message still names the edge that failed.
     @Test func incomingViewIsPinnedToEveryContainerEdge() throws {
         coordinator.setup(container: container, notes: notes, selectedIndex: 0)
         let editorView = try #require(container.subviews.first)

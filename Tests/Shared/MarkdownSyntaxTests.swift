@@ -63,9 +63,9 @@ struct MarkdownSyntaxTests {
         #expect(markers("[docs](https://example.com)") == ["[", "](https://example.com)"])
     }
 
-    /// A destination's own parentheses are balanced, so the address survives whole. Stopping at
-    /// the first `)` gave `[Foo](…/Foo_(bar))` a dead URL and left `)` behind as text — and the
-    /// writer then stored that, so the note kept the damage.
+    /// A destination's own parentheses are balanced, so the address survives whole. Stopping at the
+    /// first `)` gave `[Foo](…/Foo_(bar))` a dead URL, left `)` behind as text, and the writer
+    /// stored that.
     @Test(
         arguments: [
             "https://en.wikipedia.org/wiki/Foo_(bar)",
@@ -85,10 +85,9 @@ struct MarkdownSyntaxTests {
         #expect(styled("[Foo](https://e.co/(a)").contains { $0.1 == .link } == false)
     }
 
-    /// An unmatched `)` still ends the destination there — unescaped, that is the only thing it
-    /// can mean — so `…/a)b` is an address this app has no spelling for. What matters is that the
-    /// *writer* never stores one: `RichTextRoundTripTests` pins that it drops the link and keeps
-    /// every character.
+    /// An unmatched `)` still ends the destination there, so `…/a)b` is an address this app has no
+    /// spelling for. `LinkRoundTripTests` pins that the writer never stores one: it drops the link
+    /// and keeps every character.
     @Test func anUnmatchedCloseEndsTheDestination() {
         #expect(markers("[Foo](https://e.co/a)b)") == ["[", "](https://e.co/a)"])
     }
@@ -165,8 +164,7 @@ struct MarkdownSyntaxTests {
     }
 
     /// And a loose one is still an ordinary character, which is what makes arithmetic and shell
-    /// globs safe to type: a delimiter never opens against whitespace or closes against it, and
-    /// one with no partner opens nothing at all.
+    /// globs safe to type: a delimiter never opens or closes against whitespace.
     @Test(arguments: [
         "2 * 3 * 4", "SELECT * FROM notes", "chmod +x *.sh", "*.txt and *.md", "a * b * c"
     ])

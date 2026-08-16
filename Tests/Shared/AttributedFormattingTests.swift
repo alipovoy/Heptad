@@ -13,7 +13,7 @@ import Testing
 ///
 /// `EditorFormattingTests` drives these through ⌘B and the real editor; this pins the decisions
 /// the rule makes on its own — which direction a mixed selection goes, and that every trait is
-/// applied wherever it is asked for, since every one of them now has a spelling.
+/// applied wherever it is asked for.
 struct AttributedFormattingTests {
 
     private let appearance = MarkdownStyling.Appearance(
@@ -81,10 +81,8 @@ struct AttributedFormattingTests {
 
     // MARK: - What it declines
 
-    /// Nothing, any more. `_` cannot be written against a word character — `key_sto_re` is an
-    /// identifier to the parser, not italic — so the command used to refuse mid-word rather than
-    /// leave the note in a state the writer would drop. The writer spells that run `*` now, so
-    /// ⌘I is an ordinary toggle wherever the caret is, the way ⌘B always was.
+    /// Nothing, any more. `_` against a word character is an identifier to the parser, not italic,
+    /// so the writer spells that run `*` and ⌘I is an ordinary toggle wherever the caret is.
     @Test func italicIsAppliedInTheMiddleOfAWord() {
         let text = storage("keystore")
 
@@ -94,8 +92,8 @@ struct AttributedFormattingTests {
         #expect(MarkdownWriting.markdown(from: text) == "key*sto*re")
     }
 
-    /// And taking it off part of an italic word leaves the rest italic, which is the same rule
-    /// seen from the other side: `foo_bar_` has no spelling, `foo*bar*` does.
+    /// And taking it off part of an italic word leaves the rest italic: `foo_bar_` has no
+    /// spelling, `foo*bar*` does.
     @Test func takingItalicOffPartOfAWordLeavesTheRest() {
         let text = storage("_foobar_")
 
@@ -117,10 +115,8 @@ struct AttributedFormattingTests {
 
     /// The selection is trimmed to its core, so a trailing space is not what gets formatted.
     ///
-    /// Asserted on the buffer first, and that is the point of the finding this test is the witness
-    /// for: the writer puts a space outside the pair whether or not the command kept it out of the
-    /// run, so the store reads `**rotate** keys` either way. Drop the trim in `toggle` and the
-    /// space is bold on screen with every test still green.
+    /// Asserted on the buffer, because the store cannot see it: the writer puts the space outside
+    /// the pair either way, so `**rotate** keys` is written even with the trim dropped.
     @Test func aTrailingSpaceIsNotPartOfTheRun() {
         let text = storage("rotate keys")
 
@@ -134,11 +130,10 @@ struct AttributedFormattingTests {
 
     /// A whole list line can be formatted without the line stopping being a list line.
     ///
-    /// The pair goes around the content, never around the marker. `**- [ ] task**` keeps every
-    /// character and every trait, so the writer's own check accepts it, but
-    /// `ListContinuation.markerLength` no longer reads it: Return stops continuing the list and
-    /// `⌘⇧U` finds no checkbox to toggle. The bold on the marker itself is dropped instead, which
-    /// is the same loss the leading whitespace beside it already takes.
+    /// The pair goes around the content, never around the marker: `**- [ ] task**` round-trips
+    /// character for character, so the writer's check accepts it, but
+    /// `ListContinuation.markerLength` no longer reads it — Return stops continuing the list and
+    /// `⌘⇧U` finds no checkbox. The bold on the marker itself is dropped instead.
     @Test(arguments: ["- [ ] task", "- item", "* item", "1. item", "  - indented"])
     func formattingAWholeListLineLeavesItsMarkerReadable(line: String) throws {
         let text = storage(line)

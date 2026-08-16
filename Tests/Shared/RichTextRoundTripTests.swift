@@ -128,9 +128,8 @@ struct RichTextRoundTripTests {
     /// Only the lines that need escaping get them. A note is read in plain mode too, and a
     /// backslash in front of every glob would be its own kind of damage.
     ///
-    /// Two arguments, not five: the other three are in `markdownSurvivesTheRoundTrip`'s list and
-    /// reach the buffer identically either way — verified byte-for-byte. These two are the ones
-    /// that carry information this test alone has.
+    /// Two arguments: the rest of the old list is in `markdownSurvivesTheRoundTrip` and reaches the
+    /// buffer identically either way.
     @Test(.bug(id: 124), arguments: ["chmod +x *.sh", "50% * 2"])
     func textThatReadsBackAsItselfIsLeftAlone(typed: String) {
         let text = rendered("")
@@ -148,10 +147,8 @@ struct RichTextRoundTripTests {
 
     /// The escaping stops short of the line's own list marker.
     ///
-    /// `- [ ] ` is content — the user typed it, or pressed Return and had it typed for them — so
-    /// a backslash through it is not a defence against anything. It demoted the checkbox to a
-    /// bare bullet in the stored file, and the item stopped being a task on the first save that
-    /// escaped its line.
+    /// A backslash through `- [ ] ` defends nothing and demoted the checkbox to a bare bullet in the
+    /// stored file, so the item stopped being a task on the first save that escaped its line.
     @Test(arguments: ["- [ ] ", "- [x] ", "- ", "1. ", "  - "])
     func escapingALineLeavesItsListMarkerAlone(marker: String) {
         let text = rendered("")
@@ -225,10 +222,9 @@ struct RichTextRoundTripTests {
 
     /// Italic beside another construct.
     ///
-    /// The writer used to ask whether a `_` pair would read back by looking at the characters
-    /// flanking the run in the *rendered* string — which has no delimiters in it — so the `d` and
-    /// the `w` of `hardware` looked adjacent and the pair was refused. In the markdown being
-    /// written the `**` sits between them, and the parser reads it back exactly.
+    /// Whether a `_` pair reads back has to be asked of the markdown being written, not of the
+    /// rendered string: there the `d` and the `w` of `hardware` look adjacent and the pair is
+    /// refused, when in fact the `**` sits between them and the parser reads it back exactly.
     @Test(
         arguments: [
             "the **_hard_**ware", "x**_a_**y", "_a_**b**", "**a**_b_", "~~_a_~~b"
@@ -239,28 +235,24 @@ struct RichTextRoundTripTests {
 
     /// And it survives there on a line the ladder has already left.
     ///
-    /// The retreat is per *line*, not per run: one `_` the writer cannot spell — ⌘I mid-word, the
-    /// case `*` exists for — costs every run on the line its `.preferred` spelling. `.fallback` then
-    /// respelled these pairs `*` too, and `***hard***` is a run of asterisks no parser resolves, so
-    /// that rung failed as well and `.dropped` took the italic off *both* runs: `the **hard**ware`,
-    /// a save removing formatting the rung above it could spell. Only the link half of this was
-    /// fixed first, which is the more exotic path by far — `x*i*y the **_hard_**ware` is one press
-    /// of ⌘I away from any note. The `~~` row lost nothing and churned the stored spelling from `_`
-    /// to `*`, which a reader in plain mode sees.
+    /// The retreat is per *line*, not per run, which is why every input carries an `x*i*y` prefix:
+    /// that one unspellable `_` costs every run on the line its `.preferred` spelling. `.fallback`
+    /// respelled these pairs `*` as well, and `***hard***` resolves in no parser, so `.dropped` took
+    /// the italic off both runs and stored `the **hard**ware`.
     @Test(arguments: ["x*i*y the **_hard_**ware", "x*i*y a **_b_**c", "x*i*y ~~_a_~~b"])
     func italicSurvivesBesideAnotherConstructOnALineTheLadderHasLeft(_ markdown: String) {
         #expect(roundTrip(markdown) == markdown)
     }
 
-    /// And the rule that refusal existed to protect is still kept: `_` inside a word is an
-    /// identifier, not italic, so the parser never reads one and the writer never writes one.
+    /// And the rule `*` exists to keep: `_` inside a word is an identifier, not italic, so the
+    /// parser never reads one and the writer never writes one.
     @Test(arguments: ["AWS_SECRET_KEY", "snake_case_name", "__init__"])
     func anUnderscoreInsideAWordIsNotItalic(_ markdown: String) {
         #expect(roundTrip(markdown) == markdown)
     }
 
-    /// Which is what `*` is for. Italic against a word character has no `_` spelling at all, so
-    /// the writer used to drop it — ⌘I mid-word showed italic the next save took away.
+    /// Which is what `*` is for: italic against a word character has no `_` spelling, so ⌘I mid-word
+    /// showed italic that the next save took away.
     @Test(arguments: [
         (NSRange(location: 4, length: 3), "Test*ing*"),  // against the word behind it
         (NSRange(location: 0, length: 4), "*Test*ing"),  // and the word ahead
@@ -294,10 +286,8 @@ struct RichTextRoundTripTests {
     /// A run boundary inside a character costs neither the character nor the line's formatting.
     ///
     /// Nothing stops an attribute from starting between the two halves of a surrogate pair, and
-    /// `substring(with:)` bridges a half to U+FFFD — `a🔑b` was stored with two replacement
-    /// characters in it, which no later edit undoes. The ladder now keeps the characters
-    /// whatever happens, so what this pins is the rest: the boundary moves off the pair, and the
-    /// line keeps the run it was carrying.
+    /// `substring(with:)` bridges a half to U+FFFD, so `a🔑b` was stored with two replacement
+    /// characters in it that no later edit undoes.
     @Test func aRunBoundaryInsideACharacterDoesNotCostTheCharacter() {
         // The bold starts on the second half of the pair, which is an offset nothing prevents.
         let text = rendered("a🔑b")
@@ -310,10 +300,9 @@ struct RichTextRoundTripTests {
 
     /// A pasted image's placeholder does not reach the store.
     ///
-    /// U+FFFC is what an `NSTextAttachment` contributes to a string, so copying an image and a
-    /// word of bold out of Mail brings one along. `normalize` strips the attachment *attribute*
-    /// and leaves the character, which is invisible, cannot be selected as anything, and used to
-    /// survive every save from then on.
+    /// U+FFFC is what an `NSTextAttachment` contributes to a string, so pasting an image out of Mail
+    /// brings one along. `normalize` strips the attachment attribute and leaves the character, which
+    /// is invisible and survived every save from then on.
     @Test func anAttachmentPlaceholderIsNotStored() {
         let text = rendered("**caption**")
         text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "\u{FFFC}")
@@ -321,9 +310,8 @@ struct RichTextRoundTripTests {
         #expect(MarkdownWriting.markdown(from: text) == "**caption**")
     }
 
-    /// The control characters go the same way, and the line keeps its formatting: they are taken
-    /// out before the writer reasons about the line at all, rather than making it a line the
-    /// check finds wrong and rewrites as plain text.
+    /// The control characters go the same way, and the line keeps its formatting: they are taken out
+    /// before the writer reasons about the line, not left to make it a line the check rewrites.
     @Test(
         arguments: [
             ("a\u{0}b", "ab"),
@@ -349,10 +337,9 @@ struct RichTextRoundTripTests {
 
     /// A trait with no spelling costs the line itself and nothing else.
     ///
-    /// `_c_` between two word characters is an identifier to the parser, so the spelling that
-    /// writes it comes back as different characters and is rejected — and the candidate that ends
-    /// the ladder holds no delimiters at all, which would take the link with it. Between them is
-    /// the rung that drops just the pair it cannot write.
+    /// `_c_` between two word characters is an identifier to the parser, so that spelling is
+    /// rejected, and the candidate ending the ladder holds no delimiters at all — it would take the
+    /// link too. Between them is the rung that drops only the pair it cannot write.
     @Test func aTraitWithNoSpellingDoesNotCostTheLineItsOtherFormatting() {
         let text = rendered("")
         text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "ab cd")

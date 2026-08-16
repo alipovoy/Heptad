@@ -3,23 +3,18 @@ import UIKit
 
 @testable import Heptad
 
-/// Whether the note text follows the system text size — the setting an iOS user has already
-/// changed before they ever open this app.
-///
-/// iOS only, and the asymmetry is the design rather than a gap: macOS has no system-wide text
-/// size, which is why `⌘+`/`⌘-` and `EditorFontSize` exist there. `PlatformFont.editorBody` says
-/// so at the one place either platform decides a size.
+/// Whether the note text follows the system text size. iOS only: macOS has no system-wide text
+/// size, which is why `⌘+`/`⌘-` and `EditorFontSize` exist there instead.
 ///
 /// Driven through `UITraitCollection.performAsCurrent` rather than by changing a real setting, so
-/// each size below is exact and the test needs nothing of the device it runs on.
+/// each size below is exact and nothing depends on the simulator's own category.
 @MainActor
 struct DynamicTypeTests {
 
     /// The base every note starts from, which the metrics scale rather than replace.
     private let base = AppConstants.Layout.defaultFontSize
 
-    /// Only the end-to-end test below needs it — a real coordinator reads the zoom from defaults,
-    /// and never from the app's own suite in a test.
+    /// Only the end-to-end test below needs it: a real coordinator reads the zoom from defaults.
     private let scratchDefaults: ScratchDefaults
 
     init() throws {
@@ -36,15 +31,15 @@ struct DynamicTypeTests {
         return size
     }
 
-    /// The reason this is safe to ship: at the default category the metrics are the identity, so a
-    /// user who has never touched the setting sees the same 16 pt note as before.
+    /// At the default category the metrics are the identity, so a user who has never touched the
+    /// setting sees the same 16 pt note as before.
     @Test(arguments: [false, true])
     func theDefaultContentSizeLeavesTheNoteExactlyWhereItWas(plainText: Bool) {
         #expect(editorPointSize(at: .large, plainText: plainText) == base)
     }
 
     /// The defect this closes: a note that stayed 16 pt for someone who had asked the system for
-    /// bigger text, with nothing in the app to change it.
+    /// bigger text.
     @Test(
         arguments: [
             UIContentSizeCategory.extraLarge, .extraExtraLarge, .extraExtraExtraLarge,
@@ -59,9 +54,9 @@ struct DynamicTypeTests {
         #expect(editorPointSize(at: category) < base)
     }
 
-    /// Monotonic across the whole range, which is what says the base is being *scaled* rather than
-    /// swapped for a text style's own fixed size — `.body` at `.large` is 17 pt, so a font that had
-    /// been replaced instead of scaled would sit at 17 here and pass the two tests above.
+    /// Monotonic across the whole range, which says the base is scaled rather than swapped for a
+    /// text style's own size: `.body` at `.large` is 17 pt, so a replaced font would sit at 17 and
+    /// still pass the two tests above.
     @Test func theSizeRisesWithEveryStepOfTheSetting() {
         let ladder: [UIContentSizeCategory] = [
             .extraSmall, .small, .medium, .large, .extraLarge, .extraExtraLarge,
@@ -76,9 +71,7 @@ struct DynamicTypeTests {
         #expect(Set(sizes).count > 1, "and the setting moves it at all")
     }
 
-    /// Both modes scale together. A plain-text note is the same prose at the same size in a
-    /// monospaced face, so the two disagreeing about how big the note is would show as a jump on
-    /// every toggle of the mode.
+    /// Both modes scale together, or toggling the mode would jump the note's size.
     @Test(
         arguments: [UIContentSizeCategory.extraSmall, .large, .accessibilityExtraExtraLarge])
     func bothModesScaleTogether(category: UIContentSizeCategory) {
@@ -87,8 +80,8 @@ struct DynamicTypeTests {
                 == editorPointSize(at: category, plainText: false))
     }
 
-    /// Every other cut of the font is derived from the body font, so scaling it is enough — bold,
-    /// italic and their combination all arrive at the scaled size without knowing about any of it.
+    /// Every other cut is derived from the body font, so scaling that one is enough: bold, italic
+    /// and their combination all arrive at the scaled size.
     @Test func theDerivedCutsComeAlong() {
         UITraitCollection(preferredContentSizeCategory: .accessibilityExtraExtraLarge)
             .performAsCurrent {
@@ -104,15 +97,12 @@ struct DynamicTypeTests {
     /// The whole path, on the real views: the setting changes and the characters already on screen
     /// are redrawn at the new size.
     ///
-    /// Everything above this measures `PlatformFont.editorBody` on its own, and all of it passed
-    /// while the feature was inert — the notification reached the coordinator, the coordinator
-    /// reconfigured the showing view, and `apply`'s `appearance != configuredStyling` guard threw
-    /// the repaint away, because none of the three fields the appearance carried had moved. Only an
-    /// assertion on the font in the text storage can see that, which is why this one goes through
-    /// the real `Coordinator` and a real `MarkdownTextView` rather than a spy.
+    /// Through a real `Coordinator` and `MarkdownTextView` rather than a spy, because `apply`'s
+    /// `appearance != configuredStyling` guard can throw the repaint away while every measurement
+    /// above still passes; only the font in the text storage shows that.
     ///
-    /// Posted inside `performAsCurrent` because the post is synchronous: the appearance the
-    /// coordinator builds in response is resolved under the category set here.
+    /// Posted inside `performAsCurrent` because the post is synchronous, so the appearance the
+    /// coordinator builds in response resolves under the category set here.
     @Test func aSystemTextSizeChangeRedrawsTheNoteAlreadyOnScreen() throws {
         let coordinator = IOSRichTextEditor.Coordinator(
             statistics: EditorStatistics(), defaults: scratchDefaults.defaults,
@@ -143,13 +133,9 @@ struct DynamicTypeTests {
     }
 
     /// The zoom stored in defaults stays the base the scaling starts from, rather than being
-    /// replaced by it. Nothing on iOS writes that value today, but the appearance is built by
-    /// shared code that reads it, so a size other than the default has to still mean something.
-    /// Built inside `performAsCurrent`, not read inside it: `baseFont` is resolved by
-    /// `Appearance.init` — that is what R1 changed, and what puts the drawn size in the type's
-    /// identity — so an appearance constructed outside the closure has already scaled by whatever
-    /// category was ambient, and moving it in is the difference between naming the category and
-    /// hoping the simulator's default is `.large`.
+    /// replaced by it. The appearance has to be *built* inside `performAsCurrent`, not merely read
+    /// there: `baseFont` is resolved by `Appearance.init`, so one constructed outside the closure
+    /// has already scaled by whatever category was ambient.
     @Test func theStoredSizeIsStillTheBase() {
         var scaled: CGFloat = 0
         UITraitCollection(preferredContentSizeCategory: .large).performAsCurrent {
@@ -159,8 +145,7 @@ struct DynamicTypeTests {
         #expect(scaled == 24, "at the default category the base is what is drawn")
     }
 
-    /// And a category other than the default scales that same stored size, rather than replacing
-    /// it: 24 has to still mean something once the reader has moved the slider.
+    /// And a larger category scales that stored size rather than replacing it.
     @Test func theStoredSizeIsWhatALargerCategoryScales() {
         var scaled: CGFloat = 0
         UITraitCollection(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge)

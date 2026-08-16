@@ -5,10 +5,8 @@ import Testing
 
 /// ⌘⌫, which is `NSTextView`'s own "delete to beginning of line" and not the app's.
 ///
-/// It used to be Clear Note — the whole buffer, wherever the caret was. That is a key every
-/// other editor spends on one line, and a note is emptied with ⌘A ⌫ in two keystrokes, so the
-/// command was dropped rather than moved. These tests exist to keep the key unclaimed: the
-/// dispatch table is what took it, and the table is where it would be taken again.
+/// These tests exist to keep the key unclaimed: the dispatch table is where it would be taken
+/// again, as Clear Note once took it.
 @MainActor
 struct DeleteToLineStartTests {
     private let textView: MarkdownTextView
@@ -38,8 +36,7 @@ struct DeleteToLineStartTests {
                 charactersIgnoringModifiers: "\u{7F}", isARepeat: false, keyCode: 51))
     }
 
-    /// The event is handed back rather than consumed, which is the whole of the change: the
-    /// text view is what acts on it, and it deletes to the start of the caret's line.
+    /// The event is handed back rather than consumed, so the text view is what acts on it.
     @Test(arguments: [false, true])
     func commandDeleteIsPassedToTheTextView(shift: Bool) throws {
         let event = try commandDelete(shift: shift)
@@ -51,8 +48,7 @@ struct DeleteToLineStartTests {
         #expect(textView.string == "user: admin\npass: rotate-me", "and nothing acted on it here")
     }
 
-    /// What the text view then does with it, driven directly — the selector is the one AppKit
-    /// binds ⌘⌫ to, and it is the behaviour the shortcut used to cost.
+    /// What the text view then does with it, driven through the selector AppKit binds ⌘⌫ to.
     @Test func deletingToTheLineStartLeavesTheRestOfTheNote() {
         textView.setSelectedRange(NSRange(location: 18, length: 0))  // after "pass: "
 
@@ -61,8 +57,8 @@ struct DeleteToLineStartTests {
         #expect(textView.string == "user: admin\nrotate-me")
     }
 
-    /// And registers nothing to undo, which is the property worth having: an accidental ⌘⌫ at the
-    /// head of a line must not put an empty step on the stack for the next ⌘Z to spend.
+    /// And registers nothing to undo: an accidental ⌘⌫ at the head of a line must not put an empty
+    /// step on the stack for the next ⌘Z to spend.
     @Test func theCaretAtTheStartOfALineDeletesNothing() {
         textView.setSelectedRange(NSRange(location: 12, length: 0))  // head of line 2
 

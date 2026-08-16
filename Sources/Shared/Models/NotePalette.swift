@@ -21,11 +21,8 @@ enum NotePalette {
 
     /// The colour bold text is drawn in on note `index`, in formatted mode.
     ///
-    /// Clamped rather than trusted, and clamped here because this is the only door there is. The
-    /// index arrives from a stored selection, `colors` is fixed at seven, and a scratchpad should
-    /// not trap over a colour. It used to be a `BoldTint` value whose memberwise initializer was
-    /// internal, so the subscript could be reached without passing the clamp at all — the type
-    /// carried one `Int`, one computed colour and an `Equatable` conformance `Int?` gives away.
+    /// Clamped here because this is the only door to `boldTints`: the index arrives from a stored
+    /// selection, and a scratchpad should not trap over a colour.
     static func boldTint(forNoteIndex index: Int) -> PlatformColor {
         boldTints[NoteSelection.clamped(index, noteCount: colors.count)]
     }
@@ -35,7 +32,8 @@ enum NotePalette {
     private static let boldTints: [PlatformColor] = colors.map(tint(of:))
 
     #if !canImport(UIKit)
-        /// The two appearances the tint below chooses between, hoisted out of the resolve.
+        /// The two appearances the tint below chooses between. Hoisted because AppKit runs that
+        /// closure on every resolve, and the answer never changes.
         private static let appearances: [NSAppearance.Name] = [.aqua, .darkAqua]
     #endif
 
@@ -54,9 +52,6 @@ enum NotePalette {
         #if canImport(UIKit)
             return PlatformColor { $0.userInterfaceStyle == .dark ? dark : light }
         #else
-            // The candidate list is hoisted: AppKit calls this closure on every resolve, which is
-            // every time a tinted run is drawn, and building a two-element array there allocates
-            // for an answer that never changes.
             return PlatformColor(name: nil) { appearance in
                 appearance.bestMatch(from: Self.appearances) == .darkAqua ? dark : light
             }

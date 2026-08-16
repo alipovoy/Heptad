@@ -15,18 +15,15 @@ import Foundation
 /// bold again produced `**_**hello**_**`, because `⌘B` could only recognise a `**` pair sitting
 /// immediately beside the selection and the italic pair had moved it out of reach (#124).
 ///
-/// Nothing here declines. Every trait can be spelled wherever the caret is, so `⌘I` behaves like
-/// `⌘B` and `⌘⇧X` — including with nothing selected, where it arms the caret and what is typed
-/// next comes out italic. `⌘I` used to refuse mid-word, because `_` cannot be written against a
-/// word character; `MarkdownWriting` spells those runs `*` instead, and the rule went with it.
+/// Nothing here declines: `MarkdownWriting` falls back to `*` where `_` cannot be written against
+/// a word character, so every trait can be spelled wherever the caret is. With nothing selected a
+/// command arms the caret, and what is typed next carries the trait.
 enum AttributedFormatting {
     /// Whether every character in `range` that could carry `emphasis` already does.
     ///
-    /// Line terminators are not asked, because no answer they give is meaningful: a construct
-    /// never spans lines, so the writer refuses a trait on a terminator and every note that has
-    /// been through one save comes back with bare newlines between its runs. Counting them made
-    /// the first ⌘B on a paragraph that was already bold when the note opened *re-apply* the
-    /// bold — nothing visibly happened, and the user had to press twice.
+    /// Line terminators are not asked. A construct never spans lines, so a saved note comes back
+    /// with bare newlines between its runs, and counting them made the first ⌘B on an
+    /// already-bold paragraph re-apply the bold rather than remove it.
     ///
     /// False for a range with nothing spellable in it, which never matters: an empty selection
     /// reads the typing attributes instead, and an empty note has nothing to toggle.
@@ -103,7 +100,6 @@ enum AttributedFormatting {
     ///
     /// Removing a font trait means rebuilding the font from the base one and putting back the
     /// *other* trait, because a symbolic trait cannot be subtracted from a font that has it.
-    ///
     private static func applied(
         _ emphasis: Emphasis, _ applying: Bool,
         to attributes: [NSAttributedString.Key: Any], appearance: MarkdownStyling.Appearance
@@ -120,10 +116,9 @@ enum AttributedFormatting {
             updated[.font] = rebuilt(font, bold: font.isBold, italic: applying, appearance)
         }
 
-        // Back through the same filter every other edit meets, rather than restating the one rule
-        // from it this needs. It re-derives the colour, which is what makes `⌘B` put the note's
-        // tint on and take it off — nothing else would: this writes attributes, not characters, so
-        // the storage delegate that normalizes every other edit never sees it.
+        // Through the same filter every other edit meets, which re-derives the colour: this writes
+        // attributes, not characters, so the storage delegate that normalizes every other edit
+        // never sees it, and nothing else would put the note's tint on and take it off.
         return MarkdownStyling.normalized(updated, in: appearance)
     }
 
@@ -141,8 +136,8 @@ enum AttributedFormatting {
     /// `⌘B` then typing is bold, the way it is in every other editor. Nothing is written to the
     /// buffer, so nothing is left behind if the user presses it and types nothing.
     ///
-    /// The direction is the caret's own run inverted, decided here rather than passed in: there is
-    /// no selection to read, and `isApplied` over an empty range is false whatever the run says.
+    /// The direction is the caret's own run inverted, decided here rather than passed in:
+    /// `isApplied` over an empty range is false whatever the run says.
     private static func typingAttributes(
         _ emphasis: Emphasis, at caret: Int,
         in storage: NSAttributedString, appearance: MarkdownStyling.Appearance

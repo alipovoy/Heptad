@@ -3,13 +3,9 @@ import Foundation
 
 /// The values more than one file has to agree on.
 ///
-/// That is the whole membership rule, and it is narrower than "every number in the app": a constant
-/// with one reader lives *in* that file, beside the code whose behaviour it describes. Nine of the
-/// eighteen members here used to have exactly one — `dragToPinThreshold` re-aliased in
-/// `WindowManager` under its own name, so one value was spelled in three places to be read in
-/// one — while the numbers two views genuinely had to match sat as literals in both. That inverts
-/// what the file is for: a value here is a promise that two files stay in step, and a value here
-/// with one reader is just distance between a number and its reason.
+/// That is the whole membership rule, and it is narrower than "every number in the app": a
+/// constant with one reader belongs in that file, beside the code it describes. A value here is a
+/// promise that two files stay in step.
 enum AppConstants {
     /// The app always has exactly this many notes (one per color).
     static let noteCount = 7
@@ -46,9 +42,9 @@ enum AppConstants {
 
         /// How much of the selected note's colour the window is washed with.
         ///
-        /// Read by the view that paints it and by the test that checks every bold tint clears
-        /// WCAG AA against it. A contrast ratio is a property of two colours and this is one of
-        /// them, so a test holding its own copy would keep passing while the app went unreadable.
+        /// Read by the view that paints it and by the test that checks every bold tint clears WCAG
+        /// AA against it — with its own copy, that test would keep passing while the app went
+        /// unreadable.
         static let noteTintOpacity: Double = 0.1
     }
 
@@ -60,10 +56,9 @@ enum AppConstants {
         /// The panel's smallest content size, declared by `ContentView` and read back by
         /// `WindowManager` for the size it opens at.
         ///
-        /// The view is the source of truth for the width because it cannot help being:
-        /// `NSHostingView` installs its root's minimum as the window's `contentMinSize` and grows
-        /// the window to satisfy it, so a narrower `contentRect` never survived first contact —
-        /// the panel opened at this width whatever the window manager asked for.
+        /// The view cannot help being the source of truth for the width: `NSHostingView` installs
+        /// its root's minimum as the window's `contentMinSize` and grows the window to satisfy it,
+        /// so a narrower `contentRect` never survives.
         static let minimumContentSize = CGSize(width: 320, height: 200)
 
         /// What the panel is built at, before any autosaved frame is restored. Only the height is

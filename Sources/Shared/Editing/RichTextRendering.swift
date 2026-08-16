@@ -43,10 +43,9 @@ enum RichTextRendering {
             apply(span, over: range, to: rendered, in: source, spans: spans)
         }
 
-        // The tint last, over the finished runs, and skipping links. Spans arrive in parse order,
-        // so a bold span and the link span enclosing it can land either way round — this is what
-        // keeps which one wins from depending on that order. The link colour above is applied as
-        // the span is, and stands.
+        // The tint last, over the finished runs, and skipping links. Spans arrive in parse order, so
+        // a bold span and the link span enclosing it can land either way round — this is what keeps
+        // which one wins from depending on that order.
         MarkdownStyling.tintBold(appearance, in: rendered)
 
         return rendered

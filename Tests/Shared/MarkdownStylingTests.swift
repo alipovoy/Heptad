@@ -136,9 +136,7 @@ struct MarkdownStylingTests {
 
         MarkdownStyling.normalize(appearance, in: text, over: edited)
 
-        // The subject is that the call returns at all: `normalize` writes attributes and never
-        // characters, so this comparison cannot fail — an out-of-range read traps, and a trap
-        // fails the test. Read it as `#expect(noTrap)`.
+        // The subject is that the call returns at all: read it as `#expect(noTrap)`.
         #expect(text.string == "keys", "Normalizing never changes a character")
     }
 
@@ -148,7 +146,7 @@ struct MarkdownStylingTests {
         MarkdownStyling.normalize(appearance, in: empty)
         MarkdownStyling.normalize(appearance, in: empty, over: NSRange(location: 0, length: 0))
 
-        // As above: the absence of a trap is the assertion. Nothing else could change here.
+        // As above: the absence of a trap is the assertion.
         #expect(empty.length == 0)
     }
 

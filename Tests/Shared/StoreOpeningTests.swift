@@ -6,9 +6,9 @@ import Testing
 
 /// A `NoteItem` as an older build of the app defined it: content in `rtfData`, which #118 removed.
 ///
-/// Nested so the name does not collide with the shipping model's — SwiftData names the entity after
-/// the unqualified class name, so to the store on disk this *is* `NoteItem`, which is what makes the
-/// schema mismatch below a mismatch rather than a second table.
+/// Nested so the name does not collide with the shipping model's. SwiftData names the entity after
+/// the unqualified class name, so to the store on disk this is `NoteItem` — which is what makes the
+/// mismatch below a mismatch rather than a second table.
 enum LegacySchema {
     @Model final class NoteItem {
         var id: Int = 0
@@ -23,10 +23,9 @@ enum LegacySchema {
 
 /// What launch does with the file holding all seven notes.
 ///
-/// One case each way, because the interesting half is the one that used to be a `fatalError`: a
-/// store this app cannot open is a crash on every launch, forever, in a menubar app whose icon
-/// would then simply do nothing. And one for a file an older schema wrote, which is how #118 lost
-/// every note.
+/// A store this app cannot open was a `fatalError` — a crash on every launch, forever, in a menubar
+/// app whose icon would then do nothing. The third case is a file an older schema wrote, which is
+/// how #118 lost every note.
 @MainActor
 struct StoreOpeningTests {
 
@@ -51,14 +50,12 @@ struct StoreOpeningTests {
             "and the seven notes are there to be written in, for this session at least")
     }
 
-    /// A store written by an older schema, which is the #118 case and the one thing no test in the
-    /// suite had ever done: every other one builds a fresh container, so the schema on disk always
-    /// matched the schema in the binary.
+    /// A store written by an older schema — the one thing no other test does, since every other one
+    /// builds a fresh container whose schema on disk matches the binary's.
     ///
-    /// What is asserted is what the owner decided (D3: no versioned schema, no migration plan): the
-    /// app opens the file, seeds the seven notes, and does not crash. Content that lived only in a
-    /// property the current schema does not have is gone, and this test says so out loud rather
-    /// than leaving it to be discovered a second time.
+    /// Asserted as decided in D3 (no versioned schema, no migration plan): the app opens the file,
+    /// seeds the seven notes, does not crash, and content that lived only in a dropped property is
+    /// gone.
     @Test func aStoreWrittenByAnOlderSchemaStillOpens() throws {
         let url = scratchStoreURL()
         defer { try? FileManager.default.removeItem(at: url) }

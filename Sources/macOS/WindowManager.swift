@@ -30,10 +30,10 @@ extension Notification.Name {
 ///   parked where the user put it: not re-anchored, not dismissed by a click outside, and still
 ///   floating, so it stays above other apps until ⌘W or Esc closes it — which reattaches it.
 ///
-/// Only those two things differ. Level and mask are set once, at creation, and never toggled per
-/// mode; the mask never carries `.miniaturizable`, because minimising was the one way off the
-/// screen that bypassed `hide()` (P1-8). Detaching is a drag past `dragToPinThreshold` or ⌘P;
-/// only ⌘P attaches again without closing — `windowDidMove` arms the gesture in panel mode only.
+/// Only those two things differ: level and mask are set once at creation and never toggled per
+/// mode, and the mask never carries `.miniaturizable`, because minimising was the one way off the
+/// screen that bypassed `hide()`. Detaching is a drag past `dragToPinThreshold` or ⌘P; only ⌘P
+/// attaches again without closing.
 ///
 /// They are exact opposites (`isPanelMode == !isPinned`), and pinning lasts only as long as the
 /// window is on screen: `hide()` puts it back. It is state, not a preference — see #123.
@@ -137,9 +137,8 @@ class WindowManager: NSObject, NSWindowDelegate {
     // MARK: - Hiding
 
     /// The one way the window leaves the screen — the menubar icon, ⌘W/close, and a click outside
-    /// the panel all land here, and all three want the same steps, on the one window this class
-    /// owns. Which is why it takes none: the argument's only effect was to make ordering out one
-    /// window while restyling another expressible.
+    /// the panel all land here, and all three want the same steps on the one window this class owns.
+    /// Which is why it takes no argument.
     private func hide() {
         flushPendingSaves()
         window?.orderOut(nil)
@@ -348,9 +347,8 @@ class WindowManager: NSObject, NSWindowDelegate {
             anchorBelowStatusItem(sender: sender, window: window)
         }
 
-        // Activation first: key status is granted by the window server and only to the active
-        // application, so asking for it from the background asks for what cannot be given — the
-        // panel came up without key, and without a caret, until something else activated the app.
+        // Activation first: the window server grants key status only to the active application, so
+        // asking from the background brought the panel up without key, and without a caret.
         takeActivation()
         window.makeKeyAndOrderFront(nil)
         isPositioningPanel = false
@@ -386,12 +384,11 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// What the monitor above does with one click. Internal so a test can hand it an event
     /// rather than produce a real one in another application.
     ///
-    /// A global monitor is documented to see only what is dispatched to *other* applications,
-    /// and mostly does — but not the click that activates an inactive app, which arrives here
-    /// with `event.window` resolved in this process. Whenever Heptad was showing without having
-    /// won activation, the first click closed the panel: any click, the text included, and the
-    /// note went away under the caret. Hence the guard on the window and not on the status item
-    /// alone — an event carrying any window of ours is a click *inside* the app.
+    /// A global monitor is documented to see only what is dispatched to other applications, but the
+    /// click that activates an inactive app arrives here with `event.window` resolved in this
+    /// process. So the guard is on the window rather than on the status item alone: an event
+    /// carrying any window of ours is a click inside the app, and without that the first click on
+    /// an unactivated panel dismissed it.
     func handleClickOutside(_ event: NSEvent) {
         guard isPanelMode, window?.isVisible == true, event.window == nil else { return }
 

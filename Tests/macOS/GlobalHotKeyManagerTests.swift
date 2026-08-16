@@ -192,10 +192,9 @@ struct GlobalHotKeyManagerTests {
 
     /// A binding that will not register leaves the working one in place, registered.
     ///
-    /// `register()` gives up the current claim before it attempts the new one, and `setBinding`
-    /// used to persist first and never roll back — so one attempt at a combination another app
-    /// owns left the app with no hotkey, and the failed binding was read back at every launch
-    /// after it. There is no settings UI, so the way out was `defaults delete`.
+    /// `register()` gives up the current claim before it attempts the new one, so persisting before
+    /// the attempt succeeds left the app with no hotkey and the failed binding stored — and with no
+    /// settings UI, `defaults delete` was the only way out.
     @Test(.requiresTheSpareCombination)
     func aBindingThatWillNotRegisterIsRolledBack() throws {
         let ownedElsewhere = try ScratchDefaults(name: "GlobalHotKeyManagerTests.owner")

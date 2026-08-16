@@ -64,17 +64,16 @@ final class SpyEditorCoordinator: NoteEditorCoordinator {
 
     private var noteIdsByView: [ObjectIdentifier: Int] = [:]
 
-    /// Forwards the coordinator's own injection seams, with no defaults of its own. Without them
+    /// Forwards the coordinator's own injection seams, with no defaults of its own: without them
     /// `appearance(forNoteId:)` reads `UserDefaults.standard` — the shipping app's domain, under
-    /// `TEST_HOST` — and the zoom repaint listens on `NotificationCenter.default`, where a test
-    /// that stepped the zoom in a scratch suite would be watching a notification the coordinator
-    /// never hears. Defaulting them here made both mistakes the easy ones to make.
+    /// `TEST_HOST` — and the zoom repaint listens on `NotificationCenter.default`, so a test
+    /// stepping the zoom in a scratch suite watches a notification the coordinator never hears.
     override init(defaults: UserDefaults, notificationCenter: NotificationCenter) {
         super.init(defaults: defaults, notificationCenter: notificationCenter)
     }
 
-    /// The hook takes no note, so the id comes from `currentNoteId` — which `update` sets before
-    /// it builds anything, precisely so nothing under it can act on a stale answer.
+    /// The hook takes no note, so the id comes from `currentNoteId`, which `update` sets before it
+    /// builds anything.
     override func makeEditorView() -> PlatformView {
         let noteId = currentNoteId ?? -1
         madeViewNoteIds.append(noteId)

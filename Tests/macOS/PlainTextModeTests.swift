@@ -107,10 +107,9 @@ struct PlainTextModeTests {
     /// Toggling the showing note's mode moves the statistics bar with it.
     ///
     /// The toggle mutates the note SwiftUI is already showing, so `update` takes its early return
-    /// — and the conversion behind it reports nothing to `textDidChange`, the only other thing
-    /// that refreshes the counts. The bar kept the other mode's numbers until the next keystroke.
-    ///
-    /// Driven through `update` rather than `configure`, because the early return is the subject.
+    /// and the conversion behind it reports nothing to `textDidChange` — leaving the bar on the
+    /// other mode's numbers until the next keystroke. Driven through `update` rather than
+    /// `configure`, because that early return is the subject.
     @Test func togglingTheShowingNotesModeMovesTheCountsWithIt() async throws {
         let container = NSView()
         let notes = [NoteItem(id: 0, text: "pass: **rotate-me**")]
@@ -243,10 +242,8 @@ struct PlainTextModeTests {
         manager.toggleStrikethrough(on: textView)
 
         #expect(textView.string == "user: admin")
-        // And no trait either, which neither the characters above nor the note's markdown can
-        // show: plain mode's markdown *is* the characters, so a trait applied here would be bold
-        // on screen and invisible to both. The mode's whole promise is that what you see is the
-        // source.
+        // And no trait either, which neither assertion above can show: plain mode's markdown is the
+        // characters, so a trait applied here would be bold on screen and invisible to both.
         #expect(
             try Emphasis.allCases.allSatisfy { try fixture.carrying($0) == "..........." },
             "nothing formatted, not merely nothing typed")

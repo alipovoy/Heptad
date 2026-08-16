@@ -56,8 +56,7 @@ struct BoldTintTests {
     /// inputs, so every comparison below is made on resolved values. It is also the only way to
     /// ask what the tint actually *looks* like, which is the half of this feature that matters.
     ///
-    /// `PlatformColor.resolved(dark:)` is the app's own — this used to fork on the platform itself,
-    /// in the same shape `NotePalette` did, so the two could have drifted while both looked right.
+    /// Through `PlatformColor.resolved(dark:)`, the app's own, so this cannot drift from it.
     private func resolved(_ color: PlatformColor, dark: Bool) -> PlatformColor {
         color.resolved(dark: dark) ?? color
     }
@@ -66,8 +65,8 @@ struct BoldTintTests {
     /// `Layout.noteTintOpacity` — composited over the window. Computed rather than measured off a
     /// rendered view: the ratio being defended is a property of two colours, not of any layout.
     ///
-    /// The opacity is read from the app rather than copied here, so raising the wash cannot leave
-    /// this suite passing against a background the app no longer paints.
+    /// The opacity is read from the app rather than copied, so raising the wash cannot leave this
+    /// suite passing against a background the app no longer paints.
     private func background(forNoteIndex index: Int, dark: Bool) -> PlatformColor {
         let wash = CGFloat(AppConstants.Layout.noteTintOpacity)
         let note = resolved(PlatformColor(NotePalette.colors[index]), dark: dark)
@@ -84,9 +83,8 @@ struct BoldTintTests {
             blue: wash * blue + (1 - wash) * paper, alpha: 1)
     }
 
-    /// What is behind the note's wash, per platform. `Tests/Shared` compiles into both targets, and
-    /// a single literal here was asserting against a background one of them does not have: iOS's
-    /// dark paper is black, not the panel's 0.11.
+    /// What is behind the note's wash, per platform: `Tests/Shared` compiles into both targets, and
+    /// iOS's dark paper is black rather than the panel's 0.11.
     private func paper(dark: Bool) -> CGFloat {
         #if canImport(UIKit)
             var white: CGFloat = 0
@@ -94,9 +92,8 @@ struct BoldTintTests {
             resolved(.systemBackground, dark: dark).getWhite(&white, alpha: &alpha)
             return white
         #else
-            // The panel is a vibrant material, so there is no colour to ask for. Sampled at
-            // 0.1176 in dark appearance; 0.11 is the conservative reading of that, and light is
-            // white behind the window's own translucency.
+            // The panel is a vibrant material, so there is no colour to ask for: sampled at
+            // 0.1176 in dark, and light is white behind the window's own translucency.
             return dark ? 0.11 : 1.0
         #endif
     }
@@ -130,10 +127,9 @@ struct BoldTintTests {
 
     // MARK: - The colour itself
 
-    /// Seven notes, seven *distinguishable* colours — which is what the tint is for, and is not
-    /// what `Set(...).count == 7` was checking: two tints a thousandth apart are different values
-    /// and the same colour to the eye. Asserted as a distance instead, with the closest pair
-    /// (cyan/blue, measured at 0.103 in RGB) just clearing it.
+    /// Seven notes, seven distinguishable colours. Asserted as an RGB distance rather than as
+    /// distinct values, because two tints a thousandth apart are the same colour to the eye. The
+    /// closest pair, cyan/blue, measures 0.103.
     @Test func everyNoteGetsItsOwnTint() {
         for dark in [false, true] {
             let drawn = (0..<AppConstants.noteCount).map {
@@ -167,11 +163,8 @@ struct BoldTintTests {
     }
 
     /// The index comes from a stored selection by the time it reaches here, the same as every
-    /// other read of the palette — so it is clamped rather than trapped on.
-    ///
-    /// One door now. This used to be reachable past the clamp through `BoldTint`'s internal
-    /// memberwise initializer, which subscripted the seven-entry table with whatever it was
-    /// handed; the type is gone and the palette function is the only way in.
+    /// other read of the palette — so it is clamped rather than trapped on. The palette function is
+    /// the only way in, so the clamp cannot be stepped around.
     @Test(arguments: [-1, 99])
     func anOutOfRangeNoteIndexClampsRatherThanCrashing(index: Int) {
         let expected = index < 0 ? 0 : AppConstants.noteCount - 1
@@ -182,9 +175,8 @@ struct BoldTintTests {
     }
 
     /// Every tint clears WCAG AA for body text against its own note's background, in both
-    /// appearances. Bold text would only have needed 3:1, so 4.5 is the deliberate margin — but it
-    /// is not much of one: green in light appearance measures 4.74:1, which is the pair to look at
-    /// first if a palette change ever turns this red.
+    /// appearances. Bold text would only have needed 3:1, so 4.5 is the deliberate margin, and a
+    /// thin one: green in light appearance measures 4.74:1.
     @Test func everyTintClearsAAAgainstItsOwnNote() {
         for index in 0..<AppConstants.noteCount {
             for dark in [false, true] {
@@ -210,8 +202,7 @@ struct BoldTintTests {
     @Test(arguments: ["**_bold italic_**", "~~**struck**~~", "- **item**"])
     func everyRunCarryingBoldIsTinted(_ markdown: String) throws {
         let text = rendered(markdown, appearance)
-        // `length`, not `string.count`: the attribute index is UTF-16, and the two agree only
-        // while every argument stays ASCII.
+        // `length`, not `string.count`: the attribute index is UTF-16.
         let bold = text.length - 1
 
         #expect(try #require(text.attribute(.font, at: bold, effectiveRange: nil) as? PlatformFont)
@@ -229,10 +220,9 @@ struct BoldTintTests {
     /// A link's colour is the only run colour that already meant something, and it wins. A bold
     /// link that stopped looking like a link would trade one signal for another.
     ///
-    /// Spelled with the pair *around* the link, which is the only spelling this app reads as a bold
-    /// link — a label is not parsed, so `[**docs**](url)` renders the asterisks as characters in
-    /// the base font. That was the previous input here, and it meant the test never reached the
-    /// bold branch it was named for: deleting the link check outright left it green.
+    /// Spelled with the pair *around* the link, the only spelling this app reads as a bold link: a
+    /// label is not parsed, so `[**docs**](url)` renders the asterisks as plain characters and
+    /// never reaches the bold branch at all.
     @Test func aBoldLinkKeepsTheLinkColour() throws {
         let text = rendered("**[docs](https://example.com)**", appearance)
 
@@ -305,9 +295,8 @@ struct BoldTintTests {
 
     /// The tint is paint. A note is stored as markdown either way, and the writer reads traits.
     ///
-    /// One argument: the other three were round-trip arguments, and `RichTextRoundTripTests` owns
-    /// that property over 22 of them. What is this suite's to say is that a *tinted* buffer writes
-    /// the same markdown an untinted one does.
+    /// One argument, because the round trip itself belongs to `RichTextRoundTripTests`. What is
+    /// this suite's to say is that a tinted buffer writes the same markdown an untinted one does.
     @Test func theTintNeverReachesTheStore() {
         let markdown = "rotate **keys** now"
 

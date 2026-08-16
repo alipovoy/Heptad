@@ -26,8 +26,8 @@ struct IOSRichTextEditor: UIViewRepresentable {
     class Coordinator: NoteEditorCoordinator, UITextViewDelegate {
         private let statistics: EditorStatistics
 
-        /// The two seams are the base class's, forwarded so a test can hand this a scratch
-        /// defaults suite and a private notification centre. The app takes the defaults.
+        /// Forwards the base class's two seams, so a test can hand this a scratch defaults suite
+        /// and a private notification centre.
         init(
             statistics: EditorStatistics,
             defaults: UserDefaults = .standard,
@@ -151,10 +151,8 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
 
     /// The selection leaves on the clipboard as markdown source.
     ///
-    /// In formatted mode the buffer holds no delimiters at all, so its characters alone would put
-    /// a note's formatting on the clipboard and lose it — a copied bold run pasted back as
-    /// unformatted text. The macOS twin spends two overrides on this, one to stop AppKit writing
-    /// RTF and one to write the source; this file had neither while claiming to mirror it.
+    /// In formatted mode the buffer holds no delimiters at all, so its characters alone would lose
+    /// a copied note's formatting — a bold run pasted back as unformatted text.
     override func copy(_ sender: Any?) {
         write(markdownForSelection)
     }
@@ -175,12 +173,9 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
 
     /// Puts a note's markdown into the view, in the shape its mode calls for.
     ///
-    /// The selection is put back as a caret at its head. Measured, rather than the "UIKit collapses
-    /// it to the end" this used to claim: `setAttributedString` preserves the selection exactly, in
-    /// a detached view and in a first responder alike, and clamps a location past the new end
-    /// itself. So collapsing is the only thing this restore does — and it is the right answer,
-    /// because a mode switch means the run the selection covered is not the run at those offsets
-    /// any more. The `min` stays as belt and braces: UIKit's clamp is undocumented and free.
+    /// The selection is put back as a caret at its head: after a mode switch, the run it covered is
+    /// not the run at those offsets any more. `setAttributedString` preserves the selection itself
+    /// and clamps a location past the new end, so the `min` is belt and braces.
     func load(markdown: String) {
         let caret = selectedRange
 
@@ -197,10 +192,9 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
     func apply(_ appearance: MarkdownStyling.Appearance) {
         guard appearance != configuredStyling else { return }
 
-        // Read before the new appearance is recorded, and only when a mode step is going to use
-        // it: writing the buffer out renders every line through the spelling ladder, which is
-        // more work than the repaint a zoom step asks for. It used to run on every step, on every
-        // key repeat of `⌘+`, and be discarded.
+        // Read before the new appearance is recorded, and only for a mode step: writing the buffer
+        // out renders every line through the spelling ladder, which is more work than the repaint
+        // a zoom step asks for.
         let source = appearance.plainText != styling.plainText ? markdown : nil
         configuredStyling = appearance
 

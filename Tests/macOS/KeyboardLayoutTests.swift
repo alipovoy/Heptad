@@ -7,13 +7,11 @@ import Testing
 /// Which character a ⌘ keystroke is dispatched on, layout by layout.
 ///
 /// `NSEvent.keyEvent` takes `charactersIgnoringModifiers` and `keyCode` as separate arguments, so
-/// every layout below can be synthesized here — no input source has to be installed to test the
-/// one thing that only shows up on a non-Latin one.
+/// every layout below is synthesized here rather than installed as an input source.
 ///
-/// The fallback is injected in most of these. The shipping translation reads whichever layouts the
-/// machine has, and a test that asserted "и" resolves to "b" through the real one would be
-/// asserting a fact about the machine; `theMachinesOwnLayoutTranslatesTheAlphabet` does exactly
-/// that, once, and skips where it does not hold.
+/// The fallback is injected in most of these, because the shipping translation reads whichever
+/// layouts the machine happens to have. `theMachinesOwnLayoutTranslatesTheAlphabet` uses the real
+/// one once, and skips where it does not hold.
 @Suite struct KeyboardLayoutTests {
 
     /// One keystroke and the character the shortcut tables must see for it.
@@ -23,13 +21,12 @@ import Testing
         let resolvesTo: String
     }
 
-    /// Stands in for the machine's Latin layout: US positions, which is what the shortcut letters
-    /// were chosen against.
+    /// Stands in for the machine's Latin layout: US positions, which the shortcut letters were
+    /// chosen against.
     ///
-    /// Every keycode any test below mentions has an entry, including the ones no shortcut uses
-    /// (`n`, `y`). A missing entry makes the fallback return nil, which resolves to the typed
-    /// character by a *different* route — so a row whose keycode was absent would pass under a
-    /// keycode-first implementation too, and prove nothing.
+    /// Every keycode any test below mentions has an entry, `n` and `y` included. A missing entry
+    /// makes the fallback return nil, which resolves to the typed character by a different route —
+    /// so a row whose keycode was absent would pass under a keycode-first implementation too.
     static let usLayout: [UInt16: String] = [
         UInt16(kVK_ANSI_B): "b", UInt16(kVK_ANSI_I): "i", UInt16(kVK_ANSI_V): "v",
         UInt16(kVK_ANSI_X): "x", UInt16(kVK_ANSI_U): "u", UInt16(kVK_ANSI_Z): "z",
@@ -53,12 +50,9 @@ import Testing
 
     // MARK: - Non-Latin layouts
 
-    /// The finding this closes: on a Cyrillic layout the app's own shortcuts reached nothing, and
-    /// ⌘V fell through to `NSTextView.paste` — the #117 path, which is what pasting formatting into
-    /// the storage was called the first time.
-    ///
-    /// Russian is the layout it was reported on; the other three are here because nothing about the
-    /// fix is Cyrillic-specific and a Greek or Hebrew user would have filed the same bug.
+    /// The defect this closes: on a Cyrillic layout the app's own shortcuts reached nothing, and
+    /// ⌘V fell through to `NSTextView.paste` — the #117 path. Greek, Hebrew and Arabic are here
+    /// because nothing about the fix is Cyrillic-specific.
     @Test(
         arguments: [
             // Russian ЙЦУКЕН
@@ -81,20 +75,16 @@ import Testing
     }
 
     /// With no ASCII-capable layout to fall back to, a non-Latin keystroke resolves to itself and
-    /// so matches nothing — which is what it did before this existed. It must not resolve to some
-    /// *other* command instead.
+    /// so matches nothing, rather than matching some other command.
     @Test func withoutAFallbackTheKeystrokeStillMatchesNothing() throws {
         #expect(try resolve("и", keyCode: kVK_ANSI_B, through: [:]) == "и")
     }
 
     // MARK: - Latin layouts keep their own letters
 
-    /// The reason this is not `event.keyCode`.
-    ///
-    /// Keycodes are positions, not letters. On AZERTY the key labelled A is `kVK_ANSI_Q` and the
-    /// one labelled Q is `kVK_ANSI_A`, so dispatching on the keycode would make ⌘A — select all,
-    /// pressed over a note — quit the app instead. Dvorak scrambles it further. Every one of these
-    /// types ASCII, so the layout's own character has to win before the fallback is consulted.
+    /// The reason this is not `event.keyCode`: keycodes are positions, not letters. On AZERTY the
+    /// key labelled A is `kVK_ANSI_Q`, so dispatching on the keycode would make ⌘A quit the app.
+    /// Every one of these types ASCII, so the layout's own character wins before the fallback.
     @Test(
         arguments: [
             // French AZERTY: A and Q are swapped as positions.
@@ -113,11 +103,8 @@ import Testing
 
     // MARK: - Case folding
 
-    /// Shift is reported by `hasShift`, so the resolved character is lowercase either way. This is
-    /// what let the tables drop the duplicate `"Z"`, `"V"`, `"X"` and `"U"` cases that sat beside
-    /// their `where hasShift` forms.
-    /// "У" is Cyrillic, so it takes the fallback path with shift held — the one case where both
-    /// transformations apply at once.
+    /// Shift is reported by `hasShift`, so the resolved character is lowercase either way. "У" is
+    /// Cyrillic, the one case where folding and the fallback both apply.
     @Test(
         arguments: [
             Keystroke(typed: "V", keyCode: kVK_ANSI_V, resolvesTo: "v"),
@@ -146,11 +133,8 @@ import Testing
     // MARK: - The real translation
 
     /// One test of the shipping fallback rather than an injected one, so the Carbon call is known
-    /// to work and not merely to compile.
-    ///
-    /// Skipped rather than failed where the machine's ASCII-capable layout is not a US-positioned
-    /// one — a Dvorak-only machine is a legitimate machine, and this asserting otherwise would be
-    /// asserting a fact about the hardware.
+    /// to work and not merely to compile. Skipped where the machine's ASCII-capable layout is not
+    /// US-positioned, since that is a fact about the machine rather than about the code.
     @Test(.enabled(if: KeyboardLayout.asciiCharacter(forKeyCode: UInt16(kVK_ANSI_B)) == "b"))
     func theMachinesOwnLayoutTranslatesTheAlphabet() throws {
         for (keyCode, expected) in Self.usLayout {
