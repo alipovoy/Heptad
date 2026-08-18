@@ -27,15 +27,20 @@ extension NSPasteboard {
     }
 
     /// The most markup ⌘V will decode before falling back to pasting the clipboard's characters.
-    static let richPasteByteLimit = 1 << 20
+    ///
+    /// 128 KB, which is about two seconds on the curve measured below — a wait, not a hang. It was
+    /// 1 MB, which is on that same curve well over ten seconds of a beachballed app with ⌘V still
+    /// undelivered: a bound in name only. A web page large enough to reach it pastes as its
+    /// characters instead, which is the trade this limit exists to make.
+    static let richPasteByteLimit = 1 << 17
 
     /// Whether the clipboard's markup is small enough to be worth decoding, which is what stands
     /// between ⌘V and an unbounded main-thread stall.
     ///
     /// `markdownForPaste` runs inside the key-event monitor with the key-down still undelivered,
     /// and the decode is super-linear: 23 KB of HTML measured at 250 ms, 203 KB at 2.9 seconds.
-    /// Bounding the input makes the worst case "the bold did not survive" rather than a hang, and
-    /// the limit is far past any realistic paste. Sizes are read rather than decoded —
+    /// Bounding the input makes the worst case "the bold did not survive" rather than a hang — see
+    /// the limit above for where that bound sits. Sizes are read rather than decoded —
     /// `data(forType:)` is a copy, not a parse.
     private var richFlavorsAreWorthDecoding: Bool {
         let types: [NSPasteboard.PasteboardType] = [.html, .rtfd, .rtf]
