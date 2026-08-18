@@ -45,13 +45,20 @@ enum MarkdownSyntax {
 
     static let strong = "**"
 
-    /// Italic is `_`, not `*`. The two spellings are interchangeable in markdown at large, but
-    /// `*` is a prefix of `**`, and a delimiter that is a prefix of another delimiter cannot be
-    /// toggled cleanly: `⌘I` inside `**bold**` either peels the bold pair apart or grows it
-    /// without ever shrinking it again. Disjoint delimiters remove the ambiguity rather than
-    /// manage it, and they leave `*` free to be an ordinary character — `2 * 3` and `SELECT *`
-    /// mean what they say.
+    /// Italic is written `_` by preference, and this is the delimiter the word-boundary rule
+    /// below is about: `_` never opens or closes against a word character, so `AWS_SECRET_KEY`
+    /// and `snake_case_name` are names rather than italics.
     static let emphasis = "_"
+
+    /// The other spelling of italic, for the runs `_` refuses — `Test_ing_` is italic to no
+    /// markdown parser, and `⌘I` has to be writable wherever the caret is. `*` minds no
+    /// boundaries, so it covers exactly those.
+    ///
+    /// Read here, but written only as `MarkdownWriting`'s fallback, because text is full of loose
+    /// asterisks. What keeps them ordinary is this file's own rules: a delimiter never opens
+    /// against whitespace, so `2 * 3` and `SELECT * FROM` mean what they say, and `**` is matched
+    /// before `*` is tried, so a bold pair is never read as two italic ones.
+    static let emphasisAlternate = "*"
 
     static let strikethrough = "~~"
 
@@ -131,8 +138,9 @@ enum MarkdownSyntax {
 
     // MARK: - Inline
 
-    /// Every delimiter here is disjoint from every other, so the order below is only a
-    /// convention — no delimiter can be mistaken for the opening of a longer one.
+    /// The order below is load-bearing for one pair: `*` is a prefix of `**`, so `**` is matched
+    /// first and a bold pair is never read as two italic ones. The rest are disjoint and their
+    /// order is only a convention.
     ///
     /// `range` is also the boundary a `_` measures itself against, so a construct's content can
     /// be handed straight back here to be parsed in its own right.
@@ -172,7 +180,8 @@ enum MarkdownSyntax {
     private static let inlineDelimiters = [
         Delimiter(characters: strong, style: .strong),
         Delimiter(characters: strikethrough, style: .strikethrough),
-        Delimiter(characters: emphasis, style: .emphasis)
+        Delimiter(characters: emphasis, style: .emphasis),
+        Delimiter(characters: emphasisAlternate, style: .emphasis)
     ]
 
     /// Matches `<delimiter>content<delimiter>` at `start`, appending its spans and returning the
@@ -241,7 +250,7 @@ enum MarkdownSyntax {
     // `_` is the one delimiter that has to sit at a word boundary. Without this rule the app
     // would italicise the middle of `AWS_SECRET_KEY` and `snake_case_name` — which is precisely
     // the sort of thing these notes hold, so the rule is what makes `_` safe to spell italic
-    // with. `**` and `~~` need no such rule: nobody writes them inside an identifier.
+    // with. `**`, `~~` and `*` need no such rule: nobody writes them inside an identifier.
 
     private static func canOpen(
         _ delimiter: String, in text: NSString, at index: Int, lowerBound: Int
@@ -258,8 +267,8 @@ enum MarkdownSyntax {
         return !isWordCharacter(text.character(at: after))
     }
 
-    /// Not private: `AttributedFormatting` and `MarkdownWriting` apply the same rule, or a
-    /// command would claim underscores the parser never read as delimiters.
+    /// Not private: `MarkdownWriting` asks the same question when it chooses between `_` and `*`,
+    /// so the pair it writes is one this file reads back.
     ///
     /// `_` counts as a word character here, which is not what CommonMark says but is what an
     /// identifier says: without it the second underscore of `__init__` opens a run the first one

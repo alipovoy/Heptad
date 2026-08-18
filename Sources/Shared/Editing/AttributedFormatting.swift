@@ -15,23 +15,34 @@ import Foundation
 /// bold again produced `**_**hello**_**`, because `⌘B` could only recognise a `**` pair sitting
 /// immediately beside the selection and the italic pair had moved it out of reach (#124).
 ///
-/// One rule survives from the delimiter days: the word boundary. `_` is a word character in
-/// every identifier a scratchpad holds, so italic mid-word is declined rather than applied — it
-/// is the one trait `MarkdownWriting` cannot spell there, and a command that leaves the buffer in
-/// a state the writer has to drop is a command that loses work.
+/// Nothing here declines. Every trait can be spelled wherever the caret is, so `⌘I` behaves like
+/// `⌘B` and `⌘⇧X` — including with nothing selected, where it arms the caret and what is typed
+/// next comes out italic. `⌘I` used to refuse mid-word, because `_` cannot be written against a
+/// word character; `MarkdownWriting` spells those runs `*` instead, and the rule went with it.
 enum AttributedFormatting {
-    /// Whether every character in `range` already carries `emphasis`.
+    /// Whether every character in `range` that could carry `emphasis` already does.
     ///
-    /// Vacuously true for an empty buffer, which never matters: an empty selection reads the
-    /// typing attributes instead, and an empty note has nothing to toggle.
+    /// Line terminators are not asked, because no answer they give is meaningful: a construct
+    /// never spans lines, so the writer refuses a trait on a terminator and every note that has
+    /// been through one save comes back with bare newlines between its runs. Counting them made
+    /// the first ⌘B on a paragraph that was already bold when the note opened *re-apply* the
+    /// bold — nothing visibly happened, and the user had to press twice.
+    ///
+    /// False for a range with nothing spellable in it, which never matters: an empty selection
+    /// reads the typing attributes instead, and an empty note has nothing to toggle.
     static func isApplied(
         _ emphasis: Emphasis, over range: NSRange,
         in storage: NSAttributedString
     ) -> Bool {
         guard range.length > 0 else { return false }
+        let text = storage.string as NSString
 
+        var asked = false
         var applied = true
-        storage.enumerateAttributes(in: range, options: []) { attributes, _, stop in
+        storage.enumerateAttributes(in: range, options: []) { attributes, subrange, stop in
+            guard isSpellable(subrange, in: text) else { return }
+            asked = true
+
             guard emphasis.isOn(attributes) else {
                 applied = false
                 stop.pointee = true
@@ -39,7 +50,14 @@ enum AttributedFormatting {
             }
         }
 
-        return applied
+        return asked && applied
+    }
+
+    /// Whether `range` holds anything but line terminators.
+    private static func isSpellable(_ range: NSRange, in text: NSString) -> Bool {
+        (range.location..<NSMaxRange(range)).contains {
+            !MarkdownSyntax.isNewline(text.character(at: $0))
+        }
     }
 
     /// Toggles `emphasis` over `range`, and answers with what typing should continue in.
@@ -59,10 +77,6 @@ enum AttributedFormatting {
             return typingAttributes(
                 emphasis, applying: applying, at: range.location, in: storage,
                 appearance: appearance)
-        }
-
-        guard applying == false || canApply(emphasis, over: core, in: storage) else {
-            return storage.attributes(at: min(core.location, storage.length - 1), effectiveRange: nil)
         }
 
         set(emphasis, applying, over: core, in: storage, appearance: appearance)
@@ -141,25 +155,6 @@ enum AttributedFormatting {
     }
 
     // MARK: - Reading
-
-    /// Whether the trait can be written back out at this position. Only `_` can fail, and only
-    /// against a word character: `key_x_store` is a name, not italic text.
-    private static func canApply(
-        _ emphasis: Emphasis, over range: NSRange, in storage: NSAttributedString
-    ) -> Bool {
-        guard MarkdownSyntax.mindsWordBoundaries(emphasis.delimiter) else { return true }
-        let text = storage.string as NSString
-
-        let before = range.location - 1
-        if before >= 0, MarkdownSyntax.isWordCharacter(text.character(at: before)) { return false }
-
-        let after = NSMaxRange(range)
-        if after < text.length, MarkdownSyntax.isWordCharacter(text.character(at: after)) {
-            return false
-        }
-
-        return true
-    }
 
     /// `range` with leading and trailing whitespace dropped, so a selection with a trailing space
     /// formats the word and not the space — the writer would put the space outside the pair

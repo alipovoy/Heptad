@@ -25,17 +25,43 @@ struct WindowModeTests {
         #expect(manager.isPanelMode, "Window should still be in panel mode")
     }
 
-    @Test func pinningTurnsThePanelIntoARegularWindow() throws {
+    @Test func pinningDetachesTheWindowFromTheStatusItem() throws {
         let window = try fixture.showWindow()
 
         manager.setPinned(true)
 
         #expect(manager.isPinned, "Should be pinned now")
         #expect(manager.isPanelMode == false, "Pinned is the opposite of panel mode")
-        #expect(
-            window.styleMask.contains(.miniaturizable),
-            "Pinned window should have miniaturizable mask")
-        #expect(window.isFloatingPanel == false, "Pinned window should not float above all else")
+        #expect(window.isFloatingPanel, "A detached window stays above other apps")
+    }
+
+    /// P1-8: minimising was the one way off the screen that did not go through `hide(_:)`, so a
+    /// minimised window came back still detached, with no flush and no `.windowDidHide` behind it.
+    /// The mask is fixed at creation now, so there is no branch that can put the button back.
+    @Test func theWindowIsNeverMiniaturizableInEitherMode() throws {
+        let window = try fixture.showWindow()
+
+        #expect(window.styleMask.contains(.miniaturizable) == false, "as the panel")
+
+        manager.setPinned(true)
+        #expect(window.styleMask.contains(.miniaturizable) == false, "and once detached")
+
+        manager.setPinned(false)
+        #expect(window.styleMask.contains(.miniaturizable) == false, "and reattaching leaves it off")
+    }
+
+    /// Both modes float; the level is set once, at creation. Detaching only changes the anchor
+    /// and click-outside dismissal.
+    @Test func bothModesFloatAboveOtherApps() throws {
+        let window = try fixture.showWindow()
+
+        #expect(window.isFloatingPanel, "as the panel")
+
+        manager.setPinned(true)
+        #expect(window.isFloatingPanel, "and once detached")
+
+        _ = manager.windowShouldClose(window)
+        #expect(window.isFloatingPanel, "and after the close that reattaches it")
     }
 
     /// #127: `.nonactivatingPanel` takes key focus without making Heptad active, so a detached
@@ -63,17 +89,21 @@ struct WindowModeTests {
             "and reattaching does not put it back")
     }
 
+    /// Unpinning leaves the window where it is — it is not yanked back under the status item until
+    /// the next show. So the drag-away gesture has to be re-armed from where the window actually
+    /// is, or the distance from a stale anchor immediately reads as a drag.
     @Test func unpinningRestoresPanelBehaviourInPlace() throws {
         let window = try fixture.showWindow()
         manager.setPinned(true)
+        window.setFrameOrigin(NSPoint(x: 420, y: 320))
 
         manager.setPinned(false)
 
         #expect(manager.isPanelMode, "Should be back in panel mode")
-        #expect(window.isFloatingPanel, "Panel floats above other apps again")
+        #expect(window.frame.origin == manager.anchorOrigin, "measured from where it was parked")
         #expect(
-            window.styleMask.contains(.miniaturizable) == false,
-            "Panel has no miniaturize button")
+            manager.panelDragDistance(of: window) <= AppConstants.Window.dragToPinThreshold,
+            "so unpinning in place does not read as a drag away")
     }
 
     @Test func toggleWindowPinNotificationTogglesTheState() throws {
@@ -98,8 +128,6 @@ struct WindowModeTests {
 
         #expect(window.isVisible == false, "Window should be closed")
         #expect(manager.isPanelMode, "Hiding reattaches the window")
-        #expect(window.isFloatingPanel, "and restores the panel's styling with it")
-        #expect(window.styleMask.contains(.miniaturizable) == false)
         #expect(fixture.state.isPinned == false, "The pin toggle sees the same state")
     }
 

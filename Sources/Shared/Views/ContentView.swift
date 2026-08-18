@@ -5,7 +5,8 @@ import SwiftUI
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    @Query(sort: \NoteItem.id) private var notes: [NoteItem]
+    /// Everything the store holds, in id order. Read through `notes` below, never directly.
+    @Query(sort: \NoteItem.id) private var stored: [NoteItem]
     /// The raw stored selection. Read through `selectedNoteIndex` and written through
     /// `selection`, both below — never indexed with directly. See `NoteSelection`.
     @AppStorage(AppConstants.selectedNoteIndexKey) private var storedNoteIndex = 0
@@ -18,6 +19,15 @@ struct ContentView: View {
     /// Ages the edit-time label in place. Started and stopped with the window below, so it
     /// never ticks against a window nobody can see.
     @State private var ticker = RelativeTimeTicker()
+
+    /// The seven notes this view addresses, by id rather than by how many rows there are.
+    ///
+    /// Everything above `NoteEditorCoordinator` addresses a note by its position in this array,
+    /// so what it has to hold is ids `0..<noteCount` in order — which counting rows is only a
+    /// proxy for. A store holding an eighth id has seven perfectly good notes in it, and the
+    /// count made that a permanent "Initializing notes…" with all seven intact on disk and
+    /// unreachable. Extras are ignored rather than deleted: they are not this view's to remove.
+    private var notes: [NoteItem] { stored.filter { $0.id < AppConstants.noteCount } }
 
     #if os(macOS)
         private static let willTerminateNotification = NSApplication.willTerminateNotification

@@ -26,8 +26,12 @@ final class SystemActivationCoordinator: ActivationCoordinating {
 
     var frontmostApplication: NSRunningApplication? { NSWorkspace.shared.frontmostApplication }
 
+    /// `activate()` rather than `activate(ignoringOtherApps: true)`, which is deprecated on
+    /// macOS 14 — where activation became cooperative and the "ignoring" half is not honoured
+    /// anyway. What actually grants it is the user event this is a response to: a click on the
+    /// status item, or the global hotkey.
     func activateCurrentApp() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
     }
 
     func activate(_ app: NSRunningApplication) {

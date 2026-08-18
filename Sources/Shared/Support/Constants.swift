@@ -60,6 +60,13 @@ enum AppConstants {
         /// Debounce interval used when saving text
         static let debounceSave: Duration = .milliseconds(300)
 
+        /// The longest a burst of typing may go unwritten, however continuous it is.
+        ///
+        /// The debounce alone means "300 ms after you stop", not "at most 300 ms": anything above
+        /// roughly 40 wpm keeps rearming the timer, and a paragraph typed without a pause lives
+        /// only in the text view. This bounds what a crash can take.
+        static let maxSaveDelay: Duration = .seconds(2)
+
         /// How often `RelativeTimeTicker` re-reads the clock while the window is on screen.
         /// Coarse on purpose — the edit-time label is a staleness cue, not a stopwatch.
         static let relativeTimeRefresh: Duration = .seconds(30)

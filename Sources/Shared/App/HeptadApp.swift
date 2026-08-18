@@ -1,3 +1,4 @@
+import OSLog
 import SwiftData
 import SwiftUI
 
@@ -5,18 +6,53 @@ import SwiftUI
 struct HeptadApp: App {
     static let sharedModelContainer: ModelContainer = {
         let schema = Schema([NoteItem.self])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
         ensureApplicationSupportDirectoryExists()
 
+        return container(
+            for: schema,
+            configuration: ModelConfiguration(schema: schema, isStoredInMemoryOnly: false))
+    }()
+
+    /// The note store, or a stand-in that lasts the session when it cannot be opened.
+    ///
+    /// This used to be a `fatalError`, which made every problem with one file a crash on every
+    /// launch with no way back from inside the app — reachable from a store truncated by a power
+    /// loss, one left by a newer build after a downgrade, a full or read-only volume, or a schema
+    /// change that will not migrate. The user's recourse was to find and delete the store by hand.
+    ///
+    /// `NoteSelection` already makes this argument for a far smaller input: it refuses to turn a
+    /// junk `UserDefaults` integer into a launch crash "in a menubar app with no window and no
+    /// Dock icon", where clicking the icon would simply do nothing with no visible explanation.
+    /// The same reasoning cannot stop at the file holding all seven notes.
+    ///
+    /// Seven notes that work until quit beat an app that will not open.
+    static func container(for schema: Schema, configuration: ModelConfiguration) -> ModelContainer {
         do {
-            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-            try Self.seed(container.mainContext)
+            let container = try ModelContainer(for: schema, configurations: [configuration])
+
+            // A store that opens but will not take a write still has the notes in it, so a
+            // failure here is not a reason to hide them behind the stand-in below.
+            try? seed(container.mainContext)
             return container
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            Logger(subsystem: Bundle.main.bundleIdentifier ?? "Heptad", category: "store")
+                .error("The note store could not be opened, running in memory: \(error)")
+
+            return ephemeralContainer(for: schema)
         }
-    }()
+    }
+
+    /// The stand-in. `try!` because reaching it means the schema itself cannot be built, which no
+    /// store on disk can cause and no launch can recover from.
+    private static func ephemeralContainer(for schema: Schema) -> ModelContainer {
+        // swiftlint:disable:next force_try
+        let container = try! ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+        try? seed(container.mainContext)
+
+        return container
+    }
 
     /// Fills in whichever of the seven notes the store does not already hold.
     ///
@@ -28,16 +64,23 @@ struct HeptadApp: App {
     ///
     /// Runs on every launch, so leaving what is already there untouched is the whole contract.
     ///
+    /// By id and *only* by id: a count check in front of this loop meant "seven rows" rather than
+    /// "these seven notes", which is a different thing on any store that holds an id outside
+    /// `0..<noteCount`. Seven rows with a hole in them were left unrepaired, and a store the
+    /// count said was full was never looked at — so a build that lowered `noteCount` would leave
+    /// the user's notes on disk and unreachable.
+    ///
     /// Lifted out of the container above purely so it can be tested: the partial-store case is
     /// the one that matters and it cannot be arranged against the app's own on-disk store.
     static func seed(_ context: ModelContext) throws {
-        let fetchDescriptor = FetchDescriptor<NoteItem>()
-        guard try context.fetchCount(fetchDescriptor) < AppConstants.noteCount else { return }
-
-        let existingIds = Set(try context.fetch(fetchDescriptor).map(\.id))
+        let existingIds = Set(try context.fetch(FetchDescriptor<NoteItem>()).map(\.id))
         for noteId in 0..<AppConstants.noteCount where !existingIds.contains(noteId) {
             context.insert(NoteItem(id: noteId, modifiedAt: .now))
         }
+
+        // The launch after the first inserts nothing, and a store with nothing to add is not
+        // written to at all — the fetch above is the only round trip it costs.
+        guard context.hasChanges else { return }
         try context.save()
     }
 

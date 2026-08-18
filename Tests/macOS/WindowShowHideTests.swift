@@ -11,8 +11,8 @@ import Testing
 /// relative-time ticker is switched off by them.
 ///
 /// The third hide path — the click-outside monitor — is driven by a global `NSEvent` monitor that
-/// only the window server can fire, so it is covered by the same `hide(_:)` call rather than by a
-/// test of its own.
+/// only the window server can fire, so what is tested is the decision it makes about one event:
+/// `handleClickOutside(_:)` is handed a synthesized click rather than a real one.
 ///
 /// Both tests that depend on real key-window status live here rather than being spread across
 /// suites: `.serialized` then guarantees they cannot race each other for it.
@@ -52,6 +52,73 @@ struct WindowShowHideTests {
 
         #expect(window.isVisible == false, "A pinned window already in front hides on toggle")
         #expect(manager.isPanelMode, "and comes back as the menubar panel — see #123")
+    }
+
+    // MARK: - Activation
+
+    /// Heptad is made active *before* the window is ordered on, not after.
+    ///
+    /// Key status is granted by the window server and only to the active application, so asking
+    /// for it from the background asks for something that cannot be given: the panel came up
+    /// without key, and without a caret, until something else activated the app. Measured on the
+    /// real app after a dismissal, it was still inactive a second later.
+    @Test func theAppIsActivatedBeforeTheWindowIsOrderedOn() throws {
+        fixture.activation.whileActivating = { [manager] in
+            #expect(
+                manager.window?.isVisible != true,
+                "Activation comes first — the ordering is what needs the app already active")
+        }
+
+        let window = try fixture.showWindow()
+
+        #expect(window.isVisible, "and the window is on screen by the end of it")
+        #expect(fixture.activation.activatedCurrentAppCount == 1)
+    }
+
+    // MARK: - The click-outside monitor
+
+    /// A click carrying one of this app's own windows is a click *inside* it.
+    ///
+    /// The monitor is global, and a global monitor is documented to see only what is dispatched
+    /// to other applications — but not the click that activates an inactive app, which arrives
+    /// here too with `event.window` resolved in this process. Heptad is inactive on every show
+    /// that follows a dismissal, so the first click after one was closing the panel: any click,
+    /// the text included, and the note went away under the caret.
+    @Test func aClickCarryingOneOfOurOwnWindowsDoesNotDismissThePanel() throws {
+        let window = try fixture.showWindow()
+
+        manager.handleClickOutside(try click(in: window))
+
+        #expect(window.isVisible, "The activation click landed in the window, not outside it")
+    }
+
+    @Test func aClickInAnotherApplicationDismissesThePanel() throws {
+        let window = try fixture.showWindow()
+
+        manager.handleClickOutside(try click(in: nil))
+
+        #expect(window.isVisible == false)
+        #expect(manager.isPanelMode, "and it comes back as the panel — see #123")
+    }
+
+    /// A pinned window is not dismissed by a click outside it at all.
+    @Test func aClickOutsideAPinnedWindowLeavesItAlone() throws {
+        let window = try fixture.showWindow()
+        manager.setPinned(true)
+
+        manager.handleClickOutside(try click(in: nil))
+
+        #expect(window.isVisible)
+    }
+
+    /// A left mouse-down as the monitor reports it. `windowNumber` is the whole subject: it is
+    /// what `NSEvent.window` resolves from, and 0 is what a click in another process carries.
+    private func click(in window: NSWindow?) throws -> NSEvent {
+        try #require(
+            NSEvent.mouseEvent(
+                with: .leftMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: window?.windowNumber ?? 0, context: nil, eventNumber: 0,
+                clickCount: 1, pressure: 1))
     }
 
     // MARK: - Flushing pending saves

@@ -48,4 +48,17 @@ final class MarkdownEditorFixture {
     func configure(plainText: Bool) {
         coordinator.configure(scrollView, appearance: appearance(plainText: plainText))
     }
+
+    /// A formatted buffer loaded the way a note switch loads one, so a command meets the buffer it
+    /// meets in the app: traits derived from markdown, and bare line terminators between the lines.
+    ///
+    /// A freshly typed line answers differently — every character in it can carry a trait — which
+    /// is why a bug that only shows on a reloaded note survived the suite.
+    @discardableResult
+    func loaded(_ markdown: String) throws -> MarkdownTextView {
+        configure(plainText: false)
+        let textView = try textView()
+        textView.load(markdown: markdown)
+        return textView
+    }
 }

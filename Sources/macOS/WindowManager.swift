@@ -26,8 +26,14 @@ extension Notification.Name {
 /// - **Panel mode**: the window is the menubar-attached floating `NSPanel`. It is re-anchored
 ///   under the status item on every show, floats above other apps, and a click anywhere outside
 ///   it dismisses it.
-/// - **Pinned**: the user-facing state behind the title-bar pin toggle and ⌘P. An ordinary
-///   movable window that stays put when the user clicks into another app.
+/// - **Pinned**: the user-facing state behind the title-bar pin toggle and ⌘P. The same window,
+///   parked where the user put it: not re-anchored, not dismissed by a click outside, and still
+///   floating, so it stays above other apps until ⌘W or Esc closes it — which reattaches it.
+///
+/// Only those two things differ. Level and mask are set once, at creation, and never toggled per
+/// mode; the mask never carries `.miniaturizable`, because minimising was the one way off the
+/// screen that bypassed `hide(_:)` (P1-8). Detaching is a drag past `dragToPinThreshold` or ⌘P;
+/// only ⌘P attaches again without closing — `windowDidMove` arms the gesture in panel mode only.
 ///
 /// They are exact opposites (`isPanelMode == !isPinned`), and pinning lasts only as long as the
 /// window is on screen: `hide(_:)` puts it back. It is state, not a preference — see #123.
@@ -73,9 +79,6 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// hand focus straight back to it. See `yieldActivation()` for why that is not automatic.
     private var previouslyActiveApp: NSRunningApplication?
 
-    /// The status item, weakly, so a click on it is not read as a click outside the panel.
-    weak var statusBarButton: NSStatusBarButton?
-
     /// What AppKit persists the panel's frame under; "" persists nothing. Injected so the tests
     /// can turn it off — the autosave writes to standard defaults, see `WindowManagerFixture`.
     private let frameAutosaveName: NSWindow.FrameAutosaveName
@@ -110,8 +113,6 @@ class WindowManager: NSObject, NSWindowDelegate {
     // MARK: - API
 
     func toggleWindow(sender: NSStatusBarButton) {
-        self.statusBarButton = sender
-
         // A pinned window keeps its place, so the menubar icon (and the global hotkey, which
         // lands here too) acts as show/hide for it: bring it forward when another app covers
         // it, hide it only when it is already the window in front.
@@ -228,29 +229,20 @@ class WindowManager: NSObject, NSWindowDelegate {
         togglePin()
     }
 
+    /// Applies the current mode to the live window: the anchor and click-outside dismissal are
+    /// all that differ, and neither branch touches the level or the mask — see the class doc.
     private func applyPinnedState(to window: NSPanel) {
-        if isPinned {
-            applyPinnedStyling(to: window)
-        } else {
+        if isPanelMode {
             applyPanelStyling(to: window)
+        } else {
+            globalClickMonitor?.stop()
         }
     }
 
-    /// Pinned styling: an ordinary movable window that other apps may cover and that never
-    /// dismisses itself. What makes a click on it activate the app is not here — see `showWindow`.
-    private func applyPinnedStyling(to window: NSPanel) {
-        window.styleMask.insert(.miniaturizable)
-        window.isFloatingPanel = false
-        globalClickMonitor?.stop()
-    }
-
-    /// Panel styling: floats above other apps, no miniaturize button, click-outside dismisses.
+    /// Panel styling: re-anchored on every show, click-outside dismisses. Unpinning in place can
+    /// leave the window far from the status item, so the drag-away gesture is measured from where
+    /// the window actually is rather than from a stale anchor.
     private func applyPanelStyling(to window: NSPanel) {
-        window.styleMask.remove(.miniaturizable)
-        window.isFloatingPanel = true
-
-        // Unpinning in place can leave the window far from the status item, so the drag-away
-        // gesture is measured from where the window actually is rather than a stale anchor.
         anchorOrigin = window.frame.origin
 
         if window.isVisible {
@@ -327,7 +319,7 @@ class WindowManager: NSObject, NSWindowDelegate {
             panel.standardWindowButton(.zoomButton)?.isHidden = true
             panel.isMovableByWindowBackground = true
             panel.isReleasedWhenClosed = false
-            panel.isFloatingPanel = true
+            panel.isFloatingPanel = true  // both modes float; set here, never toggled
             panel.hidesOnDeactivate = false
 
             // Key on a click anywhere: it is an editor, and nothing in it does not want the caret.
@@ -356,11 +348,14 @@ class WindowManager: NSObject, NSWindowDelegate {
             anchorBelowStatusItem(sender: sender, window: window)
         }
 
+        // Activation first: key status is granted by the window server and only to the active
+        // application, so asking for it from the background asks for what cannot be given — the
+        // panel came up without key, and without a caret, until something else activated the app.
+        takeActivation()
         window.makeKeyAndOrderFront(nil)
         isPositioningPanel = false
 
         applyPinnedState(to: window)
-        takeActivation()
         notificationCenter.post(name: .windowDidBecomeVisible, object: nil)
     }
 
@@ -379,22 +374,27 @@ class WindowManager: NSObject, NSWindowDelegate {
     // MARK: - Global Click Monitor (click-outside to dismiss in panel mode)
 
     private func installGlobalClickMonitor() {
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]
         globalClickMonitor?.stop()
-        globalClickMonitor = EventMonitor(local: false, mask: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            guard let self = self,
-                self.isPanelMode,
-                let window = self.window,
-                window.isVisible
-            else { return event }
-
-            // Don't dismiss if the click is on the status bar button
-            if let buttonWindow = self.statusBarButton?.window, buttonWindow == event.window {
-                return event
-            }
-
-            self.hide(window)
+        globalClickMonitor = EventMonitor(local: false, mask: mask) { [weak self] event in
+            self?.handleClickOutside(event)
             return event
         }
         globalClickMonitor?.start()
+    }
+
+    /// What the monitor above does with one click. Internal so a test can hand it an event
+    /// rather than produce a real one in another application.
+    ///
+    /// A global monitor is documented to see only what is dispatched to *other* applications,
+    /// and mostly does — but not the click that activates an inactive app, which arrives here
+    /// with `event.window` resolved in this process. Whenever Heptad was showing without having
+    /// won activation, the first click closed the panel: any click, the text included, and the
+    /// note went away under the caret. Hence the guard on the window and not on the status item
+    /// alone — an event carrying any window of ours is a click *inside* the app.
+    func handleClickOutside(_ event: NSEvent) {
+        guard isPanelMode, let window, window.isVisible, event.window == nil else { return }
+
+        hide(window)
     }
 }

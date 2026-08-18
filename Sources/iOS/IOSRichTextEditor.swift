@@ -89,11 +89,12 @@ struct IOSRichTextEditor: UIViewRepresentable {
             _ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String
         ) -> Bool {
             guard text == "\n",
+                let markdownView = textView as? MarkdownTextView,
                 let edit = ListContinuation.returnEdit(
                     in: (textView.text ?? "") as NSString, selectedRange: range)
             else { return true }
 
-            textView.apply(edit)
+            markdownView.applyMarkup(edit)
             return false
         }
 
@@ -170,5 +171,11 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
     /// are the half of #117 that undo does not restore.
     func normalizeTypingAttributes() {
         typingAttributes = MarkdownStyling.normalized(typingAttributes, in: styling)
+    }
+
+    /// Applies an edit whose replacement is markup this app wrote — a list marker, a checkbox —
+    /// in the note's own body face rather than in whatever run it lands in. See `TextEdit`.
+    func applyMarkup(_ edit: TextEdit) {
+        apply(edit, attributes: MarkdownStyling.baseAttributes(styling))
     }
 }

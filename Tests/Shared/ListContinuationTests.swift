@@ -44,6 +44,21 @@ struct ListContinuationTests {
         #expect(edit.range == NSRange(location: (line as NSString).length, length: 0))
     }
 
+    /// The largest number a marker can hold continues as itself rather than trapping. Return on
+    /// `9223372036854775807. ` closed the app: an overflow on a keystroke, over a line nothing
+    /// stops anyone typing.
+    @Test func aMarkerAtTheLargestNumberContinuesWithoutOverflowing() throws {
+        let edit = try #require(returnEdit(atEndOf: "\(Int.max). item"))
+
+        #expect(edit.replacement == "\n\(Int.max). ")
+    }
+
+    /// One digit further and it is not a number this app can count with, so the line is not a
+    /// list at all and Return is left alone.
+    @Test func aMarkerTooLargeToCountWithIsNotAList() {
+        #expect(returnEdit(atEndOf: "\(Int.max)0. item") == nil)
+    }
+
     /// Return mid-item still continues the list — the item splits in two, both marked.
     @Test func returnContinuesFromInsideTheItem() throws {
         let text = "- item" as NSString
@@ -77,6 +92,15 @@ struct ListContinuationTests {
         #expect(edit.range == NSRange(location: 0, length: (line as NSString).length))
     }
 
+    /// And it takes the whole content, not the marker alone: the item is empty of *text*, which
+    /// is not the same as empty. `- [ ]   ` left its two trailing spaces on the line.
+    @Test func endingAListClearsTheWhitespaceAfterTheMarkerToo() throws {
+        let edit = try #require(returnEdit(atEndOf: "- [ ]   "))
+
+        #expect(edit.replacement.isEmpty)
+        #expect(edit.range == NSRange(location: 0, length: 8))
+    }
+
     // MARK: - Leaving Return alone
 
     @Test(
@@ -89,6 +113,37 @@ struct ListContinuationTests {
         ])
     func returnIsUntouchedOffAList(line: String) {
         #expect(returnEdit(atEndOf: line) == nil)
+    }
+
+    /// A caret at or inside the marker is not in the item yet, so Return is an ordinary newline.
+    ///
+    /// Continuing there wrote a second marker in front of the first: `- abc` with the caret at 0
+    /// — pressing Return to open a blank line above an item, which is the common way to reach
+    /// this — became `\n- - abc`, and a caret partway through the marker simply mangled the line.
+    @Test(
+        arguments: [
+            ("- abc", 0), ("- abc", 1),
+            ("- [ ] abc", 0), ("- [ ] abc", 3),
+            ("  1. abc", 0), ("  1. abc", 4),
+            // The empty item is the same rule: at column 0 there is no item to end.
+            ("- ", 0)
+        ])
+    func returnAtOrInsideTheMarkerIsUntouched(line: String, caret: Int) {
+        #expect(
+            ListContinuation.returnEdit(
+                in: line as NSString, selectedRange: NSRange(location: caret, length: 0)) == nil)
+    }
+
+    /// Measured from the start of the caret's own line, not the start of the text.
+    @Test func theMarkerIsMeasuredOnTheCaretsOwnLine() {
+        let text = "- first\n- second" as NSString
+
+        #expect(
+            ListContinuation.returnEdit(in: text, selectedRange: NSRange(location: 8, length: 0))
+                == nil, "column 0 of the second item")
+        #expect(
+            ListContinuation.returnEdit(in: text, selectedRange: NSRange(location: 10, length: 0))
+                != nil, "and past its marker the list continues")
     }
 
     /// Return over a selection replaces it; continuing the list there would drop the
