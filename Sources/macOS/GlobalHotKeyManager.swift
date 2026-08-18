@@ -86,23 +86,31 @@ class GlobalHotKeyManager {
             .intersection(.deviceIndependentFlagsMask)
     }
 
-    /// Persists a new binding, re-registering it immediately when the hotkey is already live.
+    /// Persists a new binding, and answers whether the system will actually give it to us.
     /// There is no settings UI yet; this is the seam one would drive.
     ///
     /// A binding that will not register is rolled back and the working one reclaimed: `register()`
     /// gives up its claim before it tries, so a combination another app owns would otherwise be
     /// left in `UserDefaults` and leave the app with no hotkey at all, at this launch and every
     /// one after.
+    ///
+    /// Tried whether or not the hotkey is currently live, because "not live" is exactly the state
+    /// launch registration leaves behind when the combination was already owned — the one case
+    /// where an unchecked write would stick. The claim is given back afterwards when there was
+    /// none to begin with, so this leaves registration as it found it either way.
     @discardableResult
     func setBinding(keyCode: UInt32, modifierFlags: NSEvent.ModifierFlags) -> Bool {
         let previous = (keyCode: self.keyCode, modifierFlags: self.modifierFlags)
+        let wasRegistered = isRegistered
         store(keyCode: keyCode, modifierFlags: modifierFlags)
 
-        guard isRegistered else { return true }
-        guard !register() else { return true }
+        if register() {
+            if !wasRegistered { unregister() }
+            return true
+        }
 
         store(keyCode: previous.keyCode, modifierFlags: previous.modifierFlags)
-        register()
+        if wasRegistered { register() }
         return false
     }
 

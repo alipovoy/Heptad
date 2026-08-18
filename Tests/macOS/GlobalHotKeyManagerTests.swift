@@ -120,26 +120,32 @@ struct GlobalHotKeyManagerTests {
     }
 
     // MARK: - Persistence
+    //
+    // Both of these bind the spare combination rather than an arbitrary one: `setBinding` checks
+    // what it is given against the window server before it keeps it, so a combination another app
+    // owns would be rolled back and there would be nothing to read back.
 
-    @Test func bindingRoundTripsThroughUserDefaults() {
+    @Test(.requiresTheSpareCombination)
+    func bindingRoundTripsThroughUserDefaults() {
         GlobalHotKeyManager(defaults: defaults)
-            .setBinding(keyCode: UInt32(kVK_ANSI_J), modifierFlags: [.command, .shift])
+            .setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers)
 
         // A fresh manager stands in for the next app launch.
         let relaunched = GlobalHotKeyManager(defaults: defaults)
 
-        #expect(relaunched.keyCode == UInt32(kVK_ANSI_J))
-        #expect(relaunched.modifierFlags == [.command, .shift])
+        #expect(relaunched.keyCode == spareKeyCode)
+        #expect(relaunched.modifierFlags == spareModifiers)
     }
 
-    @Test func bindingStripsDeviceDependentModifierBits() {
+    @Test(.requiresTheSpareCombination)
+    func bindingStripsDeviceDependentModifierBits() {
         let manager = GlobalHotKeyManager(defaults: defaults)
         // .init(rawValue: 1) is the device-dependent left-shift bit; it must not survive.
         manager.setBinding(
-            keyCode: UInt32(kVK_ANSI_K),
-            modifierFlags: [.control, NSEvent.ModifierFlags(rawValue: 1)])
+            keyCode: spareKeyCode,
+            modifierFlags: spareModifiers.union(NSEvent.ModifierFlags(rawValue: 1)))
 
-        #expect(manager.modifierFlags == [.control])
+        #expect(manager.modifierFlags == spareModifiers)
     }
 
     // MARK: - Carbon modifier conversion
@@ -160,7 +166,7 @@ struct GlobalHotKeyManagerTests {
         let manager = GlobalHotKeyManager(defaults: defaults)
         manager.setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers)
 
-        #expect(manager.isRegistered == false, "Should start unregistered")
+        #expect(manager.isRegistered == false, "Checking a binding does not leave it claimed")
         #expect(manager.register(), "Registering a free combination should succeed")
         // The second call must tear the first registration down rather than stack on it.
         #expect(manager.register(), "Re-registering should replace, not fail")
@@ -215,6 +221,31 @@ struct GlobalHotKeyManagerTests {
         #expect(manager.isRegistered, "and it is claimed again, not left released")
 
         manager.unregister()
+    }
+
+    /// The same rollback when the hotkey is not currently live.
+    ///
+    /// Which is exactly the state a launch that lost the race leaves behind — and the one where an
+    /// unchecked write sticks: `register()` had already failed, so the old code skipped the attempt
+    /// entirely and stored whatever it was handed, at that launch and every one after.
+    @Test(.requiresTheSpareCombination)
+    func aBindingThatWillNotRegisterIsRolledBackWhileUnregisteredToo() throws {
+        let ownedElsewhere = try ScratchDefaults(name: "GlobalHotKeyManagerTests.owner")
+        let owner = GlobalHotKeyManager(defaults: ownedElsewhere.defaults)
+        owner.setBinding(keyCode: spareSuccessorKeyCode, modifierFlags: spareModifiers)
+        try #require(owner.register(), "The stand-in for the app that already owns it")
+        defer { owner.unregister() }
+
+        let manager = GlobalHotKeyManager(defaults: defaults)
+        try #require(manager.setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers))
+        try #require(manager.isRegistered == false, "checking a binding does not claim it")
+
+        let took = manager.setBinding(
+            keyCode: spareSuccessorKeyCode, modifierFlags: spareModifiers)
+
+        #expect(took == false)
+        #expect(manager.keyCode == spareKeyCode, "The binding that works is what is stored")
+        #expect(manager.isRegistered == false, "and registration is left as it was found")
     }
 
     @Test(.requiresTheSpareCombination)
