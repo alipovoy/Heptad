@@ -188,8 +188,14 @@ enum MarkdownWriting {
                 traits.append(delimiter)
             }
 
+            // A label is not a list line, whatever the rendered text shows: the stored line starts
+            // with `[`. Left the marker exemption, the `]` of a checkbox goes unescaped, the parser
+            // takes the label to end at that one, and with every rung writing the same bytes the line
+            // falls to `Spelling.plain` — which writes no brackets, and loses the destination.
+            let label = Pass(spelling: pass.spelling, markerEnd: min(pass.markerEnd, core.location))
+
             markdown += traits.joined()
-                + "[" + content(core, of: text, as: pass) + "](" + destination + ")"
+                + "[" + content(core, of: text, as: label) + "](" + destination + ")"
                 + traits.reversed().joined()
                 + content(terminator, of: text, as: pass)
         }
@@ -370,7 +376,7 @@ enum MarkdownWriting {
     ///
     /// The list marker at the head of a line is the exception: `- [ ] ` is content, not syntax this
     /// is defending against, and a backslash through it demotes the checkbox to a bare bullet in
-    /// the stored file, leaving `⌘⇧U` nothing to toggle.
+    /// the stored file, leaving `⌘⇧U` nothing to toggle. A link's label is not such a line — see `emit`.
     private static func content(
         _ range: NSRange, of text: NSAttributedString, as pass: Pass
     ) -> String {

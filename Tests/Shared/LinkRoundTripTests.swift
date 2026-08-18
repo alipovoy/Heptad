@@ -135,6 +135,31 @@ struct LinkRoundTripTests {
         #expect(roundTripIsStable(written), "and the spelling is a fixed point")
     }
 
+    /// A link covering a whole checkbox line keeps its destination.
+    ///
+    /// The marker exemption is a rule about a line that *is* a list line; inside a label there is no
+    /// marker, whatever the rendered text shows. Exempting the `[x]` there left its `]` unescaped,
+    /// the parser took the label to end at that one, and with every rung writing the same bytes the
+    /// line fell to `Spelling.plain` — the destination gone, and gone for good.
+    @Test(arguments: ["- [x] task", "- [ ] task", "- task", "1. task", "  - [x] task"])
+    func aLinkOverAWholeListLineKeepsItsDestination(line: String) throws {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: line)
+        text.addAttribute(
+            .link, value: "https://e.co", range: NSRange(location: 0, length: line.utf16.count))
+
+        let written = MarkdownWriting.markdown(from: text)
+
+        #expect(written.hasSuffix("](https://e.co)"), "\(written) — the destination is written")
+        #expect(rendered(written).string == line, "\(written) — and costs the label no characters")
+        #expect(roundTripIsStable(written), "and the spelling is a fixed point")
+    }
+
+    /// And a stored one is not rewritten into a line without it.
+    @Test func aStoredLinkOverACheckboxLineIsAFixedPoint() {
+        #expect(roundTripIsStable("[- \\[x\\] task](https://e.co)"))
+    }
+
     /// The label's link survives the escape, rather than the escape splitting it in two.
     @Test func anEscapedBracketStaysInsideTheLink() throws {
         let text = rendered("[a\\]b](https://e.co)")
