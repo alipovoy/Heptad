@@ -17,6 +17,7 @@ struct ListEditingTests {
     private let textView: MarkdownTextView
     private let coordinator: MacRichTextEditor.Coordinator
     private let scratchDefaults: ScratchDefaults
+    private let notificationCenter = NotificationCenter()
     private let manager: EditorShortcutManager
 
     init() throws {
@@ -24,12 +25,15 @@ struct ListEditingTests {
         textView.isRichText = true
         textView.allowsUndo = true
 
-        coordinator = makeTestCoordinator()
+        // A scratch suite, so a killed run cannot leave state in the real app's defaults — and so
+        // the coordinator's own zoom read cannot pick a font size out of them either.
+        scratchDefaults = try ScratchDefaults(name: "ListEditingTests")
+        coordinator = makeTestCoordinator(
+            defaults: scratchDefaults.defaults, notificationCenter: notificationCenter)
         textView.delegate = coordinator
 
-        // A scratch suite, so a killed run cannot leave state in the real app's defaults.
-        scratchDefaults = try ScratchDefaults(name: "ListEditingTests")
-        manager = EditorShortcutManager(defaults: scratchDefaults.defaults)
+        manager = EditorShortcutManager(
+            notificationCenter: notificationCenter, defaults: scratchDefaults.defaults)
     }
 
     /// Return as the text view delivers it: the delegate is asked first, and answering false

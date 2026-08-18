@@ -243,6 +243,13 @@ struct PlainTextModeTests {
         manager.toggleStrikethrough(on: textView)
 
         #expect(textView.string == "user: admin")
+        // And no trait either, which neither the characters above nor the note's markdown can
+        // show: plain mode's markdown *is* the characters, so a trait applied here would be bold
+        // on screen and invisible to both. The mode's whole promise is that what you see is the
+        // source.
+        #expect(
+            try Emphasis.allCases.allSatisfy { try fixture.carrying($0) == "..........." },
+            "nothing formatted, not merely nothing typed")
     }
 
     /// The same commands still work in a rich note — the guard is on the mode, not on the
@@ -255,7 +262,8 @@ struct PlainTextModeTests {
 
         manager.toggleEmphasis(.strong, on: textView)
 
-        #expect(textView.markdown == "**user**: admin")
+        #expect(try fixture.carrying(.strong) == "####.......", "bold on screen")
+        #expect(textView.markdown == "**user**: admin", "and `**` in the note")
     }
 
     // MARK: - Pasting
@@ -276,6 +284,9 @@ struct PlainTextModeTests {
         shortcutManager.pasteAsMarkdown(on: textView)
 
         #expect(textView.string == "secret")
+        #expect(
+            try fixture.carrying(.strong) == "......",
+            "and the bold did not arrive as an attribute instead, which plain mode would draw")
     }
 
     /// The same clipboard in a rich note keeps the bold — as bold on screen, and as `**` in what
@@ -293,6 +304,7 @@ struct PlainTextModeTests {
         shortcutManager.pasteAsMarkdown(on: textView)
 
         #expect(textView.string == "secret", "No delimiters land in the buffer")
+        #expect(try fixture.carrying(.strong) == "######", "the bold is on screen")
         #expect(textView.markdown == "**secret**")
     }
 }

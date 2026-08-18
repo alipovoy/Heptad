@@ -26,9 +26,15 @@ struct IOSRichTextEditor: UIViewRepresentable {
     class Coordinator: NoteEditorCoordinator, UITextViewDelegate {
         private let statistics: EditorStatistics
 
-        init(statistics: EditorStatistics) {
+        /// The two seams are the base class's, forwarded so a test can hand this a scratch
+        /// defaults suite and a private notification centre. The app takes the defaults.
+        init(
+            statistics: EditorStatistics,
+            defaults: UserDefaults = .standard,
+            notificationCenter: NotificationCenter = .default
+        ) {
             self.statistics = statistics
-            super.init()
+            super.init(defaults: defaults, notificationCenter: notificationCenter)
         }
 
         override func makeEditorView() -> UIView {
@@ -169,8 +175,12 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
 
     /// Puts a note's markdown into the view, in the shape its mode calls for.
     ///
-    /// The caret is put back afterwards. Replacing the whole buffer leaves it alone on macOS, but
-    /// UIKit collapses it to the end.
+    /// The selection is put back as a caret at its head. Measured, rather than the "UIKit collapses
+    /// it to the end" this used to claim: `setAttributedString` preserves the selection exactly, in
+    /// a detached view and in a first responder alike, and clamps a location past the new end
+    /// itself. So collapsing is the only thing this restore does — and it is the right answer,
+    /// because a mode switch means the run the selection covered is not the run at those offsets
+    /// any more. The `min` stays as belt and braces: UIKit's clamp is undocumented and free.
     func load(markdown: String) {
         let caret = selectedRange
 

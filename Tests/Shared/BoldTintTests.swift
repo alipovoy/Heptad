@@ -75,9 +75,9 @@ struct BoldTintTests {
     /// The opacity is read from the app rather than copied here, so raising the wash cannot leave
     /// this suite passing against a background the app no longer paints.
     private func background(forNoteIndex index: Int, dark: Bool) -> PlatformColor {
-        let paper: CGFloat = dark ? 0.11 : 1.0
         let wash = CGFloat(AppConstants.Layout.noteTintOpacity)
         let note = resolved(PlatformColor(NotePalette.colors[index]), dark: dark)
+        let paper = self.paper(dark: dark)
 
         var red: CGFloat = 0
         var green: CGFloat = 0
@@ -88,6 +88,23 @@ struct BoldTintTests {
         return PlatformColor(
             red: wash * red + (1 - wash) * paper, green: wash * green + (1 - wash) * paper,
             blue: wash * blue + (1 - wash) * paper, alpha: 1)
+    }
+
+    /// What is behind the note's wash, per platform. `Tests/Shared` compiles into both targets, and
+    /// a single literal here was asserting against a background one of them does not have: iOS's
+    /// dark paper is black, not the panel's 0.11.
+    private func paper(dark: Bool) -> CGFloat {
+        #if canImport(UIKit)
+            var white: CGFloat = 0
+            var alpha: CGFloat = 0
+            resolved(.systemBackground, dark: dark).getWhite(&white, alpha: &alpha)
+            return white
+        #else
+            // The panel is a vibrant material, so there is no colour to ask for. Sampled at
+            // 0.1176 in dark appearance; 0.11 is the conservative reading of that, and light is
+            // white behind the window's own translucency.
+            return dark ? 0.11 : 1.0
+        #endif
     }
 
     /// WCAG relative luminance, and the ratio between two of them.
@@ -119,15 +136,40 @@ struct BoldTintTests {
 
     // MARK: - The colour itself
 
-    /// Seven notes, seven distinguishable colours. The tint's whole job is to say *which* note
-    /// this is, so two palette entries collapsing to one tint would be worse than no tint at all.
+    /// Seven notes, seven *distinguishable* colours — which is what the tint is for, and is not
+    /// what `Set(...).count == 7` was checking: two tints a thousandth apart are different values
+    /// and the same colour to the eye. Asserted as a distance instead, with the closest pair
+    /// (cyan/blue, measured at 0.103 in RGB) just clearing it.
     @Test func everyNoteGetsItsOwnTint() {
         for dark in [false, true] {
             let drawn = (0..<AppConstants.noteCount).map {
-                resolved(NotePalette.boldTint(forNoteIndex: $0), dark: dark)
+                components(of: NotePalette.boldTint(forNoteIndex: $0), dark: dark)
             }
-            #expect(Set(drawn).count == AppConstants.noteCount, "dark: \(dark)")
+
+            for first in drawn.indices {
+                for second in drawn.indices.dropFirst(first + 1) {
+                    let apart = distance(drawn[first], drawn[second])
+                    #expect(
+                        apart >= 0.1,
+                        "notes \(first) and \(second) are \(apart) apart, dark: \(dark)")
+                }
+            }
         }
+    }
+
+    /// A colour's sRGB components, flattened against one appearance.
+    private func components(of color: PlatformColor, dark: Bool) -> [CGFloat] {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        resolved(color, dark: dark).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return [red, green, blue]
+    }
+
+    private func distance(_ one: [CGFloat], _ other: [CGFloat]) -> CGFloat {
+        zip(one, other).reduce(0) { total, pair in total + (pair.0 - pair.1) * (pair.0 - pair.1) }
+            .squareRoot()
     }
 
     /// The index comes from a stored selection by the time it reaches here, the same as every
@@ -146,8 +188,9 @@ struct BoldTintTests {
     }
 
     /// Every tint clears WCAG AA for body text against its own note's background, in both
-    /// appearances — with headroom, so a palette tweak has somewhere to move before it is a
-    /// legibility bug. Bold text would only have needed 3:1.
+    /// appearances. Bold text would only have needed 3:1, so 4.5 is the deliberate margin — but it
+    /// is not much of one: green in light appearance measures 4.74:1, which is the pair to look at
+    /// first if a palette change ever turns this red.
     @Test func everyTintClearsAAAgainstItsOwnNote() {
         for index in 0..<AppConstants.noteCount {
             for dark in [false, true] {
@@ -189,11 +232,19 @@ struct BoldTintTests {
 
     /// A link's colour is the only run colour that already meant something, and it wins. A bold
     /// link that stopped looking like a link would trade one signal for another.
+    ///
+    /// Spelled with the pair *around* the link, which is the only spelling this app reads as a bold
+    /// link — a label is not parsed, so `[**docs**](url)` renders the asterisks as characters in
+    /// the base font. That was the previous input here, and it meant the test never reached the
+    /// bold branch it was named for: deleting the link check outright left it green.
     @Test func aBoldLinkKeepsTheLinkColour() throws {
-        let text = rendered("[**docs**](https://example.com)", appearance)
+        let text = rendered("**[docs](https://example.com)**", appearance)
 
-        #expect(try foreground(text, at: 0) == .editorLink)
+        #expect(text.string == "docs", "a bold link, not four literal asterisks")
+        #expect(try #require(text.attribute(.font, at: 0, effectiveRange: nil) as? PlatformFont)
+            .isBold)
         #expect(text.attribute(.link, at: 0, effectiveRange: nil) != nil)
+        #expect(try foreground(text, at: 0) == .editorLink, "and the link colour wins over the tint")
     }
 
     /// Plain mode shows the source, `**` and all, in one font and one colour. The tint is the
@@ -257,9 +308,17 @@ struct BoldTintTests {
     // MARK: - What it must not touch
 
     /// The tint is paint. A note is stored as markdown either way, and the writer reads traits.
-    @Test(arguments: ["**bold**", "**_both_**", "rotate **keys** now", "[**docs**](https://e.co)"])
-    func theTintNeverReachesTheStore(_ markdown: String) {
+    ///
+    /// One argument: the other three were round-trip arguments, and `RichTextRoundTripTests` owns
+    /// that property over 22 of them. What is this suite's to say is that a *tinted* buffer writes
+    /// the same markdown an untinted one does.
+    @Test func theTintNeverReachesTheStore() {
+        let markdown = "rotate **keys** now"
+
         #expect(MarkdownWriting.markdown(from: rendered(markdown, appearance)) == markdown)
+        #expect(
+            MarkdownWriting.markdown(from: rendered(markdown, untinted)) == markdown,
+            "tinted or not, the same store")
     }
 
     /// `Appearance` is compared on every update pass to decide whether to repaint. Carrying a live
@@ -274,6 +333,8 @@ struct BoldTintTests {
         let rebuilt = (0..<AppConstants.noteCount).map(appearance(forNoteIndex:))
 
         #expect(built == rebuilt, "the same note must not look like a change")
-        #expect(Set(built.map(\.tintedNoteIndex)).count == AppConstants.noteCount)
+        #expect(
+            appearance(forNoteIndex: 0) != appearance(forNoteIndex: 1),
+            "and two notes must, or the comparison would skip the repaint that changes the tint")
     }
 }

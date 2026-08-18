@@ -12,9 +12,17 @@ import Testing
 @MainActor
 struct NoteEditorCoordinatorTests {
 
-    private let coordinator = SpyEditorCoordinator()
+    private let coordinator: SpyEditorCoordinator
+    private let scratchDefaults: ScratchDefaults
+    private let notificationCenter = NotificationCenter()
     private let container = PlatformView()
     private let notes = [NoteItem(id: 0), NoteItem(id: 1)]
+
+    init() throws {
+        scratchDefaults = try ScratchDefaults(name: "NoteEditorCoordinatorTests")
+        coordinator = SpyEditorCoordinator(
+            defaults: scratchDefaults.defaults, notificationCenter: notificationCenter)
+    }
 
     // MARK: - Selection
 
@@ -203,15 +211,18 @@ struct NoteEditorCoordinatorTests {
     /// Checked edge by edge because a missing pin does not fail loudly: the view still
     /// appears, just sized wrong, which is the kind of layout bug that only shows up once
     /// the container is resized. Autoresizing must also be off, or the constraints conflict.
-    @Test(arguments: [
-        NSLayoutConstraint.Attribute.leading, .trailing, .top, .bottom
-    ])
-    func incomingViewIsPinnedToTheContainerEdge(edge: NSLayoutConstraint.Attribute) throws {
+    ///
+    /// A loop rather than four parameterized cases, matching its sibling below: the cases each
+    /// paid a full `setup` to assert one constraint, and the loop asserts all four for the cost
+    /// of one — with the same per-edge failure message, which was the reason for splitting them.
+    @Test func incomingViewIsPinnedToEveryContainerEdge() throws {
         coordinator.setup(container: container, notes: notes, selectedIndex: 0)
         let editorView = try #require(container.subviews.first)
 
         #expect(editorView.translatesAutoresizingMaskIntoConstraints == false)
-        #expect(Self.isPinned(editorView, to: container, on: edge))
+        for edge in [NSLayoutConstraint.Attribute.leading, .trailing, .top, .bottom] {
+            #expect(Self.isPinned(editorView, to: container, on: edge), "on \(edge.rawValue)")
+        }
     }
 
     /// A view returning to the container is pinned again, rather than relying on constraints

@@ -39,9 +39,11 @@ struct AttributedFormattingTests {
         let text = storage("**bold** plain")
 
         toggle(.strong, over: NSRange(location: 0, length: 10), in: text)
+        #expect(text.carrying(.strong) == "##########", "all of it, not the stripe")
         #expect(MarkdownWriting.markdown(from: text) == "**bold plain**")
 
         toggle(.strong, over: NSRange(location: 0, length: 10), in: text)
+        #expect(text.carrying(.strong) == "..........")
         #expect(MarkdownWriting.markdown(from: text) == "bold plain")
     }
 
@@ -58,6 +60,9 @@ struct AttributedFormattingTests {
         for emphasis in order { toggle(emphasis, over: all, in: text) }
         for emphasis in order.reversed() { toggle(emphasis, over: all, in: text) }
 
+        #expect(
+            Emphasis.allCases.allSatisfy { text.carrying($0) == "...." },
+            "no trait left on any character")
         #expect(MarkdownWriting.markdown(from: text) == "keys")
     }
 
@@ -69,6 +74,8 @@ struct AttributedFormattingTests {
         toggle(.emphasis, over: all, in: text)
         toggle(.strong, over: all, in: text)
 
+        #expect(text.carrying(.emphasis) == "####")
+        #expect(text.carrying(.strong) == "....")
         #expect(MarkdownWriting.markdown(from: text) == "_keys_")
     }
 
@@ -83,6 +90,7 @@ struct AttributedFormattingTests {
 
         toggle(.emphasis, over: NSRange(location: 3, length: 3), in: text)
 
+        #expect(text.carrying(.emphasis) == "...###..")
         #expect(MarkdownWriting.markdown(from: text) == "key*sto*re")
     }
 
@@ -93,6 +101,7 @@ struct AttributedFormattingTests {
 
         toggle(.emphasis, over: NSRange(location: 0, length: 3), in: text)
 
+        #expect(text.carrying(.emphasis) == "...###")
         #expect(MarkdownWriting.markdown(from: text) == "foo*bar*")
     }
 
@@ -102,16 +111,22 @@ struct AttributedFormattingTests {
 
         toggle(.strong, over: NSRange(location: 3, length: 3), in: text)
 
+        #expect(text.carrying(.strong) == "...###..")
         #expect(MarkdownWriting.markdown(from: text) == "key**sto**re")
     }
 
-    /// The selection is trimmed to its core, so a trailing space is not what gets formatted —
-    /// the writer would put it outside the pair anyway.
+    /// The selection is trimmed to its core, so a trailing space is not what gets formatted.
+    ///
+    /// Asserted on the buffer first, and that is the point of the finding this test is the witness
+    /// for: the writer puts a space outside the pair whether or not the command kept it out of the
+    /// run, so the store reads `**rotate** keys` either way. Drop the trim in `toggle` and the
+    /// space is bold on screen with every test still green.
     @Test func aTrailingSpaceIsNotPartOfTheRun() {
         let text = storage("rotate keys")
 
         toggle(.strong, over: NSRange(location: 0, length: 7), in: text)
 
+        #expect(text.carrying(.strong) == "######.....", "the space is not in the run")
         #expect(MarkdownWriting.markdown(from: text) == "**rotate** keys")
     }
 
@@ -126,6 +141,7 @@ struct AttributedFormattingTests {
             .strong, over: NSRange(location: 4, length: 0), in: text, appearance: appearance)
 
         #expect(text.string == "keys")
+        #expect(text.carrying(.strong) == "....", "nothing was written to the buffer either")
         #expect(MarkdownWriting.markdown(from: text) == "keys")
         let font = try #require(typing[.font] as? PlatformFont)
         #expect(font.isBold)

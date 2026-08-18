@@ -84,37 +84,62 @@ final class WindowManagerFixture {
     /// Every window this fixture put on screen, closed together at teardown.
     private var standInWindows: [NSWindow] = []
 
-    init() throws {
+    /// The autosave name this fixture's manager was built with, so a test can read back what
+    /// AppKit wrote — and so teardown can take it out of standard defaults again.
+    let autosaveName: NSWindow.FrameAutosaveName
+
+    /// Frame autosaving is off by default. AppKit keys it on the name in *standard* defaults,
+    /// outside any scratch suite, so the shipping name would have this fixture restoring the
+    /// installed app's parked frame — and writing its own back over it. That is what made the
+    /// position assertions pass or fail on what the machine already had.
+    ///
+    /// `autosaving: true` opts one test into a UUID name instead, which is the only way to cover
+    /// the claim that a pinned window comes back where the user left it. The key is removed in
+    /// `deinit`, so the run leaves nothing behind either way.
+    init(autosaving: Bool = false) throws {
         notificationCenter = NotificationCenter()
         workspaceNotificationCenter = NotificationCenter()
         activation = SpyActivationCoordinator()
+        autosaveName = autosaving ? "HeptadTest-\(UUID().uuidString)" : ""
         manager = WindowManager(
             notificationCenter: notificationCenter,
             workspaceNotificationCenter: workspaceNotificationCenter,
             activation: activation,
-            // Frame autosaving off. AppKit keys it on the name in *standard* defaults, outside
-            // the scratch suite above, so the shipping name would have this fixture restoring
-            // the installed app's parked frame — and writing its own back over it. That is what
-            // made the position assertions pass or fail on what the machine already had.
-            frameAutosaveName: "")
+            frameAutosaveName: autosaveName)
 
         let standIn = try Self.makeStandInStatusBarButton(insetFromRightEdge: 240)
         statusBarButton = standIn.button
         standInWindows = [standIn.host]
     }
 
+    /// The frame AppKit persisted under this fixture's autosave name, or nil when nothing was
+    /// written — which is every fixture built without `autosaving: true`.
+    var persistedFrameDescription: String? {
+        guard !autosaveName.isEmpty else { return nil }
+        return UserDefaults.standard.string(forKey: "NSWindow Frame \(autosaveName)")
+    }
+
     /// `isolated` so the AppKit teardown runs on the main actor wherever the last release lands.
     isolated deinit {
         manager.window?.close()
         standInWindows.forEach { $0.close() }
+
+        // The autosave writes to standard defaults, so a test that turned it on has to clean up
+        // after itself. A UUID name means nothing else could be reading this key.
+        if !autosaveName.isEmpty {
+            UserDefaults.standard.removeObject(forKey: "NSWindow Frame \(autosaveName)")
+        }
     }
 
     // MARK: - Showing the window
 
     /// Shows the window and returns it, failing the test when either step doesn't work out.
-    func showWindow() throws -> NSPanel {
+    /// `sourceLocation` threaded through, because 20 tests across four files call this: without it
+    /// every failure in here names this line instead of the test that got there.
+    func showWindow(sourceLocation: SourceLocation = #_sourceLocation) throws -> NSPanel {
         manager.toggleWindow(sender: statusBarButton)
-        return try #require(manager.window, "Window was not created")
+        return try #require(
+            manager.window, "Window was not created", sourceLocation: sourceLocation)
     }
 
     /// Shows the panel well inside the screen with the drag gesture disarmed.
@@ -196,10 +221,13 @@ final class WindowManagerFixture {
     }
 
     /// The other application the `.requiresAnotherRunningApp` trait has already checked for.
-    func otherRunningApplication() throws -> NSRunningApplication {
+    func otherRunningApplication(
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) throws -> NSRunningApplication {
         try #require(
             anyOtherRunningApplication(),
-            "Expected at least one other running application to hand activation to")
+            "Expected at least one other running application to hand activation to",
+            sourceLocation: sourceLocation)
     }
 
     func postActivation(of app: NSRunningApplication) {
@@ -216,9 +244,12 @@ final class WindowManagerFixture {
     func expectingNotification(
         _ name: Notification.Name,
         count: Int = 1,
+        sourceLocation: SourceLocation = #_sourceLocation,
         during action: @MainActor () throws -> Void
     ) async rethrows {
-        try await confirmation("\(name.rawValue) is posted", expectedCount: count) { posted in
+        try await confirmation(
+            "\(name.rawValue) is posted", expectedCount: count, sourceLocation: sourceLocation
+        ) { posted in
             let observer = notificationCenter.addObserver(
                 forName: name, object: nil, queue: nil
             ) { _ in posted() }
@@ -230,9 +261,15 @@ final class WindowManagerFixture {
 
     /// Runs `action` with observers on both `.flushPendingSaves` and `.windowDidHide` and
     /// confirms each fired exactly once.
-    func expectingFlushAndHide(during action: @MainActor () throws -> Void) async throws {
-        try await confirmation(".flushPendingSaves is posted") { flushed in
-            try await confirmation(".windowDidHide is posted") { hidden in
+    func expectingFlushAndHide(
+        sourceLocation: SourceLocation = #_sourceLocation,
+        during action: @MainActor () throws -> Void
+    ) async throws {
+        let flush: Comment = ".flushPendingSaves is posted"
+        let hide: Comment = ".windowDidHide is posted"
+
+        try await confirmation(flush, sourceLocation: sourceLocation) { flushed in
+            try await confirmation(hide, sourceLocation: sourceLocation) { hidden in
                 let flushObserver = notificationCenter.addObserver(
                     forName: .flushPendingSaves, object: nil, queue: nil
                 ) { _ in flushed() }

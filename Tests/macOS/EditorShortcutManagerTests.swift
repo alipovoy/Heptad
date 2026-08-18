@@ -4,65 +4,15 @@ import Testing
 
 @testable import Heptad
 
-/// Records the editing commands `handleTextViewShortcut` dispatches instead of running them.
-///
-/// Two reasons for the stand-in rather than a real `NSTextView`: `copy`/`cut`/`paste` go through
-/// `NSPasteboard.general`, so running them for real would trample the clipboard of whoever is
-/// running the tests; and the dispatch table is only interesting if a test can tell *which*
-/// command a keystroke reached, which is the bug class the table invites (a swapped `case`, or a
-/// `where hasShift` that should be `where !hasShift`).
-///
-/// Commands are recorded as plain strings so the enum doesn't have to leak into the signature of
-/// a parameterized test — a private type there would force the test itself to be private.
-///
-/// A `MarkdownTextView` rather than a bare `NSTextView`, because the formatting and paste
-/// commands ask the view which mode it is in. Standing in for a view the app never installs
-/// would put every one of them on the plain-text branch, and the suite would pass while
-/// asserting nothing.
-private final class SpyTextView: MarkdownTextView {
-    private(set) var commands: [String] = []
-    private lazy var spyUndoManager = SpyUndoManager { [weak self] in self?.record($0) }
-
-    /// An `NSTextView` only gets a real undo manager once it is in a window; the spy stands in
-    /// for one so ⌘Z/⌘⇧Z can be observed without building a window per case.
-    override var undoManager: UndoManager? { spyUndoManager }
-
-    fileprivate func record(_ command: String) { commands.append(command) }
-
-    override func copy(_ sender: Any?) { record("copy") }
-    override func cut(_ sender: Any?) { record("cut") }
-    override func paste(_ sender: Any?) { record("paste") }
-    override func selectAll(_ sender: Any?) { record("selectAll") }
-}
-
-/// Records the app-level actions ⌘Q and ⌘W ask for, instead of quitting the test process or
-/// closing whichever window another suite left key.
-@MainActor
-private final class SpyAppCommander: AppCommanding {
-    private(set) var performed: [String] = []
-
-    nonisolated init() {}
-
-    func terminate() { performed.append("terminate") }
-    func closeKeyWindow() { performed.append("closeKeyWindow") }
-}
-
-private final class SpyUndoManager: UndoManager {
-    private let onCommand: (String) -> Void
-
-    init(onCommand: @escaping (String) -> Void) {
-        self.onCommand = onCommand
-        super.init()
-    }
-
-    override func undo() { onCommand("undo") }
-    override func redo() { onCommand("redo") }
-}
-
 /// `NSTextView` and friends are main-actor types, and the suite drives them directly.
 @MainActor
 struct EditorShortcutManagerTests {
     private let scratchDefaults: ScratchDefaults
+
+    /// Private, because `changeFontSize` posts `.editorFontSizeDidChange`: on `.default` that post
+    /// reaches every coordinator alive in the process — every other suite's fixtures — and each one
+    /// repaints its cached views.
+    private let notificationCenter = NotificationCenter()
     private let textView: SpyTextView
     private let manager: EditorShortcutManager
 
@@ -78,7 +28,8 @@ struct EditorShortcutManagerTests {
         textView = SpyTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
         textView.load(markdown: "Test Text")
 
-        manager = EditorShortcutManager(defaults: scratchDefaults.defaults)
+        manager = EditorShortcutManager(
+            notificationCenter: notificationCenter, defaults: scratchDefaults.defaults)
     }
 
     // MARK: - Fixtures
@@ -93,17 +44,9 @@ struct EditorShortcutManagerTests {
                 isARepeat: false, keyCode: 40))
     }
 
-    /// The font on the first character, where every formatting assertion below looks.
-    private func selectionFont() throws -> NSFont {
-        let storage = try #require(textView.textStorage, "Missing text storage")
-        return try #require(
-            storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont,
-            "Missing font attribute")
-    }
-
-    private func selectionStrikethrough() throws -> Int {
-        let storage = try #require(textView.textStorage, "Missing text storage")
-        return (storage.attribute(.strikethroughStyle, at: 0, effectiveRange: nil) as? Int) ?? 0
+    /// Which characters of the buffer carry `emphasis` — see `NSAttributedString.carrying(_:)`.
+    private func carrying(_ emphasis: Emphasis) throws -> String {
+        try #require(textView.textStorage, "Missing text storage").carrying(emphasis)
     }
 
     /// A scratch store, so the ⌘0 path never opens — let alone reads — the developer's notes.
@@ -159,14 +102,18 @@ struct EditorShortcutManagerTests {
     /// they are checked by what they did — to the note for the emphasis commands, and to the
     /// stored zoom for ⌘+/⌘-, which stopped being a text edit when notes became markdown.
     ///
-    /// Read back as markdown: the buffer holds rich text, so the delimiters are in what the note
-    /// *stores* rather than in what is on screen (#124).
+    /// Which trait landed, and nothing about how the note spells it: that is
+    /// `EditorFormattingTests`, and this test asserting it too made that one a strict subset of
+    /// this one. The trait on the buffer is the cheapest witness that the key reached *this*
+    /// command rather than merely reaching one.
     @Test(
         arguments: [
-            ("b", false, "**Test** Text"), ("i", false, "_Test_ Text"),
-            ("x", true, "~~Test~~ Text"), ("X", false, "~~Test~~ Text")
+            ("b", false, Emphasis.strong), ("i", false, .emphasis),
+            ("x", true, .strikethrough), ("X", false, .strikethrough)
         ])
-    func emphasisShortcutsFormatTheSelection(chars: String, hasShift: Bool, stored: String) throws {
+    func emphasisShortcutsFormatTheSelection(
+        chars: String, hasShift: Bool, emphasis: Emphasis
+    ) throws {
         textView.setSelectedRange(NSRange(location: 0, length: 4))  // "Test"
 
         let result = manager.handleTextViewShortcut(
@@ -174,7 +121,7 @@ struct EditorShortcutManagerTests {
 
         #expect(result == nil, "A format that applied means the key was consumed")
         #expect(textView.string == "Test Text", "and put no delimiters on screen")
-        #expect(textView.markdown == stored)
+        #expect(try carrying(emphasis) == "####.....", "the selection got this trait")
         #expect(
             textView.commands.isEmpty,
             "⌘⇧X strikes through; cutting here would destroy the selection instead")
@@ -230,6 +177,9 @@ struct EditorShortcutManagerTests {
             chars: chars, hasShift: hasShift, on: textView, event: try passThroughEvent())
 
         #expect(result == nil, "A paste that ran means the key was consumed")
+        #expect(
+            try carrying(.strong) == (expected.hasPrefix("**") ? "#########" : "........."),
+            "⌘V brings the bold in as bold; ⌘⇧V brings none in at all")
         #expect(textView.markdown == expected)
         #expect(textView.commands.isEmpty, "Neither paste reaches NSTextView.paste any more")
     }
@@ -265,9 +215,14 @@ struct EditorShortcutManagerTests {
         let storage = try #require(textView.textStorage)
         let font = try #require(storage.attribute(.font, at: 2, effectiveRange: nil) as? NSFont)
         #expect(font.pointSize == AppConstants.Layout.defaultFontSize, "at the note's own size")
+        // The exact colour, not `!= .systemRed`: the clipboard's colour never reaches this buffer
+        // to begin with — ⌘V goes clipboard → markdown → `String` → `insertText`, so no attribute
+        // survives the trip — and `normalize` can only write a colour this app derives. The
+        // negation was true of every possible outcome; this is true of one.
         #expect(
-            storage.attribute(.foregroundColor, at: 2, effectiveRange: nil) as? NSColor != .systemRed,
-            "and not in the clipboard's colour")
+            storage.attribute(.foregroundColor, at: 2, effectiveRange: nil) as? NSColor
+                == .adaptiveEditorText,
+            "in the note's own colour, which is the only kind that reaches a run")
     }
 
     /// An image is not text, and the note is left alone. The key is still consumed — handing it

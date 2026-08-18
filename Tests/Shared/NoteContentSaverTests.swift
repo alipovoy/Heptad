@@ -126,6 +126,36 @@ struct NoteContentSaverTests {
         try await waitUntil("the ceiling to write the note mid-burst") { note.text.isEmpty == false }
     }
 
+    /// The same thing at the numbers the app actually ships, which nothing else in `Tests/` reads.
+    ///
+    /// Every other case here supplies its own pair, so both shipping values could be changed to
+    /// something useless — a ceiling below the debounce, or a ceiling of an hour — with the whole
+    /// suite green. This types at half the debounce, which is the shape of real typing (every
+    /// keystroke rearms), for 15 seconds' worth of keystrokes.
+    ///
+    /// The timeout is a literal 4 seconds and deliberately *not* derived from `defaultMaxDelay`: a
+    /// wait computed from the constant under test grows with it, and a ceiling of 2000 seconds then
+    /// passes on the debounce that fires after the burst finally ends. Measured that way round —
+    /// 4 seconds is comfortably past the shipping 2 and nowhere near the burst's own 15.
+    @Test func aBurstAtTheShippingIntervalsIsWrittenBeforeItEnds() async throws {
+        let note = NoteItem(id: 0)
+        let center = NotificationCenter()
+        let saver = NoteContentSaver(note: note, notificationCenter: center)
+
+        let typing = Task { @MainActor in
+            for length in 1...100 {
+                saver.save(text: String(repeating: "a", count: length))
+                try await Task.sleep(for: NoteContentSaver.defaultDebounce / 2)
+            }
+        }
+        defer { typing.cancel() }
+
+        try await waitUntil(
+            "the shipping ceiling to write the note mid-burst", timeout: .seconds(4)
+        ) { note.text.isEmpty == false }
+        #expect(typing.isCancelled == false, "and the burst is still going")
+    }
+
     /// And the ceiling is a ceiling, not a period: a pause resets it, so an idle editor is not
     /// writing to the store on a timer.
     @Test func theCeilingStartsAgainAfterASave() async throws {
