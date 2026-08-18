@@ -197,11 +197,14 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
     func apply(_ appearance: MarkdownStyling.Appearance) {
         guard appearance != configuredStyling else { return }
 
-        let source = markdown
-        let switchingMode = appearance.plainText != styling.plainText
+        // Read before the new appearance is recorded, and only when a mode step is going to use
+        // it: writing the buffer out renders every line through the spelling ladder, which is
+        // more work than the repaint a zoom step asks for. It used to run on every step, on every
+        // key repeat of `⌘+`, and be discarded.
+        let source = appearance.plainText != styling.plainText ? markdown : nil
         configuredStyling = appearance
 
-        if switchingMode {
+        if let source {
             load(markdown: source)
         } else {
             MarkdownStyling.normalize(styling, in: textStorage)

@@ -58,7 +58,9 @@ class EditorShortcutManager {
             guard let self = self else { return event }
             guard Self.handlesModifiers(event.modifierFlags) else { return event }
 
-            let chars = event.charactersIgnoringModifiers ?? ""
+            // Not `charactersIgnoringModifiers`: that reports what the current layout types, and
+            // on a non-Latin one every case below would miss. See `KeyboardLayout`.
+            let chars = KeyboardLayout.commandKey(for: event)
             let hasShift = event.modifierFlags.contains(.shift)
 
             if self.handleAppShortcut(chars: chars, hasShift: hasShift) {
@@ -77,9 +79,9 @@ class EditorShortcutManager {
 
     /// The gate both dispatch tables sit behind: ⌘ held, option and control not.
     ///
-    /// The exclusions carry the weight. `charactersIgnoringModifiers` reports "b" for ⌥⌘B just
-    /// as it does for ⌘B, so without them the tables would claim every ⌥⌘ and ⌃⌘ combination
-    /// the system and NSTextView own. Shift is left to the tables, which read it themselves.
+    /// The exclusions carry the weight. ⌥⌘B resolves to "b" just as ⌘B does, so without them the
+    /// tables would claim every ⌥⌘ and ⌃⌘ combination the system and NSTextView own. Shift is left
+    /// to the tables, which read it themselves.
     static func handlesModifiers(_ flags: NSEvent.ModifierFlags) -> Bool {
         flags.contains(.command)
             && !flags.contains(.option)
@@ -130,7 +132,7 @@ class EditorShortcutManager {
         case "z" where !hasShift:
             textView.undoManager?.undo()
             return nil
-        case "z" where hasShift, "Z":
+        case "z" where hasShift:
             textView.undoManager?.redo()
             return nil
         case "c" where !hasShift:
@@ -139,16 +141,16 @@ class EditorShortcutManager {
         case "v" where !hasShift:
             pasteAsMarkdown(on: textView)
             return nil
-        case "v" where hasShift, "V":
+        case "v" where hasShift:
             pasteAsPlainText(on: textView)
             return nil
         case "x" where !hasShift:
             textView.cut(nil)
             return nil
-        case "x" where hasShift, "X":
+        case "x" where hasShift:
             toggleStrikethrough(on: textView)
             return nil
-        case "u" where hasShift, "U":
+        case "u" where hasShift:
             toggleCheckbox(on: textView)
             return nil
         case "a" where !hasShift:

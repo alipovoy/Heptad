@@ -81,9 +81,13 @@ struct EditorShortcutManagerTests {
         #expect(result != nil, "An unclaimed key must be handed back, not consumed")
     }
 
+    /// Every `chars` here is lowercase because that is all the table can be handed:
+    /// `KeyboardLayout.commandKey` folds case, so shift is reported once, by `hasShift`. The rows
+    /// that used to pass `"Z"`/`"X"`/`"V"` with `hasShift: false` were covering duplicate cases
+    /// that existed only to tolerate `charactersIgnoringModifiers` reporting the shifted letter.
     @Test(
         arguments: [
-            ("z", false, "undo"), ("z", true, "redo"), ("Z", false, "redo"),
+            ("z", false, "undo"), ("z", true, "redo"),
             ("c", false, "copy"),
             ("x", false, "cut"),
             ("a", false, "selectAll")
@@ -109,7 +113,7 @@ struct EditorShortcutManagerTests {
     @Test(
         arguments: [
             ("b", false, Emphasis.strong), ("i", false, .emphasis),
-            ("x", true, .strikethrough), ("X", false, .strikethrough)
+            ("x", true, .strikethrough)
         ])
     func emphasisShortcutsFormatTheSelection(
         chars: String, hasShift: Bool, emphasis: Emphasis
@@ -162,7 +166,7 @@ struct EditorShortcutManagerTests {
     @Test(
         arguments: [
             ("v", false, "**formatted**"),
-            ("v", true, "formatted"), ("V", false, "formatted")
+            ("v", true, "formatted")
         ])
     func pasteShortcutsInsertTheClipboardAsTextOrMarkdown(
         chars: String, hasShift: Bool, expected: String
@@ -227,7 +231,7 @@ struct EditorShortcutManagerTests {
 
     /// An image is not text, and the note is left alone. The key is still consumed — handing it
     /// back would only find nothing else to run it and beep. Same rule as ⌘B in a plain note.
-    @Test(arguments: [("v", false), ("V", false)])
+    @Test(arguments: [("v", false), ("v", true)])
     func pasteConsumesTheKeyWithNothingToPaste(chars: String, hasShift: Bool) throws {
         let scratch = ScratchPasteboard()
         try scratch.writeAnImage()

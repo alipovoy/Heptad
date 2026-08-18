@@ -144,6 +144,9 @@ struct ListEditingTests {
     }
 
     /// ⌘⇧U reaches the toggle only with shift held; the plain form is checked below.
+    ///
+    /// `chars` is lowercase even though this event types "U": `KeyboardLayout.commandKey` folds
+    /// case, so `hasShift` is the only thing that reports shift to the table.
     @Test func shiftCommandUReachesTheToggle() throws {
         type("- [ ] task")
         let event = try #require(
@@ -153,7 +156,8 @@ struct ListEditingTests {
                 isARepeat: false, keyCode: 32))
 
         let consumed = manager.handleTextViewShortcut(
-            chars: "U", hasShift: true, on: textView, event: event)
+            chars: KeyboardLayout.commandKey(for: event), hasShift: true, on: textView,
+            event: event)
 
         #expect(consumed == nil, "The shortcut is handled here, not passed on")
         #expect(textView.string == "- [x] task")

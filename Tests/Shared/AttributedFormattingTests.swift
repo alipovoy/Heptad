@@ -130,6 +130,26 @@ struct AttributedFormattingTests {
         #expect(MarkdownWriting.markdown(from: text) == "**rotate** keys")
     }
 
+    // MARK: - List markers
+
+    /// A whole list line can be formatted without the line stopping being a list line.
+    ///
+    /// The pair goes around the content, never around the marker. `**- [ ] task**` keeps every
+    /// character and every trait, so the writer's own check accepts it, but
+    /// `ListContinuation.markerLength` no longer reads it: Return stops continuing the list and
+    /// `⌘⇧U` finds no checkbox to toggle. The bold on the marker itself is dropped instead, which
+    /// is the same loss the leading whitespace beside it already takes.
+    @Test(arguments: ["- [ ] task", "- item", "* item", "1. item", "  - indented"])
+    func formattingAWholeListLineLeavesItsMarkerReadable(line: String) throws {
+        let text = storage(line)
+
+        toggle(.strong, over: NSRange(location: 0, length: text.length), in: text)
+        let written = MarkdownWriting.markdown(from: text)
+
+        #expect(ListContinuation.markerLength(on: written) != nil, "\(written)")
+        #expect(written.hasSuffix("**"), "\(written) — and the content is still bold")
+    }
+
     // MARK: - The caret
 
     /// With nothing selected the command answers with what typing should continue in, and writes

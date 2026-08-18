@@ -37,6 +37,12 @@ class NoteEditorCoordinator: NSObject {
     /// The count in flight, held so the next keystroke can cancel it.
     private var statsTask: Task<Void, Never>?
 
+    /// Which count is the latest one asked for. Cancellation alone does not decide this: a task
+    /// cancelled *after* it passed its check still hops to the main actor, and nothing orders that
+    /// hop against its replacement's, so a superseded count could land last and leave the bar
+    /// showing numbers for text that is no longer there.
+    private var statsGeneration = 0
+
     private let defaults: UserDefaults
 
     /// Held, not merely observed on: the savers below are built with it too. Passing them
@@ -56,8 +62,22 @@ class NoteEditorCoordinator: NSObject {
         // The same centre the zoom is posted on, and the same defaults it is read from: half an
         // injection seam is worse than none, because it reads as tested when it is not.
         notificationCenter.addObserver(
-            self, selector: #selector(editorFontSizeDidChange),
+            self, selector: #selector(textSizeDidChange),
             name: .editorFontSizeDidChange, object: nil)
+
+        #if canImport(UIKit)
+            // The other way text size moves on iOS, and the one the app does not own: the system
+            // setting `PlatformFont.editorBody` scales against. On `.default` rather than the
+            // injected centre because UIKit posts it there and nowhere else — the same split
+            // `WindowManager` draws between its own notifications and the workspace's.
+            //
+            // Needed rather than assumed: a note's font is baked into its text storage when it is
+            // configured, so nothing repaints on its own, and whether SwiftUI happens to re-run
+            // `updateUIView` for this is not something this class should be resting on.
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(textSizeDidChange),
+                name: UIContentSizeCategory.didChangeNotification, object: nil)
+        #endif
     }
 
     /// How a note should be drawn right now: its own mode, at the app-wide zoom, in its own
@@ -68,9 +88,25 @@ class NoteEditorCoordinator: NSObject {
     /// untinted appearance is no longer a value the text views need this never to produce: they
     /// hold their own as `nil` until configured, so the first call lands whatever it carries.
     func appearance(forNoteId id: Int) -> MarkdownStyling.Appearance {
+        appearance(plainText: modes[id] ?? false, tintedNoteIndex: paletteIndices[id])
+    }
+
+    /// The same answer for a note the caller is holding, rather than one this class has been told
+    /// about. Nothing in the app needs it — every production path arrives by id — but the test
+    /// fixture builds views without going through `update`, and hand-copying the three fields
+    /// there meant every field added to `Appearance` had to be added twice.
+    func appearance(for note: NoteItem, at index: Int) -> MarkdownStyling.Appearance {
+        appearance(plainText: note.isPlainText, tintedNoteIndex: index)
+    }
+
+    /// The one place an appearance is built: what the note asks for, plus the app-wide zoom, which
+    /// is neither caller's to know about.
+    private func appearance(
+        plainText: Bool, tintedNoteIndex: Int?
+    ) -> MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
-            plainText: modes[id] ?? false, fontSize: EditorFontSize.current(defaults),
-            tintedNoteIndex: paletteIndices[id])
+            plainText: plainText, fontSize: EditorFontSize.current(defaults),
+            tintedNoteIndex: tintedNoteIndex)
     }
 
     func setup(container: PlatformView, notes: [NoteItem], selectedIndex: Int) {
@@ -170,7 +206,9 @@ class NoteEditorCoordinator: NSObject {
         return editorView
     }
 
-    /// Repaints the showing note at the new zoom level.
+    /// Repaints the showing note at whatever size it should now be drawn at — the app's own zoom
+    /// on macOS, the system text size on iOS. Both arrive here because both change the same thing:
+    /// what `PlatformFont.editorBody` returns, which every attribute in the note derives from.
     ///
     /// Only the showing one. Every cached view is configured again on its way back in (#103), so
     /// repainting the other six here does work that is thrown away and then done a second time —
@@ -178,9 +216,9 @@ class NoteEditorCoordinator: NSObject {
     /// repeat leaves, six sevenths of it spent on notes nobody was looking at.
     ///
     /// `@objc` selector dispatch (used by `NotificationCenter`) crosses the Swift/ObjC boundary
-    /// without hopping actors, so this can't be `@MainActor`-isolated directly. The poster is
-    /// the key monitor, which is already on the main actor.
-    @objc nonisolated private func editorFontSizeDidChange() {
+    /// without hopping actors, so this can't be `@MainActor`-isolated directly. Both posters are
+    /// already on the main actor: the key monitor, and UIKit.
+    @objc nonisolated private func textSizeDidChange() {
         MainActor.assumeIsolated {
             guard let noteId = currentNoteId, let editorView = editorViews[noteId] else { return }
 
@@ -226,17 +264,22 @@ class NoteEditorCoordinator: NSObject {
     /// counts the incoming note's text *before* it becomes the current one.
     private func updateStats(plainText: String, for noteId: Int) {
         statsTask?.cancel()
+        statsGeneration += 1
+        let generation = statsGeneration
+
         statsTask = Task.detached(priority: .utility) { [weak self] in
             let stats = TextStats(text: plainText)
             guard !Task.isCancelled else { return }
 
-            await self?.deliverStats(stats, for: noteId)
+            await self?.deliverStats(stats, for: noteId, generation: generation)
         }
     }
 
-    /// Hands `stats` to the platform hook, unless the note moved on while they were being counted.
-    private func deliverStats(_ stats: TextStats, for noteId: Int) {
-        guard noteId == currentNoteId else { return }
+    /// Hands `stats` to the platform hook, unless the note or the text moved on while they were
+    /// being counted. Both checks are needed: the generation catches a newer count of the same
+    /// note, and `noteId` catches a selection change, which does not always start a count.
+    private func deliverStats(_ stats: TextStats, for noteId: Int, generation: Int) {
+        guard generation == statsGeneration, noteId == currentNoteId else { return }
         statsDidChange(stats)
     }
 
