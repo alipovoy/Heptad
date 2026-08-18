@@ -56,8 +56,8 @@ struct LinkRoundTripTests {
     /// characters and no brackets at all.
     @Test(
         arguments: [
-            "x*[a](u)*y",  // word characters on both sides refuse `_`
-            "x*[a](u)*",  // and on one side is enough
+            "x *[a](u)* y",  // `_` is refused against a word character; whitespace frees `*`
+            "(*[a](u)*)",  // and so does punctuation, on the flanking rule's own terms
             // A guard row: the bold pair is itself the boundary `_` needs, so what it pins is that
             // two traits still nest in order once each is spelled separately.
             "x**_[a](u)_**y"
@@ -76,6 +76,31 @@ struct LinkRoundTripTests {
             rendered(written).attribute(.link, at: italic, effectiveRange: nil) != nil,
             "\(written) — the destination survives the save")
         #expect(roundTripIsStable(written), "and is not written differently the second time")
+    }
+
+    /// An italic link with a word character right against it keeps its destination and loses the
+    /// italic, because there is no spelling left for it.
+    ///
+    /// `_` is refused by the word boundary, and `*` by the flanking rule — the pair would face the
+    /// label's `[` on the inside and the word character on the outside, which is the shape
+    /// `/usr/*/bin/*x` has and no parser reads as emphasis. So the ladder reaches `.dropped`, and
+    /// what it drops is the trait rather than the URL. `x*[a](u)*y` used to be written here, read
+    /// back as italic by this app alone, and shown as its asterisks by everything else.
+    @Test func anItalicLinkAgainstAWordCharacterKeepsTheDestinationAndNotTheItalic() throws {
+        let text = rendered("xay")
+        text.addAttribute(.link, value: "https://e.co", range: NSRange(location: 1, length: 1))
+        AttributedFormatting.toggle(
+            .emphasis, over: NSRange(location: 1, length: 1), in: text, appearance: appearance)
+
+        let written = MarkdownWriting.markdown(from: text)
+        let back = rendered(written)
+
+        #expect(written == "x[a](https://e.co)y")
+        #expect(back.string == "xay", "\(written) — the characters are the note's own")
+        #expect(back.attribute(.link, at: 1, effectiveRange: nil) != nil, "\(written) — and the URL")
+        #expect(
+            !Emphasis.emphasis.isOn(back.attributes(at: 1, effectiveRange: nil)),
+            "\(written) — the italic is what was given up")
     }
 
     /// A bold italic link keeps its italic when another run on the line sends the ladder down a

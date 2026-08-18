@@ -119,7 +119,7 @@ extension MarkdownSyntax {
         let limit = NSMaxRange(bounds)
 
         guard matches(characters, in: text, at: start, limit: limit),
-            canOpen(characters, in: text, at: start, lowerBound: bounds.location)
+            canOpen(characters, in: text, at: start, bounds: bounds)
         else { return nil }
 
         let contentStart = start + width
@@ -133,7 +133,7 @@ extension MarkdownSyntax {
 
         var closing = contentStart + 1
         while closing + width <= limit {
-            if closes(delimiter, in: text, at: closing, limit: limit) {
+            if closes(delimiter, in: text, at: closing, bounds: bounds) {
                 let content = NSRange(location: contentStart, length: closing - contentStart)
 
                 spans.append(Span(range: NSRange(location: start, length: width), style: .marker))
@@ -156,36 +156,89 @@ extension MarkdownSyntax {
     }
 
     /// Whether a delimiter at `index` closes a run: it is there, it does not close against
-    /// whitespace, and it falls at a word boundary if it is one that must.
+    /// whitespace, and it falls where the boundary rules for its own spelling allow.
     private static func closes(
-        _ delimiter: Delimiter, in text: NSString, at index: Int, limit: Int
+        _ delimiter: Delimiter, in text: NSString, at index: Int, bounds: NSRange
     ) -> Bool {
-        matches(delimiter.characters, in: text, at: index, limit: limit)
+        matches(delimiter.characters, in: text, at: index, limit: NSMaxRange(bounds))
             && !isEscaped(index, in: text)
             && !isWhitespace(text.character(at: index - 1))
-            && canClose(delimiter.characters, in: text, at: index, limit: limit)
+            && canClose(delimiter.characters, in: text, at: index, bounds: bounds)
     }
 
-    // MARK: - Word boundaries
+    // MARK: - Boundaries
     //
-    // `_` is the one delimiter that has to sit at a word boundary. Without this rule the app
-    // would italicise the middle of `AWS_SECRET_KEY` and `snake_case_name` — which is precisely
-    // the sort of thing these notes hold, so the rule is what makes `_` safe to spell italic
-    // with. `**`, `~~` and `*` need no such rule: nobody writes them inside an identifier.
+    // `_` has to sit at a word boundary. Without that rule the app would italicise the middle of
+    // `AWS_SECRET_KEY` and `snake_case_name` — precisely the sort of thing these notes hold, and
+    // the rule is what makes `_` safe to spell italic with.
+    //
+    // `*` is italic's fallback spelling, written wherever `_` would not read back, so the same rule
+    // would take that spelling away — `Test*ing*` has to be italic. It got no rule at all instead,
+    // and a note holding `/usr/*/bin/*x` drew as `/usr//bin/x` with `/bin/` italic and the
+    // asterisks hidden. CommonMark's flanking rules are the ones that tell those two apart, and
+    // being the ones every other parser uses, they are also what the note means elsewhere.
+    //
+    // `**` and `~~` still have no rule of their own: `2**3**4` has the same shape as `2*3*4`, but
+    // bold has no fallback spelling to keep working, so the rule there would cost the trait rather
+    // than protect the text. See `Spelling.Italic`.
 
     private static func canOpen(
-        _ delimiter: String, in text: NSString, at index: Int, lowerBound: Int
+        _ delimiter: String, in text: NSString, at index: Int, bounds: NSRange
     ) -> Bool {
-        guard delimiter == emphasis, index > lowerBound else { return true }
-        return !isWordCharacter(text.character(at: index - 1))
+        switch delimiter {
+        case emphasis:
+            return index <= bounds.location
+                || !isWordCharacter(text.character(at: index - 1))
+        case emphasisAlternate:
+            let sides = Neighbours(of: delimiter, at: index, in: text, bounds: bounds)
+            return flanks(inside: sides.after, outside: sides.before)
+        default:
+            return true
+        }
     }
 
     private static func canClose(
-        _ delimiter: String, in text: NSString, at index: Int, limit: Int
+        _ delimiter: String, in text: NSString, at index: Int, bounds: NSRange
     ) -> Bool {
-        let after = index + delimiter.utf16.count
-        guard delimiter == emphasis, after < limit else { return true }
-        return !isWordCharacter(text.character(at: after))
+        switch delimiter {
+        case emphasis:
+            let after = index + delimiter.utf16.count
+            return after >= NSMaxRange(bounds) || !isWordCharacter(text.character(at: after))
+        case emphasisAlternate:
+            let sides = Neighbours(of: delimiter, at: index, in: text, bounds: bounds)
+            return flanks(inside: sides.before, outside: sides.after)
+        default:
+            return true
+        }
+    }
+
+    /// CommonMark's flanking test, both directions in one: the run may open or close unless the
+    /// character it faces `inside` the pair is punctuation and the one `outside` is a word
+    /// character. nil is the line's own end, which counts as whitespace and frees the delimiter.
+    ///
+    /// Which is the rule that reads `/usr/*/bin/*x` as characters. Its closing `*` faces `/` inside
+    /// the pair and `x` outside, so it cannot close — while in `Test*ing*` it faces `g`, which is no
+    /// punctuation, and closes.
+    ///
+    /// `**` and `~~` never ask this: only `*` weighs its two sides against each other, and `_` asks
+    /// the stricter question above.
+    private static func flanks(inside: unichar?, outside: unichar?) -> Bool {
+        guard let inside, isPunctuation(inside) else { return true }
+        guard let outside else { return true }
+
+        return isWhitespace(outside) || isPunctuation(outside)
+    }
+
+    /// The characters either side of a delimiter run, nil where the line ends.
+    private struct Neighbours {
+        let before: unichar?
+        let after: unichar?
+
+        init(of delimiter: String, at index: Int, in text: NSString, bounds: NSRange) {
+            let end = index + delimiter.utf16.count
+            before = index > bounds.location ? text.character(at: index - 1) : nil
+            after = end < NSMaxRange(bounds) ? text.character(at: end) : nil
+        }
     }
 
     // MARK: - Links
