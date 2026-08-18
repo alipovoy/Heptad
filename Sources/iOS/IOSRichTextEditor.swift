@@ -171,6 +171,53 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
         UIPasteboard.general.string = markdown
     }
 
+    /// The clipboard read as the source `copy(_:)` writes it: what it describes, not its
+    /// delimiters.
+    ///
+    /// The other half of the pair above, and it has to be here — a note copied out of this app and
+    /// pasted back in would otherwise arrive as the six characters of `**bold**`, and the next save
+    /// escapes them into the store. macOS reads the clipboard the same way, through
+    /// `EditorShortcutManager.pasteAsMarkdown`.
+    ///
+    /// Plain mode takes the characters as they are, which is what that mode means. There is no ⌘⇧V
+    /// on iOS to say so for a formatted note; switching the note to plain is how you paste literally.
+    override func paste(_ sender: Any?) {
+        guard styling.isStyled, let source = UIPasteboard.general.string, !source.isEmpty else {
+            super.paste(sender)
+            return
+        }
+
+        paste(markdown: source)
+    }
+
+    /// The half of the paste with a decision in it, split out for the reason `markdownForSelection`
+    /// is: `UIPasteboard.general` is the half a test cannot reach.
+    ///
+    /// Inserted a run at a time through `insertText`, which is the path a keystroke takes — the view
+    /// registers the undo step and reports the change to its delegate, neither of which an edit of
+    /// the storage by hand would do. One undo group around the lot, so a paste comes back off in one
+    /// press rather than one per run.
+    func paste(markdown source: String) {
+        let attributed = RichTextRendering.attributed(from: source, appearance: styling)
+        let whole = NSRange(location: 0, length: attributed.length)
+        guard whole.length > 0 else { return }
+
+        let characters = attributed.string as NSString
+        let typing = typingAttributes
+
+        undoManager?.beginUndoGrouping()
+        attributed.enumerateAttributes(in: whole, options: []) { attributes, run, _ in
+            typingAttributes = attributes
+            insertText(characters.substring(with: run))
+        }
+        undoManager?.setActionName("Paste")  // while the group is open: it names that group
+        undoManager?.endUndoGrouping()
+
+        // The caret continues in what it was in before the paste, not in the last run of it: a
+        // pasted bold ending at the caret would otherwise make everything typed after it bold.
+        typingAttributes = MarkdownStyling.normalized(typing, in: styling)
+    }
+
     /// Puts a note's markdown into the view, in the shape its mode calls for.
     ///
     /// The selection is put back as a caret at its head: after a mode switch, the run it covered is
