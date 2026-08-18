@@ -86,23 +86,60 @@ class GlobalHotKeyManager {
             .intersection(.deviceIndependentFlagsMask)
     }
 
-    /// Persists a new binding, re-registering it immediately when the hotkey is already live.
+    /// The current binding written the way a menu shows it — `⌃⌥Space`.
+    ///
+    /// Built from what is stored rather than spelled out at the call site, so the one place the app
+    /// can say the summon key is unavailable cannot name a combination the user is not bound to.
+    /// Glyph order is Apple's own: control, option, shift, command.
+    var bindingDescription: String {
+        let flags = modifierFlags
+        let glyphs = [
+            (NSEvent.ModifierFlags.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")
+        ]
+
+        return glyphs.reduce(into: "") { description, glyph in
+            if flags.contains(glyph.0) { description += glyph.1 }
+        } + Self.name(of: keyCode)
+    }
+
+    /// A key as that description names it: Space by name, anything the machine's Latin layout types
+    /// by its own character, and otherwise the number.
+    ///
+    /// The number is deliberate rather than a table of every function and arrow key: a binding this
+    /// cannot name is one no UI offers yet, and a wrong name would be worse than a plain one.
+    private static func name(of keyCode: UInt32) -> String {
+        guard keyCode != UInt32(kVK_Space) else { return "Space" }
+
+        let typed = KeyboardLayout.asciiCharacter(forKeyCode: UInt16(keyCode)) ?? ""
+        guard let scalar = typed.unicodeScalars.first, (0x21...0x7E).contains(scalar.value) else {
+            return "key \(keyCode)"
+        }
+
+        return typed.uppercased()
+    }
+
+    /// Persists a new binding, and answers whether the system will actually give it to us.
     /// There is no settings UI yet; this is the seam one would drive.
     ///
     /// A binding that will not register is rolled back and the working one reclaimed: `register()`
     /// gives up its claim before it tries, so a combination another app owns would otherwise be
     /// left in `UserDefaults` and leave the app with no hotkey at all, at this launch and every
     /// one after.
+    ///
+    /// Tried whether or not the hotkey is currently live: "not live" is what a launch that lost the
+    /// race for the combination leaves behind, and the state a rebinding user is escaping. So a
+    /// combination the system grants is left claimed rather than handed back — the alternative is
+    /// an honest `true` and a dead summon key until the next launch.
     @discardableResult
     func setBinding(keyCode: UInt32, modifierFlags: NSEvent.ModifierFlags) -> Bool {
         let previous = (keyCode: self.keyCode, modifierFlags: self.modifierFlags)
+        let wasRegistered = isRegistered
         store(keyCode: keyCode, modifierFlags: modifierFlags)
 
-        guard isRegistered else { return true }
-        guard !register() else { return true }
+        if register() { return true }
 
         store(keyCode: previous.keyCode, modifierFlags: previous.modifierFlags)
-        register()
+        if wasRegistered { register() }
         return false
     }
 

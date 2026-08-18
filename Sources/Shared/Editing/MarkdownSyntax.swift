@@ -96,6 +96,14 @@ enum MarkdownSyntax {
     /// Whether `delimiter` is one that has to fall at a word boundary. Only `_` is.
     static func mindsWordBoundaries(_ delimiter: String) -> Bool { delimiter == emphasis }
 
+    /// Anything that is neither a word character nor whitespace, which is what CommonMark's
+    /// flanking rules mean by punctuation — the class `*` measures itself against. Defined out of
+    /// the app's own two classes rather than out of Unicode's categories, so the three stay
+    /// exhaustive.
+    static func isPunctuation(_ character: unichar) -> Bool {
+        !isWordCharacter(character) && !isWhitespace(character)
+    }
+
     /// The commands and the writer trim to the same idea of whitespace the scanner refuses to
     /// close a delimiter against, so neither can emit markdown it would reject.
     static func isWhitespace(_ character: unichar) -> Bool {

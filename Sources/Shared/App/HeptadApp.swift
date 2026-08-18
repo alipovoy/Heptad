@@ -59,7 +59,12 @@ struct HeptadApp: App {
     /// Lifted out of the container above purely so it can be tested: the partial-store case is
     /// the one that matters and it cannot be arranged against the app's own on-disk store.
     static func seed(_ context: ModelContext) throws {
-        let existingIds = Set(try context.fetch(FetchDescriptor<NoteItem>()).map(\.id))
+        // Ids alone: this runs on the launch path, and a plain fetch reads every note's `text` to
+        // answer a question about seven integers.
+        var descriptor = FetchDescriptor<NoteItem>()
+        descriptor.propertiesToFetch = [\.id]
+
+        let existingIds = Set(try context.fetch(descriptor).map(\.id))
         for noteId in 0..<AppConstants.noteCount where !existingIds.contains(noteId) {
             context.insert(NoteItem(id: noteId, modifiedAt: .now))
         }

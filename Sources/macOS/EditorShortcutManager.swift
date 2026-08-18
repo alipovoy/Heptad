@@ -317,13 +317,16 @@ class EditorShortcutManager {
     /// ⌘⇧U flips the checkbox on the line holding the insertion point, and does nothing on a
     /// line without one. Unlike the formatting commands this is a text edit, so it goes
     /// through the same should/didChangeText pair the list continuation uses.
+    ///
+    /// `caretFollowsMarkup: false` because the box is behind the caret, not under it: this flips
+    /// `[ ]` at the head of the line and leaves the caret in whatever run it was already in.
     func toggleCheckbox(on textView: NSTextView) {
         guard let markdownView = textView as? MarkdownTextView,
             let edit = ListContinuation.checkboxEdit(
                 in: textView.string as NSString, selectedRange: textView.selectedRange())
         else { return }
 
-        markdownView.applyMarkup(edit)
+        markdownView.applyMarkup(edit, caretFollowsMarkup: false)
         textView.undoManager?.setActionName("Checkbox")
     }
 

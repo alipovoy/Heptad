@@ -4,7 +4,7 @@ import UIKit
 @testable import Heptad
 
 /// What ⌘C puts on the clipboard. The buffer holds no delimiters in formatted mode, so copying
-/// its characters loses the note's formatting, and iOS's paste is plain.
+/// its characters loses the note's formatting. `MarkdownTextViewPasteTests` is the way back in.
 /// `MarkdownTextViewTests.copyingAStyledNoteRoundTripsExactly` pins the same guarantee on macOS;
 /// the iOS target does not compile that suite.
 ///

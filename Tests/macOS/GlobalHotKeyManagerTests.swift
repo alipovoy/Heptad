@@ -119,27 +119,59 @@ struct GlobalHotKeyManagerTests {
         #expect(manager.modifierFlags == GlobalHotKeyManager.defaultModifierFlags)
     }
 
-    // MARK: - Persistence
+    // MARK: - Description
 
-    @Test func bindingRoundTripsThroughUserDefaults() {
+    /// The menu's only line about the hotkey names what is stored, since a hardcoded `⌃⌥Space`
+    /// would go on claiming the default after a rebind.
+    @Test func theDefaultBindingDescribesItselfAsControlOptionSpace() {
+        #expect(GlobalHotKeyManager(defaults: defaults).bindingDescription == "⌃⌥Space")
+    }
+
+    /// Glyphs in Apple's order, and the key by the character the Latin layout types on it.
+    @Test func aStoredBindingIsDescribedFromItsOwnKeyAndModifiers() {
+        defaults.set(Int(kVK_ANSI_J), forKey: AppConstants.globalHotKeyKeyCodeKey)
+        defaults.set(
+            Int(NSEvent.ModifierFlags([.command, .shift]).rawValue),
+            forKey: AppConstants.globalHotKeyModifierFlagsKey)
+
+        #expect(GlobalHotKeyManager(defaults: defaults).bindingDescription == "⇧⌘J")
+    }
+
+    /// A key with no character to show is named by its number rather than by a guess.
+    @Test func aKeyWithNoCharacterIsNamedByItsNumber() {
+        defaults.set(Int(kVK_F16), forKey: AppConstants.globalHotKeyKeyCodeKey)
+        defaults.set(0, forKey: AppConstants.globalHotKeyModifierFlagsKey)
+
+        #expect(GlobalHotKeyManager(defaults: defaults).bindingDescription == "key \(kVK_F16)")
+    }
+
+    // MARK: - Persistence
+    //
+    // Both of these bind the spare combination rather than an arbitrary one: `setBinding` checks
+    // what it is given against the window server before it keeps it, so a combination another app
+    // owns would be rolled back and there would be nothing to read back.
+
+    @Test(.requiresTheSpareCombination)
+    func bindingRoundTripsThroughUserDefaults() {
         GlobalHotKeyManager(defaults: defaults)
-            .setBinding(keyCode: UInt32(kVK_ANSI_J), modifierFlags: [.command, .shift])
+            .setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers)
 
         // A fresh manager stands in for the next app launch.
         let relaunched = GlobalHotKeyManager(defaults: defaults)
 
-        #expect(relaunched.keyCode == UInt32(kVK_ANSI_J))
-        #expect(relaunched.modifierFlags == [.command, .shift])
+        #expect(relaunched.keyCode == spareKeyCode)
+        #expect(relaunched.modifierFlags == spareModifiers)
     }
 
-    @Test func bindingStripsDeviceDependentModifierBits() {
+    @Test(.requiresTheSpareCombination)
+    func bindingStripsDeviceDependentModifierBits() {
         let manager = GlobalHotKeyManager(defaults: defaults)
         // .init(rawValue: 1) is the device-dependent left-shift bit; it must not survive.
         manager.setBinding(
-            keyCode: UInt32(kVK_ANSI_K),
-            modifierFlags: [.control, NSEvent.ModifierFlags(rawValue: 1)])
+            keyCode: spareKeyCode,
+            modifierFlags: spareModifiers.union(NSEvent.ModifierFlags(rawValue: 1)))
 
-        #expect(manager.modifierFlags == [.control])
+        #expect(manager.modifierFlags == spareModifiers)
     }
 
     // MARK: - Carbon modifier conversion
@@ -158,9 +190,11 @@ struct GlobalHotKeyManagerTests {
     @Test(.requiresTheSpareCombination)
     func doubleRegisterAndDoubleUnregisterAreSafe() {
         let manager = GlobalHotKeyManager(defaults: defaults)
+        #expect(manager.isRegistered == false, "A fresh manager holds no claim")
+
         manager.setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers)
 
-        #expect(manager.isRegistered == false, "Should start unregistered")
+        #expect(manager.isRegistered, "and a binding the system grants is left claimed")
         #expect(manager.register(), "Registering a free combination should succeed")
         // The second call must tear the first registration down rather than stack on it.
         #expect(manager.register(), "Re-registering should replace, not fail")
@@ -169,6 +203,22 @@ struct GlobalHotKeyManagerTests {
         manager.unregister()
         manager.unregister()
         #expect(manager.isRegistered == false)
+    }
+
+    /// A binding set while the hotkey is inert is live once it is stored.
+    ///
+    /// Inert is the state a launch that lost the race to the combination leaves behind, and it is
+    /// the state a user rebinding is trying to get out of. Answering `true` and handing the claim
+    /// back would leave them with no summon key until the next launch.
+    @Test(.requiresTheSpareCombination)
+    func aBindingSetWhileInertIsLeftLive() {
+        let manager = GlobalHotKeyManager(defaults: defaults)
+        #expect(manager.isRegistered == false)
+
+        #expect(manager.setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers))
+        #expect(manager.isRegistered, "the combination it reported as granted is the one it holds")
+
+        manager.unregister()
     }
 
     @Test func unregisterBeforeRegisterIsSafe() {
@@ -215,6 +265,34 @@ struct GlobalHotKeyManagerTests {
         #expect(manager.isRegistered, "and it is claimed again, not left released")
 
         manager.unregister()
+    }
+
+    /// The same rollback when the hotkey is not currently live.
+    ///
+    /// Which is exactly the state a launch that lost the race leaves behind — and the one where an
+    /// unchecked write sticks: `register()` had already failed, so the old code skipped the attempt
+    /// entirely and stored whatever it was handed, at that launch and every one after.
+    @Test(.requiresTheSpareCombination)
+    func aBindingThatWillNotRegisterIsRolledBackWhileUnregisteredToo() throws {
+        let ownedElsewhere = try ScratchDefaults(name: "GlobalHotKeyManagerTests.owner")
+        let owner = GlobalHotKeyManager(defaults: ownedElsewhere.defaults)
+        owner.setBinding(keyCode: spareSuccessorKeyCode, modifierFlags: spareModifiers)
+        try #require(owner.register(), "The stand-in for the app that already owns it")
+        defer { owner.unregister() }
+
+        let manager = GlobalHotKeyManager(defaults: defaults)
+        try #require(manager.setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers))
+
+        // A working binding stored and no claim held: what a lost launch race leaves behind.
+        manager.unregister()
+        try #require(manager.isRegistered == false)
+
+        let took = manager.setBinding(
+            keyCode: spareSuccessorKeyCode, modifierFlags: spareModifiers)
+
+        #expect(took == false)
+        #expect(manager.keyCode == spareKeyCode, "The binding that works is what is stored")
+        #expect(manager.isRegistered == false, "and an attempt that failed claims nothing")
     }
 
     @Test(.requiresTheSpareCombination)

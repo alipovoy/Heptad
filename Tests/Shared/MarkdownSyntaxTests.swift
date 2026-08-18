@@ -172,6 +172,21 @@ struct MarkdownSyntaxTests {
         #expect(styled(text).isEmpty)
     }
 
+    /// A path or a glob is characters too, which whitespace alone did not cover: `/usr/*/bin/*x`
+    /// drew as `/usr//bin/x` with `/bin/` italic and the asterisks hidden.
+    ///
+    /// The rule is CommonMark's flanking test — a delimiter facing punctuation inside the pair needs
+    /// whitespace or punctuation outside it — so the closing `*` of `/bin/*x` is refused for the `x`
+    /// behind it. `2*3*4` and `*.txt/*.md` are *not* here: CommonMark reads those as emphasis, and
+    /// agreeing with it is the point.
+    @Test(arguments: [
+        "/usr/*/bin/*x", "s3://bucket/*/logs/*x", "*.sh *.md and *.txt file",
+        "rm -rf /tmp/*/cache/*x"
+    ])
+    func aFlushAsteriskAgainstAWordCharacterStylesNothing(text: String) {
+        #expect(styled(text).isEmpty)
+    }
+
     // MARK: - Escapes
 
     /// A backslash says what the character after it is not, so a note can hold the markdown it

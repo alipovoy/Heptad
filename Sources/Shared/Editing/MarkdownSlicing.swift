@@ -57,7 +57,10 @@ enum MarkdownSlicing {
     /// went on.
     static func trimmed(_ range: NSRange, in source: NSString) -> NSRange {
         var start = range.location
-        var end = NSMaxRange(range)
+
+        // Clipped rather than trusted: the range arrives from the text view, and the file that
+        // decides every slice boundary is the wrong one to trap in.
+        var end = min(NSMaxRange(range), source.length)
 
         while start < end, MarkdownSyntax.isWhitespace(source.character(at: start)) { start += 1 }
         while end > start, MarkdownSyntax.isWhitespace(source.character(at: end - 1)) { end -= 1 }
@@ -101,17 +104,27 @@ enum MarkdownSlicing {
         return index - 1
     }
 
-    /// How much of `range` is the leading list marker of the line it starts on, in UTF-16 units.
+    /// Where the leading list marker of the line holding `location` ends, in the same absolute
+    /// UTF-16 coordinates `location` is in — the line's own start when it has no marker.
     ///
-    /// Asked of the line rather than of `range`, because `range` is whatever slice of it the run
-    /// boundaries produced: the marker is only ever at the head of the line, and only the part of
-    /// it this slice holds counts.
-    static func markerPrefix(of range: NSRange, in source: NSString) -> Int {
-        let line = source.lineRange(for: NSRange(location: range.location, length: 0))
+    /// Split from `markerPrefix` below because this is the expensive half: it copies the whole
+    /// line out to ask `ListContinuation` about it, and the writer emits a line in as many slices
+    /// as that line has runs. Found once per line and carried down, it is off the inner loop.
+    static func markerEnd(ofLineAt location: Int, in source: NSString) -> Int {
+        let line = source.lineRange(for: NSRange(location: location, length: 0))
         guard let length = ListContinuation.markerLength(on: source.substring(with: line)) else {
-            return 0
+            return line.location
         }
 
-        return max(0, min(line.location + length, NSMaxRange(range)) - range.location)
+        return line.location + length
+    }
+
+    /// How much of `range` is the leading list marker of the line it starts on, in UTF-16 units.
+    ///
+    /// Measured against the line rather than against `range`, because `range` is whatever slice of
+    /// it the run boundaries produced: the marker is only ever at the head of the line, and only
+    /// the part of it this slice holds counts.
+    static func markerPrefix(of range: NSRange, endingAt markerEnd: Int) -> Int {
+        max(0, min(markerEnd, NSMaxRange(range)) - range.location)
     }
 }
