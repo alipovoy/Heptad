@@ -86,6 +86,30 @@ private enum PlainTextPasteboardTestError: Error {
         #expect(scratch.pasteboard.plainTextForPaste() == expected)
     }
 
+    /// What the clipboard carries that a note may not hold is dropped on the way in, on every
+    /// flavor — ⌘⇧V never goes near the writer, so this reading is the only place to do it.
+    /// U+FFFC is what an image on the clipboard contributes to the text beside it.
+    @Test(arguments: [("secret\u{FFFC}", "secret"), ("a\u{0}b", "ab"), ("a\r\nb", "a\nb")])
+    func charactersANoteMayNotHoldAreDropped(written: String, expected: String) {
+        let scratch = ScratchPasteboard()
+        scratch.write { $0.setString(written, forType: .string) }
+
+        #expect(scratch.pasteboard.plainTextForPaste() == expected)
+    }
+
+    /// A flavor holding nothing but those characters is an empty flavor, so the search falls
+    /// through to one with text in it rather than pasting nothing.
+    @Test func aFlavorOfNothingButThoseCharactersFallsThrough() throws {
+        let rtf = try Self.rtf()
+        let scratch = ScratchPasteboard()
+        scratch.write {
+            $0.setData(rtf, forType: .rtf)
+            $0.setString("\u{FFFC}", forType: .string)
+        }
+
+        #expect(scratch.pasteboard.plainTextForPaste() == "formatted")
+    }
+
     /// nil, not "", so the caller can tell a clipboard with no text from one holding empty text
     /// — the first leaves the note alone, and only the second would be a paste of nothing.
     @Test func aClipboardHoldingNoTextIsNil() throws {
@@ -203,15 +227,26 @@ private enum PlainTextPasteboardTestError: Error {
         #expect(styled.markdownRepresentation() == "[docs](https://example.com)")
     }
 
-    /// `MarkdownSyntax` does not parse inside a link's label, so emphasis written there could
-    /// never be read back — it would sit in the note as literal asterisks with no command able to
-    /// remove them. The link wins and the traits are dropped, which is the rule the whole
-    /// conversion exists to hold.
-    @Test func aBoldLinkKeepsTheLinkAndDropsTheBold() throws {
+    /// `MarkdownSyntax` does not parse inside a link's label, so emphasis over a link is written
+    /// *around* it. That is a spelling the parser reads (`MarkdownSyntaxTests`
+    /// `aLinkNestsButItsLabelIsNotParsed`), so the trait survives the save it used to be dropped
+    /// by — and ⌘B can take it off again, which is the rule the whole conversion exists to hold.
+    @Test func aBoldLinkKeepsBothTheLinkAndTheBold() throws {
         let url = try #require(URL(string: "https://example.com"))
         let styled = NSAttributedString(
             string: "docs",
             attributes: [.link: url, .font: NSFont.boldSystemFont(ofSize: 13)])
+
+        #expect(styled.markdownRepresentation() == "**[docs](https://example.com)**")
+    }
+
+    /// The pair has to go around the whole link — the label is not parsed, so there is nowhere
+    /// else to put it. A trait covering only part of one has no spelling and is dropped.
+    @Test func boldOverPartOfALinkIsDropped() throws {
+        let url = try #require(URL(string: "https://example.com"))
+        let styled = NSMutableAttributedString(string: "docs", attributes: [.link: url])
+        styled.addAttribute(
+            .font, value: NSFont.boldSystemFont(ofSize: 13), range: NSRange(location: 0, length: 2))
 
         #expect(styled.markdownRepresentation() == "[docs](https://example.com)")
     }

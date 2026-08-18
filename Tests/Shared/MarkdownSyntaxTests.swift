@@ -63,6 +63,36 @@ struct MarkdownSyntaxTests {
         #expect(markers("[docs](https://example.com)") == ["[", "](https://example.com)"])
     }
 
+    /// A destination's own parentheses are balanced, so the address survives whole. Stopping at
+    /// the first `)` gave `[Foo](…/Foo_(bar))` a dead URL and left `)` behind as text — and the
+    /// writer then stored that, so the note kept the damage.
+    @Test(
+        arguments: [
+            "https://en.wikipedia.org/wiki/Foo_(bar)",
+            "https://e.co/a(b(c)d)e",
+            "https://e.co/()"
+        ])
+    func aDestinationMayHoldBalancedParentheses(destination: String) {
+        let text = "[Foo](" + destination + ")"
+
+        #expect(styled(text).map(\.0) == ["Foo"])
+        #expect(markers(text) == ["[", "](" + destination + ")"])
+    }
+
+    /// An unmatched `(` opens a nesting the line never closes, so there is no link — the same
+    /// answer as for `[Foo](` with no `)` at all.
+    @Test func anUnclosedNestingIsNotALink() {
+        #expect(styled("[Foo](https://e.co/(a)").contains { $0.1 == .link } == false)
+    }
+
+    /// An unmatched `)` still ends the destination there — unescaped, that is the only thing it
+    /// can mean — so `…/a)b` is an address this app has no spelling for. What matters is that the
+    /// *writer* never stores one: `RichTextRoundTripTests` pins that it drops the link and keeps
+    /// every character.
+    @Test func anUnmatchedCloseEndsTheDestination() {
+        #expect(markers("[Foo](https://e.co/a)b)") == ["[", "](https://e.co/a)"])
+    }
+
     /// The list grammar comes from `ListContinuation`, so what Return continues and what the
     /// editor reads as a bullet are the same set by construction.
     ///

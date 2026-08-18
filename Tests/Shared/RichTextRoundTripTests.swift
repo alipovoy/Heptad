@@ -37,6 +37,7 @@ struct RichTextRoundTripTests {
             "rotate **keys** now",
             "[docs](https://example.com)",
             "see [docs](https://example.com) first",
+            "[wiki](https://en.wikipedia.org/wiki/Foo_(bar))",
             "- one\n- two\n- three",
             "- [ ] rotate **keys**\n- [x] done",
             "1. first\n2. second",
@@ -46,6 +47,7 @@ struct RichTextRoundTripTests {
             "chmod +x *.sh here",
             "trailing spaces   \nand a tab\tinside",
             "\\*\\*not bold\\*\\*",
+            "- [ ] \\*\\*not bold\\*\\*",
             "\\_not italic\\_ but **this is**",
             "C:\\Users\\admin",
             "a \\ b"
@@ -148,6 +150,25 @@ struct RichTextRoundTripTests {
         #expect(roundTrip("escaped \\\\ backslash") == "escaped \\ backslash")
     }
 
+    /// The escaping stops short of the line's own list marker.
+    ///
+    /// `- [ ] ` is content — the user typed it, or pressed Return and had it typed for them — so
+    /// a backslash through it is not a defence against anything. It demoted the checkbox to a
+    /// bare bullet in the stored file, and the item stopped being a task on the first save that
+    /// escaped its line.
+    @Test(arguments: ["- [ ] ", "- [x] ", "- ", "1. ", "  - "])
+    func escapingALineLeavesItsListMarkerAlone(marker: String) {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: marker + "**not bold**")
+
+        let written = MarkdownWriting.markdown(from: text)
+
+        #expect(written == marker + "\\*\\*not bold\\*\\*")
+        #expect(
+            ListContinuation.markerLength(on: written) == marker.utf16.count,
+            "and the line still reads as the list item it was")
+    }
+
     /// Escaping is decided per line, so one awkward line does not put backslashes through the
     /// whole note.
     @Test(.bug(id: 124)) func onlyTheLineThatNeedsEscapingGetsIt() {
@@ -204,6 +225,131 @@ struct RichTextRoundTripTests {
 
         #expect(markdown == "**abc _def_** _ghi_")
         #expect(roundTripIsStable(markdown), "and what it writes parses back to the same thing")
+    }
+
+    /// Italic beside another construct.
+    ///
+    /// The writer used to ask whether a `_` pair would read back by looking at the characters
+    /// flanking the run in the *rendered* string — which has no delimiters in it — so the `d` and
+    /// the `w` of `hardware` looked adjacent and the pair was refused. In the markdown being
+    /// written the `**` sits between them, and the parser reads it back exactly.
+    @Test(
+        arguments: [
+            "the **_hard_**ware", "x**_a_**y", "_a_**b**", "**a**_b_", "~~_a_~~b"
+        ])
+    func italicSurvivesBesideAnotherConstruct(_ markdown: String) {
+        #expect(roundTrip(markdown) == markdown)
+    }
+
+    /// And the rule that refusal existed to protect is still kept: `_` inside a word is an
+    /// identifier, not italic, so the parser never reads one and the writer never writes one.
+    @Test(arguments: ["AWS_SECRET_KEY", "snake_case_name", "__init__"])
+    func anUnderscoreInsideAWordIsNotItalic(_ markdown: String) {
+        #expect(roundTrip(markdown) == markdown)
+    }
+
+    /// A run boundary inside a character costs neither the character nor the line's formatting.
+    ///
+    /// Nothing stops an attribute from starting between the two halves of a surrogate pair, and
+    /// `substring(with:)` bridges a half to U+FFFD — `a🔑b` was stored with two replacement
+    /// characters in it, which no later edit undoes. The ladder now keeps the characters
+    /// whatever happens, so what this pins is the rest: the boundary moves off the pair, and the
+    /// line keeps the run it was carrying.
+    @Test func aRunBoundaryInsideACharacterDoesNotCostTheCharacter() {
+        // The bold starts on the second half of the pair, which is an offset nothing prevents.
+        let text = rendered("a🔑b")
+        MarkdownStyling.restyle(text, over: NSRange(location: 2, length: 2)) { $0.bolded() }
+
+        #expect(MarkdownWriting.markdown(from: text) == "a**🔑b**")
+    }
+
+    // MARK: - Characters a note may not hold
+
+    /// A pasted image's placeholder does not reach the store.
+    ///
+    /// U+FFFC is what an `NSTextAttachment` contributes to a string, so copying an image and a
+    /// word of bold out of Mail brings one along. `normalize` strips the attachment *attribute*
+    /// and leaves the character, which is invisible, cannot be selected as anything, and used to
+    /// survive every save from then on.
+    @Test func anAttachmentPlaceholderIsNotStored() {
+        let text = rendered("**caption**")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "\u{FFFC}")
+
+        #expect(MarkdownWriting.markdown(from: text) == "**caption**")
+    }
+
+    /// The control characters go the same way, and the line keeps its formatting: they are taken
+    /// out before the writer reasons about the line at all, rather than making it a line the
+    /// check finds wrong and rewrites as plain text.
+    @Test(
+        arguments: [
+            ("a\u{0}b", "ab"),
+            ("a\u{B}b", "ab"),
+            ("a\r\nb", "a\nb", ),
+            ("a\tb", "a\tb")
+        ])
+    func aControlCharacterIsNotStored(typed: String, expected: String) {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: typed)
+
+        #expect(MarkdownWriting.markdown(from: text) == expected)
+    }
+
+    @Test func filteringACharacterOutDoesNotCostTheLineItsFormatting() {
+        let text = rendered("**bold** and _italic_")
+        text.replaceCharacters(in: NSRange(location: 4, length: 0), with: "\u{FFFC}")
+
+        #expect(MarkdownWriting.markdown(from: text) == "**bold** and _italic_")
+    }
+
+    // MARK: - The line the check rejects twice
+
+    /// A link this app cannot spell used to be written anyway, permanently changing the note's
+    /// own text: the escaping candidate is byte-identical for a link — `emit` builds the brackets
+    /// and the destination out of raw characters — so the check found the line wrong and had
+    /// nothing else to write.
+    ///
+    /// Now the ladder ends somewhere. The link is lost, which is the most this app can do with a
+    /// destination it has no spelling for, but not one character of the note is.
+    @Test(arguments: ["", "https://e.co/a)b", "x\ny"])
+    func aLinkWithAnUnspellableDestinationLosesTheLinkAndNotTheText(_ destination: String) {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "Foo bar")
+        text.addAttribute(.link, value: destination, range: NSRange(location: 0, length: 7))
+
+        let written = MarkdownWriting.markdown(from: text)
+
+        #expect(rendered(written).string == "Foo bar")
+        #expect(roundTripIsStable(written), "and it is not written differently the second time")
+    }
+
+    /// A link that reaches the end of its line still gets written.
+    ///
+    /// The attribute carries the terminator — the shape a link arrives in when it is dragged over
+    /// or pasted with the line break — and the writer used to see a newline in the label and give
+    /// up, which meant a link survived only on the note's *last* line, where there is no
+    /// terminator to carry.
+    @Test func aLinkThatRunsToTheEndOfALineIsStillWritten() {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "docs\nnext")
+        text.addAttribute(.link, value: "https://e.co", range: NSRange(location: 0, length: 5))
+
+        #expect(MarkdownWriting.markdown(from: text) == "[docs](https://e.co)\nnext")
+    }
+
+    /// A trait with no spelling costs the line itself and nothing else.
+    ///
+    /// `_c_` between two word characters is an identifier to the parser, so the spelling that
+    /// writes it comes back as different characters and is rejected — and the candidate that ends
+    /// the ladder holds no delimiters at all, which would take the link with it. Between them is
+    /// the rung that drops just the pair it cannot write.
+    @Test func aTraitWithNoSpellingDoesNotCostTheLineItsOtherFormatting() {
+        let text = rendered("")
+        text.replaceCharacters(in: NSRange(location: 0, length: 0), with: "ab cd")
+        text.addAttribute(.link, value: "https://e.co", range: NSRange(location: 0, length: 2))
+        MarkdownStyling.restyle(text, over: NSRange(location: 3, length: 1)) { $0.italicized() }
+
+        #expect(MarkdownWriting.markdown(from: text) == "[ab](https://e.co) cd")
     }
 
     private func roundTripIsStable(_ markdown: String) -> Bool {

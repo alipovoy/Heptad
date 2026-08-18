@@ -59,8 +59,13 @@ extension NSPasteboard {
     /// Empty ones are dropped rather than joined, which is what carries the flavor an app
     /// declared and left empty: it contributes nothing, so the search moves on to the next
     /// flavor instead of calling that clipboard successfully pasted.
+    ///
+    /// Every reading above ends here, which is why the characters a note may not hold are taken
+    /// out here too — the `.string` flavor is tried first and never goes near the writer, and ⌘⇧V
+    /// inserts what this returns directly. A clipboard whose whole content was an image's
+    /// placeholder comes back empty, so the search falls through to a flavor with text in it.
     private static func joined(_ texts: [String]) -> String? {
-        let joined = texts.filter { !$0.isEmpty }.joined(separator: "\n")
+        let joined = texts.map(NoteCharacters.storable).filter { !$0.isEmpty }.joined(separator: "\n")
         return joined.isEmpty ? nil : joined
     }
 }
