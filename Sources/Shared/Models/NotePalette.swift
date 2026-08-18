@@ -54,6 +54,11 @@ struct BoldTint: Equatable {
     /// converts a colour space, and `color` is read once per text run on every normalize.
     private static let tints: [PlatformColor] = NotePalette.colors.map(tint(of:))
 
+    #if !canImport(UIKit)
+        /// The two appearances the tint below chooses between, hoisted out of the resolve.
+        private static let appearances: [NSAppearance.Name] = [.aqua, .darkAqua]
+    #endif
+
     /// A palette entry's hue, at a fixed saturation and brightness per appearance.
     ///
     /// Fixing those rather than taking them from the entry is the point: `.yellow` and `.blue`
@@ -69,8 +74,11 @@ struct BoldTint: Equatable {
         #if canImport(UIKit)
             return PlatformColor { $0.userInterfaceStyle == .dark ? dark : light }
         #else
+            // The candidate list is hoisted: AppKit calls this closure on every resolve, which is
+            // every time a tinted run is drawn, and building a two-element array there allocates
+            // for an answer that never changes.
             return PlatformColor(name: nil) { appearance in
-                appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+                appearance.bestMatch(from: Self.appearances) == .darkAqua ? dark : light
             }
         #endif
     }

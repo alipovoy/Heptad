@@ -8,9 +8,15 @@ struct TextStatisticsBar: View {
     /// When the selected note was last edited, or nil for a note with no edit to report.
     let lastEditedAt: Date?
 
-    /// What the edit time is measured against. Passed in rather than read here so the bar
-    /// re-renders when `RelativeTimeTicker` moves it on, and so tests can pin it.
-    let now: Date
+    /// The clock the edit time is measured against, handed over as the ticker rather than as the
+    /// `Date` it is currently showing.
+    ///
+    /// Reading `now` is what subscribes a view to the tick, and this is the only view that wants
+    /// it: read in `ContentView`'s body instead, every 30 seconds re-evaluated the whole tree —
+    /// title bar, seven colour circles, background and the representable — measured at root=1,
+    /// circles=7, `updateNSView`=1 per tick against 0/0/0 for this shape. That is the same
+    /// invalidation the `EditorStatistics` hoist above exists to avoid, arriving next door.
+    let ticker: RelativeTimeTicker
 
     let color: Color
 
@@ -103,7 +109,8 @@ struct TextStatisticsBar: View {
     /// sentence with the counts, and so the separator matches the ones between them.
     private var editedSuffix: String {
         guard let lastEditedAt else { return "" }
-        return " ⋅ " + RelativeEditTimeFormatter.shared.string(for: lastEditedAt, relativeTo: now)
+        return " ⋅ "
+            + RelativeEditTimeFormatter.shared.string(for: lastEditedAt, relativeTo: ticker.now)
     }
 
     #if os(macOS)
@@ -134,21 +141,22 @@ struct TextStatisticsBar: View {
     return VStack(spacing: 12) {
         TextStatisticsBar(
             statistics: EditorStatistics(), lastEditedAt: nil,
-            now: PreviewFixtures.now, color: .yellow, isPlainText: false, togglePlainText: {}
+            ticker: PreviewFixtures.ticker(), color: .yellow, isPlainText: false,
+            togglePlainText: {}
         )
         .frame(width: 480)
 
         TextStatisticsBar(
             statistics: EditorStatistics(stats: populated),
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-300),
-            now: PreviewFixtures.now, color: .red, isPlainText: true, togglePlainText: {}
+            ticker: PreviewFixtures.ticker(), color: .red, isPlainText: true, togglePlainText: {}
         )
         .frame(width: 480)
 
         TextStatisticsBar(
             statistics: EditorStatistics(stats: populated),
             lastEditedAt: PreviewFixtures.now.addingTimeInterval(-86_400),
-            now: PreviewFixtures.now, color: .blue, isPlainText: true, togglePlainText: {}
+            ticker: PreviewFixtures.ticker(), color: .blue, isPlainText: true, togglePlainText: {}
         )
         .frame(width: AppConstants.Window.minimumContentSize.width)
     }

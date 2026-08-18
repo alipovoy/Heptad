@@ -45,4 +45,47 @@ struct TextStatisticsTests {
         #expect(stats.words == expected.words)
         #expect(stats.lines == expected.lines)
     }
+
+    /// The membership tests still answer exactly what `CharacterSet` answered.
+    ///
+    /// `.newlines` and `.alphanumerics` were replaced by scalar ranges and a general-category
+    /// check, which halved the cost of counting — the two `contains` calls were the whole of it.
+    /// The cases above pin the contract; this pins that the *rewrite* did not move it, across
+    /// scripts, combining marks, line separators and the astral plane where a hand-written range
+    /// list is easiest to get wrong.
+    @Test(arguments: [
+        "", "hello", "a\r\nb", "a\u{2028}b", "a\u{2029}b", "a\u{0B}b\u{0C}c", "a\u{85}b",
+        "ümlaut ß Straße", "汉字 test", "e\u{0301}mile", "Ⅻ roman Ⅻ", "٣٤٥ arabic digits",
+        "𝕬𝖓𝖙𝖎𝖖𝖚𝖆 astral", "👋🏽 emoji ✅", "_underscore-hyphen.dot", "١٢٣\n٤٥٦"
+    ])
+    func theScalarTestsAgreeWithCharacterSet(text: String) {
+        #expect(TextStats(text: text) == Self.usingCharacterSet(text))
+    }
+
+    /// The counting loop as it was, `CharacterSet` and all — the thing the rewrite has to match.
+    private static func usingCharacterSet(_ text: String) -> TextStats {
+        var stats = TextStats()
+        guard !text.isEmpty else { return stats }
+
+        var lines = 1
+        var inWord = false
+
+        for character in text {
+            if !character.isNewline { stats.characters += 1 }
+            for scalar in character.unicodeScalars {
+                if CharacterSet.newlines.contains(scalar) { lines += 1 }
+                if CharacterSet.alphanumerics.contains(scalar) {
+                    if !inWord {
+                        stats.words += 1
+                        inWord = true
+                    }
+                } else {
+                    inWord = false
+                }
+            }
+        }
+
+        stats.lines = lines
+        return stats
+    }
 }

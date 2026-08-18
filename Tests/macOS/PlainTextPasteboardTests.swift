@@ -282,4 +282,34 @@ private enum PlainTextPasteboardTestError: Error {
 
         #expect(scratch.pasteboard.markdownForPaste() == nil)
     }
+
+    /// Past the size limit ⌘V stops decoding the markup and pastes the characters instead.
+    ///
+    /// The decode runs on the main thread inside the key-event monitor and is super-linear —
+    /// 203 KB of HTML measured at 2.9 s, which is where macOS starts calling an app unresponsive.
+    /// Losing the bold on a clipboard nobody would paste into a scratchpad is the better trade.
+    @Test func anEnormousRichClipboardIsPastedAsItsCharacters() {
+        let scratch = ScratchPasteboard()
+        // `<b>keys</b> ` is 12 bytes, so this clears the limit with room to spare — and has to,
+        // because a clipboard that reaches the decode at this size is what the test would hang on.
+        let repeats = AppConstants.richPasteByteLimit / 8
+        scratch.write {
+            $0.setData(Data(String(repeating: "<b>keys</b> ", count: repeats).utf8), forType: .html)
+            $0.setString(String(repeating: "keys ", count: repeats), forType: .string)
+        }
+
+        let pasted = scratch.pasteboard.markdownForPaste()
+
+        #expect(pasted?.contains("**") == false, "The markup was not decoded")
+        #expect(pasted?.hasPrefix("keys keys") == true, "and the characters came through")
+    }
+
+    /// The same clipboard under the limit keeps its formatting, so the guard above is a size
+    /// check and not a second answer to "does this clipboard carry formatting".
+    @Test func aRichClipboardUnderTheLimitKeepsItsFormatting() {
+        let scratch = ScratchPasteboard()
+        scratch.write { $0.setData(Data("<b>keys</b>".utf8), forType: .html) }
+
+        #expect(scratch.pasteboard.markdownForPaste() == "**keys**")
+    }
 }

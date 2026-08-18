@@ -17,8 +17,8 @@ class NoteEditorCoordinator: NSObject {
     private var savers: [Int: NoteContentSaver] = [:]
     private(set) var currentNoteId: Int?
 
-    /// Each note's mode, by id, so a font-size change can repaint every cached view without
-    /// waiting for SwiftUI to drive one through.
+    /// Each note's mode, by id, so `appearance(forNoteId:)` can answer with no `NoteItem` in
+    /// hand — the zoom repaint has an id and nothing else.
     ///
     /// Modes rather than the notes themselves: `configure` asks a note for `isPlainText` and
     /// nothing else, so keeping the models alive only to look one flag up would retain seven
@@ -33,6 +33,9 @@ class NoteEditorCoordinator: NSObject {
     /// came apart, `NotePalette.boldTint` clamped rather than failed, so bold text came up in
     /// another note's colour with nothing to say which.
     private var paletteIndices: [Int: Int] = [:]
+
+    /// The count in flight, held so the next keystroke can cancel it.
+    private var statsTask: Task<Void, Never>?
 
     private let defaults: UserDefaults
 
@@ -160,16 +163,21 @@ class NoteEditorCoordinator: NSObject {
         return editorView
     }
 
-    /// Repaints every cached note at the new zoom level.
+    /// Repaints the showing note at the new zoom level.
+    ///
+    /// Only the showing one. Every cached view is configured again on its way back in (#103), so
+    /// repainting the other six here does work that is thrown away and then done a second time —
+    /// with seven 300-line notes cached that measured 155 ms per `⌘+`, against the 33 ms a key
+    /// repeat leaves, six sevenths of it spent on notes nobody was looking at.
     ///
     /// `@objc` selector dispatch (used by `NotificationCenter`) crosses the Swift/ObjC boundary
     /// without hopping actors, so this can't be `@MainActor`-isolated directly. The poster is
     /// the key monitor, which is already on the main actor.
     @objc nonisolated private func editorFontSizeDidChange() {
         MainActor.assumeIsolated {
-            for (id, editorView) in editorViews {
-                configure(editorView, appearance: appearance(forNoteId: id))
-            }
+            guard let noteId = currentNoteId, let editorView = editorViews[noteId] else { return }
+
+            configure(editorView, appearance: appearance(forNoteId: noteId))
         }
     }
 
@@ -196,17 +204,25 @@ class NoteEditorCoordinator: NSObject {
     /// then delivers the result back on the main actor. Detached deliberately: a plain
     /// `Task {}` here would inherit this class's MainActor isolation and run inline.
     ///
-    /// Nothing orders these tasks against each other, so two quick note switches can deliver the
-    /// older count last and leave the bar showing the previous note's numbers until the next
-    /// keystroke. `noteId` is the note the text was read from, and it is re-checked against the
-    /// showing note on delivery so a result that has been overtaken is dropped.
+    /// The previous count is cancelled, because only the last one can be right. Nothing did that
+    /// before, so three seconds of typing on a 145 KB note started fifty full-note scans — about
+    /// half a second of CPU, forty-nine of whose results were thrown away — six lines under a
+    /// *save* that is debounced for exactly this reason. Three numbers in a bar need freshness
+    /// less than the store does, not more.
     ///
-    /// Passed in rather than read off `currentNoteId` here: the `update` path counts the incoming
-    /// note's text *before* it becomes the current one, so reading it would name the note being
-    /// left and drop every count taken on a switch.
+    /// Cancellation is checked on delivery rather than inside the count: `TextStats` is one pass
+    /// with no allocation, and threading a check through it would cost more than it saves on
+    /// every note small enough for the scan to finish anyway.
+    ///
+    /// `noteId` is the note the text was read from, re-checked against the showing note on
+    /// delivery — passed in rather than read off `currentNoteId` there, because the `update` path
+    /// counts the incoming note's text *before* it becomes the current one.
     private func updateStats(plainText: String, for noteId: Int) {
-        Task.detached(priority: .utility) { [weak self] in
+        statsTask?.cancel()
+        statsTask = Task.detached(priority: .utility) { [weak self] in
             let stats = TextStats(text: plainText)
+            guard !Task.isCancelled else { return }
+
             await self?.deliverStats(stats, for: noteId)
         }
     }

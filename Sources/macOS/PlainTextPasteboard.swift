@@ -14,6 +14,8 @@ extension NSPasteboard {
     /// putting them through the writer would escape the delimiters they meant. ⌘⇧V is the
     /// shortcut for reading them literally; ⌘V reads them as the source they look like.
     func markdownForPaste() -> String? {
+        guard richFlavorsAreWorthDecoding else { return plainTextForPaste() }
+
         let rich = readObjects(forClasses: [NSAttributedString.self]) as? [NSAttributedString] ?? []
 
         if rich.contains(where: \.carriesFormatting),
@@ -22,6 +24,27 @@ extension NSPasteboard {
         }
 
         return plainTextForPaste()
+    }
+
+    /// Whether the clipboard's markup is small enough to be worth decoding, which is the one
+    /// thing standing between ⌘V and an unbounded main-thread stall.
+    ///
+    /// The whole of `markdownForPaste` runs inside the key-event monitor with the key-down still
+    /// undelivered, and the decode is super-linear: 23 KB of HTML measured at 250 ms, 203 KB at
+    /// **2.9 seconds** — long enough for macOS to start calling the app unresponsive. Bounding the
+    /// *input* rather than the algorithm is what makes the worst case "the bold did not survive"
+    /// instead of "frozen for three seconds"; `plainTextForPaste` reads the `.string` flavor and
+    /// costs nothing.
+    ///
+    /// The limit is far past any realistic scratchpad paste, so nothing anyone would type reaches
+    /// it. Sizes are read rather than decoded — `data(forType:)` is a copy, not a parse.
+    private var richFlavorsAreWorthDecoding: Bool {
+        let types: [NSPasteboard.PasteboardType] = [.html, .rtfd, .rtf]
+        let markup = (pasteboardItems ?? []).reduce(0) { total, item in
+            total + (types.compactMap { item.data(forType: $0)?.count }.max() ?? 0)
+        }
+
+        return markup <= AppConstants.richPasteByteLimit
     }
 
     /// The clipboard as plain text, whichever flavor it arrived in: what ⌘⇧V inserts.
