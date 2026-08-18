@@ -58,8 +58,8 @@ enum MarkdownSlicing {
     static func trimmed(_ range: NSRange, in source: NSString) -> NSRange {
         var start = range.location
 
-        // Clipped rather than trusted: a selection arrives from the text view, and the file that
-        // decides every slice boundary is the wrong one to trap on a range past the end.
+        // Clipped rather than trusted: the range arrives from the text view, and the file that
+        // decides every slice boundary is the wrong one to trap in.
         var end = min(NSMaxRange(range), source.length)
 
         while start < end, MarkdownSyntax.isWhitespace(source.character(at: start)) { start += 1 }

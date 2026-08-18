@@ -20,8 +20,7 @@ struct ContentView: View {
     /// never ticks against a window nobody can see.
     @State private var ticker = RelativeTimeTicker()
 
-    /// The seven notes this view addresses, by id rather than by row count. The rule is
-    /// `NoteItem.addressable(in:)`, which is where it can be tested.
+    /// The seven notes this view addresses, by id rather than by row count.
     private var notes: [NoteItem] { NoteItem.addressable(in: stored) }
 
     #if os(macOS)

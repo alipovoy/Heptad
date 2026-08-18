@@ -126,14 +126,10 @@ class GlobalHotKeyManager {
     /// left in `UserDefaults` and leave the app with no hotkey at all, at this launch and every
     /// one after.
     ///
-    /// Tried whether or not the hotkey is currently live, because "not live" is exactly the state
-    /// launch registration leaves behind when the combination was already owned — the one case
-    /// where an unchecked write would stick.
-    ///
-    /// A combination the system grants is left claimed, from either state. Handing the claim back
-    /// when there was none to begin with would keep the answer honest and the hotkey dead: a user
-    /// rebinding after a lost launch race would be told the new combination is theirs and still have
-    /// no summon key until the next launch, which is the state they were escaping.
+    /// Tried whether or not the hotkey is currently live: "not live" is what a launch that lost the
+    /// race for the combination leaves behind, and the state a rebinding user is escaping. So a
+    /// combination the system grants is left claimed rather than handed back — the alternative is
+    /// an honest `true` and a dead summon key until the next launch.
     @discardableResult
     func setBinding(keyCode: UInt32, modifierFlags: NSEvent.ModifierFlags) -> Bool {
         let previous = (keyCode: self.keyCode, modifierFlags: self.modifierFlags)

@@ -174,13 +174,12 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
     /// The clipboard read as the source `copy(_:)` writes it: what it describes, not its
     /// delimiters.
     ///
-    /// The other half of the pair above, and it has to be here — a note copied out of this app and
-    /// pasted back in would otherwise arrive as the six characters of `**bold**`, and the next save
-    /// escapes them into the store. macOS reads the clipboard the same way, through
+    /// Without this a note copied out of this app arrives back as the six characters of `**bold**`,
+    /// which the next save escapes into the store. macOS reads the clipboard the same way, through
     /// `EditorShortcutManager.pasteAsMarkdown`.
     ///
-    /// Plain mode takes the characters as they are, which is what that mode means. There is no ⌘⇧V
-    /// on iOS to say so for a formatted note; switching the note to plain is how you paste literally.
+    /// Plain mode takes the characters as they are: with no ⌘⇧V on iOS, switching the note to plain
+    /// is how you paste literally.
     override func paste(_ sender: Any?) {
         guard styling.isStyled, let source = UIPasteboard.general.string, !source.isEmpty else {
             super.paste(sender)
@@ -273,10 +272,7 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
     }
 
     /// Applies an edit whose replacement is markup this app wrote — a list marker, a checkbox —
-    /// in the note's own body face rather than in whatever run it lands in.
-    ///
-    /// `caretFollowsMarkup` defaults to true for the list continuation, which is where the caret
-    /// ends up. See `TextEdit` for what it costs to get it wrong.
+    /// in the note's own body face rather than in whatever run it lands in. See the macOS twin.
     func applyMarkup(_ edit: TextEdit, caretFollowsMarkup: Bool = true) {
         apply(
             edit, attributes: MarkdownStyling.baseAttributes(styling),

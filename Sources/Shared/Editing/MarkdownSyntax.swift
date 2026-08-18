@@ -98,8 +98,8 @@ enum MarkdownSyntax {
 
     /// Anything that is neither a word character nor whitespace, which is what CommonMark's
     /// flanking rules mean by punctuation — the class `*` measures itself against. Defined out of
-    /// the app's own two classes rather than out of Unicode's categories so the three stay
-    /// exhaustive: every character is one of the three, and no delimiter can fall between them.
+    /// the app's own two classes rather than out of Unicode's categories, so the three stay
+    /// exhaustive.
     static func isPunctuation(_ character: unichar) -> Bool {
         !isWordCharacter(character) && !isWhitespace(character)
     }

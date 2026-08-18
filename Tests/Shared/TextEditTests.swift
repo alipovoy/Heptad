@@ -67,7 +67,7 @@ struct TextEditApplyTests {
             TextEdit(range: NSRange(location: 6, length: 0), replacement: "\n- "),
             attributes: [.font: body], caretFollowsMarkup: true)
 
-        #expect((textView.typingAttributes[.font] as? PlatformFont)?.isBold == false)
+        #expect(!Emphasis.strong.isOn(textView.typingAttributes))
     }
 
     /// And keeps its own when it does not.
@@ -84,7 +84,7 @@ struct TextEditApplyTests {
             attributes: [.font: body], caretFollowsMarkup: false)
 
         #expect(currentText(of: textView) == "- [x] task")
-        #expect((textView.typingAttributes[.font] as? PlatformFont)?.isBold == true)
+        #expect(Emphasis.strong.isOn(textView.typingAttributes))
     }
 
     #if canImport(UIKit)

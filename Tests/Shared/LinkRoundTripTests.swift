@@ -162,10 +162,8 @@ struct LinkRoundTripTests {
 
     /// A link covering a whole checkbox line keeps its destination.
     ///
-    /// The marker exemption is a rule about a line that *is* a list line; inside a label there is no
-    /// marker, whatever the rendered text shows. Exempting the `[x]` there left its `]` unescaped,
-    /// the parser took the label to end at that one, and with every rung writing the same bytes the
-    /// line fell to `Spelling.plain` — the destination gone, and gone for good.
+    /// The marker exemption is a rule about a line that *is* a list line; inside a label there is
+    /// no marker, whatever the rendered text shows. See `MarkdownWriting.emit`.
     @Test(arguments: ["- [x] task", "- [ ] task", "- task", "1. task", "  - [x] task"])
     func aLinkOverAWholeListLineKeepsItsDestination(line: String) throws {
         let text = rendered("")

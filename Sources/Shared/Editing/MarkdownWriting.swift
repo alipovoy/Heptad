@@ -43,8 +43,8 @@ enum MarkdownWriting {
         return MarkdownSlicing.lines(of: whole, in: attributed).reduce(into: "") { markdown, line in
             let original = attributed.attributedSubstring(from: line)
 
-            // Once per line, then carried down: every slice of the line asks where the marker
-            // ends, and finding it copies the line out. See `MarkdownSlicing.markerEnd`.
+            // Once per line, then carried down: finding it copies the line out, and every slice
+            // of the line asks. See `MarkdownSlicing.markerEnd`.
             let markerEnd = MarkdownSlicing.markerEnd(ofLineAt: line.location, in: source)
 
             for spelling in Spelling.ladder {
@@ -130,9 +130,7 @@ enum MarkdownWriting {
     /// list marker ends.
     ///
     /// Both are fixed for the whole of a line and every slice of it needs both, so they travel as
-    /// one rather than as two more parameters on four mutually recursive functions. Where the
-    /// marker ends is also the expensive half — see `MarkdownSlicing.markerEnd` — so it is found
-    /// once per line here rather than once per slice down there.
+    /// one rather than as two more parameters on four mutually recursive functions.
     private struct Pass {
         let spelling: Spelling
         let markerEnd: Int
@@ -189,9 +187,9 @@ enum MarkdownWriting {
             }
 
             // A label is not a list line, whatever the rendered text shows: the stored line starts
-            // with `[`. Left the marker exemption, the `]` of a checkbox goes unescaped, the parser
-            // takes the label to end at that one, and with every rung writing the same bytes the line
-            // falls to `Spelling.plain` — which writes no brackets, and loses the destination.
+            // with `[`. Left the exemption, the `]` of a checkbox goes unescaped, the parser takes
+            // the label to end there, and the line falls to `Spelling.plain` — no brackets written,
+            // and the destination gone.
             let label = Pass(spelling: pass.spelling, markerEnd: min(pass.markerEnd, core.location))
 
             markdown += traits.joined()
@@ -272,8 +270,7 @@ enum MarkdownWriting {
     /// survive that spelling the check accepts it — so the note silently stops being a task.
     ///
     /// Takes the whole of `traits` rather than its head and tail separately: the pair written here
-    /// is the first one's, and the rest go inside it. `wrap` has already established there is a
-    /// first, so the guard below is only the compiler's.
+    /// is the first one's, and the rest go inside it.
     private static func delimited(
         _ line: NSRange, of text: NSAttributedString, in traits: ArraySlice<Emphasis>,
         as pass: Pass, shielded: Bool = false

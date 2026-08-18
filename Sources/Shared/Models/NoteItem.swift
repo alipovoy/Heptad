@@ -43,12 +43,9 @@ extension NoteItem {
     ///
     /// A note is addressed by its place in this array, so an id outside the range has no place in
     /// it, at either end: letting one through makes the count read seven-plus-one and strands
-    /// `ContentView` on its "notes could not be loaded" branch, which nothing in the app can get
-    /// back from. Extras are ignored rather than deleted — a store carrying an eighth row still
-    /// has seven good notes in it, and they are not a view's to remove.
-    ///
-    /// Lifted out of `ContentView` so it can be tested: the branch it decides is a live editor
-    /// against a screen with no way off it.
+    /// `ContentView` on its "notes could not be loaded" branch, which nothing gets back off.
+    /// Extras are ignored rather than deleted — a store carrying an eighth row still has seven
+    /// good notes in it, and they are not a view's to remove.
     static func addressable(in notes: [NoteItem]) -> [NoteItem] {
         notes.filter { (0..<AppConstants.noteCount).contains($0.id) }
     }

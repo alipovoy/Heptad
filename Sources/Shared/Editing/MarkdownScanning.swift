@@ -178,37 +178,31 @@ extension MarkdownSyntax {
     // asterisks hidden. CommonMark's flanking rules are the ones that tell those two apart, and
     // being the ones every other parser uses, they are also what the note means elsewhere.
     //
-    // `**` and `~~` still have no rule of their own: `2**3**4` has the same shape as `2*3*4`, but
-    // bold has no fallback spelling to keep working, so the rule there would cost the trait rather
-    // than protect the text. See `Spelling.Italic`.
+    // `**` and `~~` still have no rule of their own: bold has no fallback spelling to keep
+    // working, so flanking there would cost the trait rather than protect the text — `a**/usr**`
+    // could not open, and the line would fall to `Spelling.plain`. See `Spelling.Italic`.
 
     private static func canOpen(
         _ delimiter: String, in text: NSString, at index: Int, bounds: NSRange
     ) -> Bool {
+        let sides = neighbours(of: delimiter, at: index, in: text, bounds: bounds)
+
         switch delimiter {
-        case emphasis:
-            return index <= bounds.location
-                || !isWordCharacter(text.character(at: index - 1))
-        case emphasisAlternate:
-            let sides = Neighbours(of: delimiter, at: index, in: text, bounds: bounds)
-            return flanks(inside: sides.after, outside: sides.before)
-        default:
-            return true
+        case emphasis: return sides.before.map { !isWordCharacter($0) } ?? true
+        case emphasisAlternate: return flanks(inside: sides.after, outside: sides.before)
+        default: return true
         }
     }
 
     private static func canClose(
         _ delimiter: String, in text: NSString, at index: Int, bounds: NSRange
     ) -> Bool {
+        let sides = neighbours(of: delimiter, at: index, in: text, bounds: bounds)
+
         switch delimiter {
-        case emphasis:
-            let after = index + delimiter.utf16.count
-            return after >= NSMaxRange(bounds) || !isWordCharacter(text.character(at: after))
-        case emphasisAlternate:
-            let sides = Neighbours(of: delimiter, at: index, in: text, bounds: bounds)
-            return flanks(inside: sides.before, outside: sides.after)
-        default:
-            return true
+        case emphasis: return sides.after.map { !isWordCharacter($0) } ?? true
+        case emphasisAlternate: return flanks(inside: sides.before, outside: sides.after)
+        default: return true
         }
     }
 
@@ -216,12 +210,8 @@ extension MarkdownSyntax {
     /// character it faces `inside` the pair is punctuation and the one `outside` is a word
     /// character. nil is the line's own end, which counts as whitespace and frees the delimiter.
     ///
-    /// Which is the rule that reads `/usr/*/bin/*x` as characters. Its closing `*` faces `/` inside
-    /// the pair and `x` outside, so it cannot close — while in `Test*ing*` it faces `g`, which is no
-    /// punctuation, and closes.
-    ///
-    /// `**` and `~~` never ask this: only `*` weighs its two sides against each other, and `_` asks
-    /// the stricter question above.
+    /// So the closing `*` of `/usr/*/bin/*x` faces `/` inside and `x` outside and cannot close,
+    /// while in `Test*ing*` it faces `g`, which is no punctuation, and closes.
     private static func flanks(inside: unichar?, outside: unichar?) -> Bool {
         guard let inside, isPunctuation(inside) else { return true }
         guard let outside else { return true }
@@ -230,15 +220,14 @@ extension MarkdownSyntax {
     }
 
     /// The characters either side of a delimiter run, nil where the line ends.
-    private struct Neighbours {
-        let before: unichar?
-        let after: unichar?
+    private static func neighbours(
+        of delimiter: String, at index: Int, in text: NSString, bounds: NSRange
+    ) -> (before: unichar?, after: unichar?) {
+        let end = index + delimiter.utf16.count
 
-        init(of delimiter: String, at index: Int, in text: NSString, bounds: NSRange) {
-            let end = index + delimiter.utf16.count
-            before = index > bounds.location ? text.character(at: index - 1) : nil
-            after = end < NSMaxRange(bounds) ? text.character(at: end) : nil
-        }
+        return (
+            before: index > bounds.location ? text.character(at: index - 1) : nil,
+            after: end < NSMaxRange(bounds) ? text.character(at: end) : nil)
     }
 
     // MARK: - Links
