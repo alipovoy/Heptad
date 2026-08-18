@@ -1,4 +1,5 @@
 import Cocoa
+import OSLog
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -30,7 +31,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let button = self.statusBarItem.button else { return }
             self.windowManager.toggleWindow(sender: button)
         }
-        hotKeyManager.register()
+        // A failure here is not fatal — everything else keeps working, only the hotkey is inert —
+        // but the app advertises a summon key and has no settings UI, so a user whose combination
+        // is owned by Spotlight or Raycast would otherwise have nothing at all to go on. The
+        // right-click menu says so too; see `statusItemMenu`.
+        if !hotKeyManager.register() {
+            Logger(subsystem: Bundle.main.bundleIdentifier ?? "Heptad", category: "hotkey")
+                .warning("The global hotkey could not be claimed; another app owns it.")
+        }
 
         // Open the SwiftData store during launch so the first panel open doesn't pay for it.
         _ = HeptadApp.sharedModelContainer
@@ -50,16 +58,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Accessibility-driven activation (VoiceOver, UI automation) delivers this action
         // with no backing NSEvent; treat that the same as a plain left click.
         if NSApp.currentEvent?.type == .rightMouseUp {
-            let menu = NSMenu()
-            menu.addItem(
-                NSMenuItem(
-                    title: "Quit", action: #selector(NSApplication.terminate(_:)),
-                    keyEquivalent: "q"))
-            statusBarItem.menu = menu
+            statusBarItem.menu = statusItemMenu()
             statusBarItem.button?.performClick(nil)
             statusBarItem.menu = nil
         } else {
             windowManager.toggleWindow(sender: sender)
         }
+    }
+
+    /// The right-click menu, which carries a disabled line when the summon key could not be
+    /// claimed. This menu is the app's only chrome, so it is the only place that can say why the
+    /// advertised shortcut does nothing.
+    ///
+    /// Disabled by having no action rather than by `isEnabled`, which an enclosing menu
+    /// recomputes for itself.
+    private func statusItemMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        if !hotKeyManager.isRegistered {
+            menu.addItem(
+                NSMenuItem(
+                    title: "⌃⌥Space unavailable — another app owns it", action: nil,
+                    keyEquivalent: ""))
+            menu.addItem(.separator())
+        }
+
+        menu.addItem(
+            NSMenuItem(
+                title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        return menu
     }
 }

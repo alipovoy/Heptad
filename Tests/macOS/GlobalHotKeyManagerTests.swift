@@ -190,6 +190,34 @@ struct GlobalHotKeyManagerTests {
         manager.unregister()
     }
 
+    /// A binding that will not register leaves the working one in place, registered.
+    ///
+    /// `register()` gives up the current claim before it attempts the new one, and `setBinding`
+    /// used to persist first and never roll back — so one attempt at a combination another app
+    /// owns left the app with no hotkey, and the failed binding was read back at every launch
+    /// after it. There is no settings UI, so the way out was `defaults delete`.
+    @Test(.requiresTheSpareCombination)
+    func aBindingThatWillNotRegisterIsRolledBack() throws {
+        let ownedElsewhere = try ScratchDefaults(name: "GlobalHotKeyManagerTests.owner")
+        let owner = GlobalHotKeyManager(defaults: ownedElsewhere.defaults)
+        owner.setBinding(keyCode: spareSuccessorKeyCode, modifierFlags: spareModifiers)
+        try #require(owner.register(), "The stand-in for the app that already owns it")
+        defer { owner.unregister() }
+
+        let manager = GlobalHotKeyManager(defaults: defaults)
+        manager.setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers)
+        try #require(manager.register())
+
+        let took = manager.setBinding(
+            keyCode: spareSuccessorKeyCode, modifierFlags: spareModifiers)
+
+        #expect(took == false)
+        #expect(manager.keyCode == spareKeyCode, "The working binding is what is stored")
+        #expect(manager.isRegistered, "and it is claimed again, not left released")
+
+        manager.unregister()
+    }
+
     @Test(.requiresTheSpareCombination)
     func deallocatingARegisteredManagerReleasesTheHotKey() {
         var manager: GlobalHotKeyManager? = GlobalHotKeyManager(defaults: defaults)

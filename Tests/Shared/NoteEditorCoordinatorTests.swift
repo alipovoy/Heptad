@@ -32,6 +32,9 @@ struct NoteEditorCoordinatorTests {
 
         #expect(coordinator.resignedViews.isEmpty)
         #expect(coordinator.madeViewNoteIds == [0])  // and so no second saver: same guard
+        #expect(
+            coordinator.configuredNoteIds == [0, 0],
+            "but it is repainted: this is the only path a mode change on the showing note takes")
         #expect(container.subviews.count == 1)
         #expect(container.subviews.first === showing)
         #expect(container.constraints.count == 4)  // not pinned a second time either
@@ -75,16 +78,39 @@ struct NoteEditorCoordinatorTests {
     /// A new view is built, then configured, then loaded — and the coordinator already names the
     /// incoming note by the time it is configured.
     ///
-    /// Every step of that order is load-bearing. `configure` flattens what is already in the
-    /// view, so running it before `load` is what leaves the note's own attributes intact.
-    /// `configure` also reports its edit through `textDidChange`, which resolves the saver by the
-    /// showing note — so with `currentNoteId` still naming the note being left, opening a plain
-    /// note would write it over that one.
+    /// On a view with nothing in it yet, the only surviving effect of `configure` is that it
+    /// records the appearance — and that is what `load` renders the note through. Reversed, the
+    /// note is rendered in whatever the view was before and the mode arrives one paint late.
+    /// `currentNoteId` is set ahead of both so nothing under them can act on a stale answer to
+    /// "which note is showing".
     @Test(.bug(id: 103))
     func aNewViewIsConfiguredBeforeItsContentIsLoaded() {
         coordinator.setup(container: container, notes: notes, selectedIndex: 1)
 
         #expect(coordinator.stepsInOrder == ["make", "configure(showing: 1)", "load"])
+    }
+
+    // MARK: - Appearance
+
+    /// Each note is drawn in its own colour, and that colour is its *position* — not its id.
+    ///
+    /// This class is the only one that addresses a note by `id`; everything above it, the palette
+    /// included, addresses one by position. The two agree only while the stored ids are exactly
+    /// `0..<noteCount`, and `NotePalette.boldTint` clamps rather than fails — so where they came
+    /// apart, bold text was drawn in another note's colour with nothing to say which.
+    ///
+    /// Sparse ids rather than `0, 1`, because with those every wrong answer is also the right one.
+    @Test func eachNoteIsTintedByItsPositionRatherThanItsId() {
+        let sparse = [NoteItem(id: 3), NoteItem(id: 9)]
+
+        coordinator.setup(container: container, notes: sparse, selectedIndex: 0)
+        coordinator.update(notes: sparse, selectedIndex: 1)
+
+        #expect(coordinator.configuredAppearances.count == 2)
+        #expect(coordinator.configuredAppearances.first?.boldTint == NotePalette.boldTint(forNoteIndex: 0))
+        #expect(
+            coordinator.configuredAppearances.last?.boldTint == NotePalette.boldTint(forNoteIndex: 1),
+            "Note 9 is the second note, so it takes the second tint — not the clamped seventh")
     }
 
     // MARK: - Zoom

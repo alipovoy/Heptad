@@ -159,7 +159,19 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
 
     /// How this view draws, and which of the two shapes its buffer is in. Display only — none of
     /// it is ever stored.
-    private(set) var styling = MarkdownStyling.Appearance(
+    ///
+    /// Held as `nil` until something configures it, and that is what makes the first `configure`
+    /// do anything: `apply` returns early on an appearance it already has, so any stand-in
+    /// starting value silently swallows the first call whenever it happens to match — a formatted
+    /// note at the default zoom, in the note's own colour, is exactly that shape. Nothing equals
+    /// nothing, so there is no coincidence left to depend on.
+    private var configuredStyling: MarkdownStyling.Appearance?
+
+    /// What the view draws as now: what it was last configured with, or what a bare text view is
+    /// before anything has.
+    var styling: MarkdownStyling.Appearance { configuredStyling ?? Self.unconfigured }
+
+    private static let unconfigured = MarkdownStyling.Appearance(
         plainText: false, fontSize: AppConstants.Layout.defaultFontSize)
 
     /// The note leaves on the clipboard as its own characters, never as rich text.
@@ -226,11 +238,11 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
     /// point of #124's redesign. Typing is no longer a parse.
     func apply(_ appearance: MarkdownStyling.Appearance) {
         guard let textStorage else { return }
-        guard appearance != styling else { return }
+        guard appearance != configuredStyling else { return }
 
         let source = markdown
         let switchingMode = appearance.plainText != styling.plainText
-        styling = appearance
+        configuredStyling = appearance
 
         if switchingMode {
             load(markdown: source)

@@ -25,6 +25,15 @@ class NoteEditorCoordinator: NSObject {
     /// managed objects for the coordinator's lifetime as a lookup table.
     private var modes: [Int: Bool] = [:]
 
+    /// Each note's palette index — its position in the array everything above this class
+    /// addresses notes by.
+    ///
+    /// Held rather than derived from the id. This is the one component that addresses a note by
+    /// `id`, and the two agree only while the stored ids are exactly `0..<noteCount`; where they
+    /// came apart, `NotePalette.boldTint` clamped rather than failed, so bold text came up in
+    /// another note's colour with nothing to say which.
+    private var paletteIndices: [Int: Int] = [:]
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard, notificationCenter: NotificationCenter = .default) {
@@ -42,12 +51,16 @@ class NoteEditorCoordinator: NSObject {
     }
 
     /// How a note should be drawn right now: its own mode, at the app-wide zoom, in its own
-    /// colour. The id is the palette index, so the tint is looked up here rather than threaded
-    /// down from the view alongside the note.
+    /// colour, all three looked up here rather than threaded down alongside the note.
+    ///
+    /// A note with no recorded palette index gets no tint rather than someone else's. It cannot
+    /// happen — `update` records one for every note before anything is configured — and an
+    /// untinted appearance is no longer a value the text views need this never to produce: they
+    /// hold their own as `nil` until configured, so the first call lands whatever it carries.
     func appearance(forNoteId id: Int) -> MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
             plainText: modes[id] ?? false, fontSize: EditorFontSize.current(defaults),
-            boldTint: NotePalette.boldTint(forNoteIndex: id))
+            boldTint: paletteIndices[id].map(NotePalette.boldTint(forNoteIndex:)))
     }
 
     func setup(container: PlatformView, notes: [NoteItem], selectedIndex: Int) {
@@ -61,7 +74,10 @@ class NoteEditorCoordinator: NSObject {
     /// the answer it used to give was to install no editor at all: a blank, untypable note
     /// beside a statistics bar describing a different one.
     func update(notes: [NoteItem], selectedIndex: Int) {
-        for note in notes { modes[note.id] = note.isPlainText }
+        for (index, note) in notes.enumerated() {
+            modes[note.id] = note.isPlainText
+            paletteIndices[note.id] = index
+        }
         let note = notes[selectedIndex]
 
         if currentNoteId == note.id {
@@ -69,6 +85,13 @@ class NoteEditorCoordinator: NSObject {
             // acts on the note, not on the view, and the view is cached across updates.
             if let editorView = editorViews[note.id] {
                 configure(editorView, appearance: appearance(forNoteId: note.id))
+
+                // A mode step rewrites the buffer, and the counters describe what is on screen.
+                // Nothing else refreshes them on this path: the conversion goes through
+                // `setAttributedString`, which reports to the storage delegate and not to
+                // `textDidChange`, so the bar kept the other mode's numbers until the next
+                // keystroke.
+                updateStats(plainText: plainText(of: editorView), for: note.id)
             }
             return
         }
@@ -81,10 +104,12 @@ class NoteEditorCoordinator: NSObject {
             oldView.removeFromSuperview()
         }
 
-        // Before anything below can build a view: `load` puts text into one, and any report that
-        // reaches `textDidChange` looks the saver up by the *current* note. Set at the end of
-        // this method instead, that lookup would find the note being left and write the incoming
-        // note's text into it.
+        // Before anything below can build a view, so nothing under it can act on a stale answer
+        // to "which note is showing". Measured: neither `configure` nor `load` reports through
+        // `textDidChange` — both go through `setAttributedString`, which tells the storage
+        // delegate and no one else — so the cross-note write this used to claim to prevent
+        // cannot happen. Kept because a lookup naming the note being left is a bad shape, not
+        // because anything is currently reaching for one.
         currentNoteId = note.id
 
         let editorView: PlatformView
@@ -120,8 +145,11 @@ class NoteEditorCoordinator: NSObject {
 
     /// Builds the note's editor view and its saver, and caches both.
     ///
-    /// `configure` before `load`: the view has to know how it draws before there is anything in
-    /// it to draw, or the first paint would use the wrong mode until the next keystroke.
+    /// `configure` before `load`, and the reason is narrower than "the first paint would be
+    /// wrong": on an empty buffer `apply`'s whole body is inert — the normalize returns on a
+    /// zero length, and the typing attributes it sets are overwritten by `load` two lines later.
+    /// What survives is that it records the appearance, which is what `load` then renders
+    /// through. Reverse the two and the note is rendered in whatever the view was before.
     private func makeCachedEditorView(for note: NoteItem) -> PlatformView {
         let editorView = makeEditorView(for: note)
         editorViews[note.id] = editorView

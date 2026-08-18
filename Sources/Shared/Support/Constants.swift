@@ -35,10 +35,14 @@ enum AppConstants {
         /// Font size of the statistics line beneath the editor.
         static let statisticsFontSize: CGFloat = 11
 
-        /// Icon sizes in the macOS window chrome: the title-bar close button, and the pin
-        /// toggle, which is sized against the statistics text it sits beside rather than
-        /// against the title bar. Deliberately fixed rather than Dynamic Type — the panel is
-        /// a fixed-size menubar popover and accessibility sizes would break its layout.
+        /// The title-bar close button, and the toggles in the statistics bar — the pin, and the
+        /// plain-text switch beside it, both sized against that text rather than the title bar.
+        ///
+        /// These are the *base* sizes, not the drawn ones. On macOS they are drawn as they stand:
+        /// the panel is a fixed menubar popover and accessibility text sizes would break the
+        /// layout built around them. iOS is a full-screen window with a text size the user sets,
+        /// so its readers scale these with `@ScaledMetric` — the licence above was always about a
+        /// window iOS does not have.
         static let titleBarIconSize: CGFloat = 18
         static let pinToggleIconSize: CGFloat = 13
 
@@ -54,6 +58,19 @@ enum AppConstants {
     enum Window {
         /// Distance the panel must be dragged away from its menubar anchor to become pinned
         static let dragToPinThreshold: CGFloat = 20
+
+        /// The panel's smallest content size, declared by `ContentView` and read back by
+        /// `WindowManager` for the size it opens at.
+        ///
+        /// The view is the source of truth for the width because it cannot help being:
+        /// `NSHostingView` installs its root's minimum as the window's `contentMinSize` and grows
+        /// the window to satisfy it, so a narrower `contentRect` never survived first contact —
+        /// the panel opened at this width whatever the window manager asked for.
+        static let minimumContentSize = CGSize(width: 320, height: 200)
+
+        /// What the panel is built at, before any autosaved frame is restored. Only the height is
+        /// its own: the width is the minimum above, because that is what it would be given anyway.
+        static let openingContentSize = CGSize(width: minimumContentSize.width, height: 400)
     }
 
     enum Timing {

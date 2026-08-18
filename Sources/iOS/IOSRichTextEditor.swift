@@ -109,17 +109,62 @@ struct IOSRichTextEditor: UIViewRepresentable {
     }
 }
 
-/// The editor's text view: a buffer whose shape is its note's mode. See the macOS twin, which
-/// this mirrors line for line.
+/// The editor's text view: a buffer whose shape is its note's mode.
+///
+/// See the macOS twin for the design. The two differ only where the frameworks do: `UITextView`
+/// already gives each view its own undo manager, and there is no `writablePasteboardTypes` to
+/// narrow, so `copy(_:)` writes the clipboard itself rather than filtering what AppKit would.
 class MarkdownTextView: UITextView, NSTextStorageDelegate {
     /// How this view draws, and which of the two shapes its buffer is in. Display only — none of
-    /// it is ever stored.
-    private(set) var styling = MarkdownStyling.Appearance(
+    /// it is ever stored. `nil` until something configures it; see the macOS twin for why that
+    /// is what makes the first `configure` do anything.
+    private var configuredStyling: MarkdownStyling.Appearance?
+
+    /// What the view draws as now: what it was last configured with, or what a bare text view is
+    /// before anything has.
+    var styling: MarkdownStyling.Appearance { configuredStyling ?? Self.unconfigured }
+
+    private static let unconfigured = MarkdownStyling.Appearance(
         plainText: false, fontSize: AppConstants.Layout.defaultFontSize)
 
     /// The note as it would be stored: markdown, whichever mode this view is in.
     var markdown: String {
         styling.isStyled ? MarkdownWriting.markdown(from: textStorage) : (text ?? "")
+    }
+
+    /// The *selection* as the note would store it, on the same terms.
+    ///
+    /// Split out from `copy(_:)` because this is the half with a decision in it and
+    /// `UIPasteboard.general` is the half a test cannot reach.
+    var markdownForSelection: String {
+        guard styling.isStyled else {
+            return ((text ?? "") as NSString).substring(with: selectedRange)
+        }
+        return MarkdownWriting.markdown(from: textStorage.attributedSubstring(from: selectedRange))
+    }
+
+    /// The selection leaves on the clipboard as markdown source.
+    ///
+    /// In formatted mode the buffer holds no delimiters at all, so its characters alone would put
+    /// a note's formatting on the clipboard and lose it — a copied bold run pasted back as
+    /// unformatted text. The macOS twin spends two overrides on this, one to stop AppKit writing
+    /// RTF and one to write the source; this file had neither while claiming to mirror it.
+    override func copy(_ sender: Any?) {
+        write(markdownForSelection)
+    }
+
+    /// `super` deletes, registers the undo step and reports the change — only what it leaves on
+    /// the clipboard is wrong, and assigning `string` replaces the whole item.
+    override func cut(_ sender: Any?) {
+        let markdown = markdownForSelection
+        super.cut(sender)
+        write(markdown)
+    }
+
+    private func write(_ markdown: String) {
+        guard !markdown.isEmpty else { return }
+
+        UIPasteboard.general.string = markdown
     }
 
     /// Puts a note's markdown into the view, in the shape its mode calls for.
@@ -140,11 +185,11 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
 
     /// Applies a mode and a zoom level. See the macOS twin for why a mode step is a conversion.
     func apply(_ appearance: MarkdownStyling.Appearance) {
-        guard appearance != styling else { return }
+        guard appearance != configuredStyling else { return }
 
         let source = markdown
         let switchingMode = appearance.plainText != styling.plainText
-        styling = appearance
+        configuredStyling = appearance
 
         if switchingMode {
             load(markdown: source)

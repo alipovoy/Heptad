@@ -35,7 +35,7 @@ enum PreviewFixtures {
     }
 
     /// An in-memory container holding `notes()`, or nothing at all — which is what puts
-    /// `ContentView` on its "Initializing notes..." branch.
+    /// `ContentView` on its "Notes could not be loaded" branch.
     @MainActor
     static func container(seeded: Bool = true) -> ModelContainer {
         do {

@@ -211,7 +211,10 @@ struct EditorFormattingTests {
 
     /// A junk value written from outside the app is clamped on read rather than reaching text
     /// layout. The stored size is plain `UserDefaults` and nothing sanity-checks it on write.
-    @Test(arguments: [Double(0), -12, 5000])
+    ///
+    /// The non-finite three are here because the clamp is two comparisons, and every comparison
+    /// against NaN is false — so it passed straight through both bounds.
+    @Test(arguments: [Double(0), -12, 5000, .nan, .infinity, -.infinity])
     func anOutOfRangeStoredSizeIsClampedOnRead(stored: Double) {
         scratchDefaults.defaults.set(stored, forKey: AppConstants.editorFontSizeKey)
 
@@ -219,6 +222,21 @@ struct EditorFormattingTests {
 
         #expect(size >= AppConstants.Layout.minFontSize)
         #expect(size <= AppConstants.Layout.maxFontSize)
+    }
+
+    /// And a stored NaN can be stepped off, which is what made it worse than the rest of the junk.
+    ///
+    /// `step` bails on `stepped != size`, and `nan != nan` is true, so both keys rewrote the NaN
+    /// and posted a repaint at a size AppKit substitutes 13 pt for. The only way out was
+    /// `defaults delete`.
+    @Test func aStoredNaNIsSteppedOffRatherThanRewritten() {
+        scratchDefaults.defaults.set(Double.nan, forKey: AppConstants.editorFontSizeKey)
+
+        manager.changeFontSize(increase: true)
+
+        #expect(
+            EditorFontSize.current(scratchDefaults.defaults)
+                == AppConstants.Layout.defaultFontSize + 2)
     }
 
     /// The editors repaint on this notification, so a step that changes nothing must not post it
