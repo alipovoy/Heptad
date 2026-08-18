@@ -126,6 +126,19 @@ struct AttributedFormattingTests {
         #expect(MarkdownWriting.markdown(from: text) == "**rotate** keys")
     }
 
+    /// A range reaching past the end of the text is clipped, not trapped.
+    ///
+    /// `MarkdownSlicing.trimmed` is where every slice boundary is decided and the selection it is
+    /// handed comes from the text view; without the clamp it read one character past the end and
+    /// `NSString.character(at:)` raised.
+    @Test func aRangePastTheEndIsClipped() {
+        let text = storage("rotate")
+
+        toggle(.strong, over: NSRange(location: 0, length: 99), in: text)
+
+        #expect(text.carrying(.strong) == "######")
+    }
+
     // MARK: - List markers
 
     /// A whole list line can be formatted without the line stopping being a list line.
