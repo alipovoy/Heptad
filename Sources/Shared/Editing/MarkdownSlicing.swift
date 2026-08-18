@@ -51,6 +51,12 @@ enum MarkdownSlicing {
     }
 
     /// `range` without the whitespace at its ends — the core a delimiter pair can close against.
+    ///
+    /// Two callers, one rule, deliberately: the writer puts a pair around this core, and `⌘B` over
+    /// a selection with a trailing space formats the same core rather than the space. They were the
+    /// same eight lines in two files, which meant a trait the commands would apply and the writer
+    /// would then drop was one edit away — and a trait that vanishes on save is worse than one that
+    /// never went on.
     static func trimmed(_ range: NSRange, in source: NSString) -> NSRange {
         var start = range.location
         var end = NSMaxRange(range)

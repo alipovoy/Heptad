@@ -22,8 +22,7 @@ final class MarkdownEditorFixture {
         let statistics = EditorStatistics()
         self.statistics = statistics
         coordinator = makeTestCoordinator(statistics: statistics)
-        scrollView = try #require(
-            coordinator.makeEditorView(for: NoteItem(id: 0)) as? NSScrollView)
+        scrollView = try #require(coordinator.makeEditorView() as? NSScrollView)
     }
 
     func textView() throws -> MarkdownTextView {
@@ -43,7 +42,7 @@ final class MarkdownEditorFixture {
     func appearance(plainText: Bool) -> MarkdownStyling.Appearance {
         MarkdownStyling.Appearance(
             plainText: plainText, fontSize: AppConstants.Layout.defaultFontSize,
-            boldTint: NotePalette.boldTint(forNoteIndex: 0))
+            tintedNoteIndex: 0)
     }
 
     func baseFont(plainText: Bool) -> NSFont {

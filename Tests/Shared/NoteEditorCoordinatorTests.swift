@@ -107,9 +107,9 @@ struct NoteEditorCoordinatorTests {
         coordinator.update(notes: sparse, selectedIndex: 1)
 
         #expect(coordinator.configuredAppearances.count == 2)
-        #expect(coordinator.configuredAppearances.first?.boldTint == NotePalette.boldTint(forNoteIndex: 0))
+        #expect(coordinator.configuredAppearances.first?.tintedNoteIndex == 0)
         #expect(
-            coordinator.configuredAppearances.last?.boldTint == NotePalette.boldTint(forNoteIndex: 1),
+            coordinator.configuredAppearances.last?.tintedNoteIndex == 1,
             "Note 9 is the second note, so it takes the second tint — not the clamped seventh")
     }
 
@@ -170,7 +170,7 @@ struct NoteEditorCoordinatorTests {
         let scratch = try ScratchDefaults(name: "NoteEditorCoordinatorTests")
         let center = NotificationCenter()
         scratch.defaults.set(
-            Double(AppConstants.Layout.maxFontSize), forKey: AppConstants.editorFontSizeKey)
+            Double(EditorFontSize.maximumSize), forKey: AppConstants.editorFontSizeKey)
         let zoomed = SpyEditorCoordinator(defaults: scratch.defaults, notificationCenter: center)
 
         zoomed.setup(container: container, notes: notes, selectedIndex: 0)

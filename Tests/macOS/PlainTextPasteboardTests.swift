@@ -292,7 +292,7 @@ private enum PlainTextPasteboardTestError: Error {
         let scratch = ScratchPasteboard()
         // `<b>keys</b> ` is 12 bytes, so this clears the limit with room to spare — and has to,
         // because a clipboard that reaches the decode at this size is what the test would hang on.
-        let repeats = AppConstants.richPasteByteLimit / 8
+        let repeats = NSPasteboard.richPasteByteLimit / 8
         scratch.write {
             $0.setData(Data(String(repeating: "<b>keys</b> ", count: repeats).utf8), forType: .html)
             $0.setString(String(repeating: "keys ", count: repeats), forType: .string)

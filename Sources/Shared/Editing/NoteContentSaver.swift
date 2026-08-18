@@ -7,6 +7,16 @@ extension Notification.Name {
 /// Debounces writes of a note's markdown back to the store.
 @MainActor
 class NoteContentSaver {
+    /// How long after the last keystroke a note is written.
+    nonisolated static let defaultDebounce: Duration = .milliseconds(300)
+
+    /// The longest a burst of typing may go unwritten, however continuous it is.
+    ///
+    /// The debounce alone means "300 ms after you stop", not "at most 300 ms": anything above
+    /// roughly 40 wpm keeps rearming the timer, and a paragraph typed without a pause lives only
+    /// in the text view. This bounds what a crash can take.
+    nonisolated static let defaultMaxDelay: Duration = .seconds(2)
+
     private var saveTask: Task<Void, Never>?
     private let note: NoteItem
     private let debounce: Duration
@@ -22,8 +32,8 @@ class NoteContentSaver {
 
     init(
         note: NoteItem,
-        debounce: Duration = AppConstants.Timing.debounceSave,
-        maxDelay: Duration = AppConstants.Timing.maxSaveDelay,
+        debounce: Duration = NoteContentSaver.defaultDebounce,
+        maxDelay: Duration = NoteContentSaver.defaultMaxDelay,
         notificationCenter: NotificationCenter = .default
     ) {
         self.note = note

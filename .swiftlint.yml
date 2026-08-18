@@ -36,7 +36,7 @@ opt_in_rules:
 cyclomatic_complexity:
   ignores_case_statements: true
 
-# AppConstants namespaces its values with nested enums (AppConstants.Layout.ColorCircle),
+# AppConstants namespaces its values with nested enums (AppConstants.Layout.defaultSpacing),
 # so two levels are expected. Anything deeper than that is still flagged.
 nesting:
   type_level: 2

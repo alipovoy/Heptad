@@ -47,8 +47,8 @@ struct ContentView: View {
                             .background(backgroundFill)
                     #else
                         ColorPickerRow(selectedNoteIndex: selection, notes: notes)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 12)
+                        .padding(.vertical, AppConstants.Layout.rowInset)
+                        .padding(.horizontal, AppConstants.Layout.defaultSpacing)
 
                         IOSRichTextEditor(notes: notes, selectedNoteIndex: selection, statistics: statistics)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -112,6 +112,12 @@ struct ContentView: View {
                 ticker.start()
             }
             .onReceive(NotificationCenter.default.publisher(for: .windowDidHide)) { _ in
+                // `WindowManager.hide` has already asked the savers to flush — this is the half it
+                // cannot do, having no model context. The second post is inert (nothing is pending
+                // by now) and keeps one name for "make the notes durable". Without it, a dismissal
+                // was durable only because SwiftData's autosave happens to fire on the
+                // deactivation that follows.
+                flushPendingSaves()
                 ticker.stop()
             }
         #endif
@@ -174,23 +180,27 @@ struct ContentView: View {
     /// on iOS has a safe area to ignore, and carrying it on the shared value applied it to two
     /// more uses that sit in the middle of a `VStack`.
     private var backgroundFill: some View {
-        NotePalette.colors[selectedNoteIndex].opacity(0.1)
+        NotePalette.colors[selectedNoteIndex].opacity(AppConstants.Layout.noteTintOpacity)
     }
 
     #if os(macOS)
+        /// The close button, and the hidden copy of it that balances the row. Drawn as it stands:
+        /// the panel is a menubar popover and there is no title bar on iOS to scale.
+        private static let titleBarIconSize: CGFloat = 18
+
         private var macOSTitleBar: some View {
             HStack {
                 Button {
                     NSApp.keyWindow?.performClose(nil)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: AppConstants.Layout.titleBarIconSize))
+                        .font(.system(size: Self.titleBarIconSize))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .focusable(false)
                 .accessibilityLabel("Close window")
-                .padding(.leading, 14)
+                .padding(.leading, AppConstants.Layout.edgeInset)
 
                 Spacer()
 
@@ -202,12 +212,11 @@ struct ContentView: View {
                 // deliberately does not live here: pin.slash and pin.fill are different widths,
                 // so toggling it nudged the circles sideways.
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: AppConstants.Layout.titleBarIconSize))
+                    .font(.system(size: Self.titleBarIconSize))
                     .hidden()  // Reserves the space without leaving it in the accessibility tree
-                    .padding(.trailing, 14)
+                    .padding(.trailing, AppConstants.Layout.edgeInset)
             }
-            .padding(.top, 5)
-            .padding(.bottom, 5)
+            .padding(.vertical, 5)
         }
     #endif
 }

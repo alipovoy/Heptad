@@ -182,7 +182,7 @@ struct EditorFormattingTests {
     /// Shrinking stops at the floor and stays there rather than marching down to an unreadable
     /// size — and, since ⌘- repeats while held, stays there for every keystroke after it.
     @Test func decreasingFontSizeStopsAtTheFloor() {
-        let floor = AppConstants.Layout.minFontSize
+        let floor = EditorFontSize.minimumSize
         scratchDefaults.defaults.set(Double(floor + 2), forKey: AppConstants.editorFontSizeKey)
 
         manager.changeFontSize(increase: false)
@@ -197,7 +197,7 @@ struct EditorFormattingTests {
     /// The ceiling the floor above went without: holding ⌘+ used to grow the font unbounded.
     @Test(.bug(id: 50))
     func increasingFontSizeStopsAtTheCeiling() {
-        let ceiling = AppConstants.Layout.maxFontSize
+        let ceiling = EditorFontSize.maximumSize
         scratchDefaults.defaults.set(Double(ceiling - 2), forKey: AppConstants.editorFontSizeKey)
 
         manager.changeFontSize(increase: true)
@@ -220,8 +220,8 @@ struct EditorFormattingTests {
 
         let size = EditorFontSize.current(scratchDefaults.defaults)
 
-        #expect(size >= AppConstants.Layout.minFontSize)
-        #expect(size <= AppConstants.Layout.maxFontSize)
+        #expect(size >= EditorFontSize.minimumSize)
+        #expect(size <= EditorFontSize.maximumSize)
     }
 
     /// And a stored NaN can be stepped off, which is what made it worse than the rest of the junk.
@@ -243,7 +243,7 @@ struct EditorFormattingTests {
     /// — otherwise a held ⌘+ at the ceiling would restyle every cached note per keystroke.
     @Test func steppingAtABoundPostsNothing() {
         scratchDefaults.defaults.set(
-            Double(AppConstants.Layout.maxFontSize), forKey: AppConstants.editorFontSizeKey)
+            Double(EditorFontSize.maximumSize), forKey: AppConstants.editorFontSizeKey)
 
         var posts = 0
         let token = notificationCenter.addObserver(

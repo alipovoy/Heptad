@@ -19,7 +19,7 @@ struct MarkdownTextViewCopyTests {
 
     private func textView(_ markdown: String, plainText: Bool = false) -> MarkdownTextView {
         let view = MarkdownTextView()
-        view.apply(MarkdownStyling.Appearance(plainText: plainText, fontSize: 16, boldTint: nil))
+        view.apply(MarkdownStyling.Appearance(plainText: plainText, fontSize: 16))
         view.load(markdown: markdown)
         return view
     }

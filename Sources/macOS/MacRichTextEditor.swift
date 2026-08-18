@@ -31,7 +31,7 @@ struct MacRichTextEditor: NSViewRepresentable {
             super.init()
         }
 
-        override func makeEditorView(for note: NoteItem) -> NSView {
+        override func makeEditorView() -> NSView {
             let scrollView = MarkdownTextView.scrollableTextView()
             scrollView.borderType = .noBorder
             scrollView.drawsBackground = false

@@ -26,7 +26,7 @@ final class SpyEditorCoordinator: NoteEditorCoordinator {
         let superviewAtCall: PlatformView?
     }
 
-    /// Note ids passed to `makeEditorView`, in call order. The length is the assertion that
+    /// The note showing at each `makeEditorView`, in call order. The length is the assertion that
     /// matters: view creation and saver creation sit behind the same `editorViews[id] == nil`
     /// check, so a second entry here would mean a second saver for that note too.
     /// A statistics delivery, plus where it landed.
@@ -74,11 +74,14 @@ final class SpyEditorCoordinator: NoteEditorCoordinator {
         super.init(defaults: defaults, notificationCenter: notificationCenter)
     }
 
-    override func makeEditorView(for note: NoteItem) -> PlatformView {
-        madeViewNoteIds.append(note.id)
+    /// The hook takes no note, so the id comes from `currentNoteId` — which `update` sets before
+    /// it builds anything, precisely so nothing under it can act on a stale answer.
+    override func makeEditorView() -> PlatformView {
+        let noteId = currentNoteId ?? -1
+        madeViewNoteIds.append(noteId)
         stepsInOrder.append("make")
         let view = PlatformView()
-        noteIdsByView[ObjectIdentifier(view)] = note.id
+        noteIdsByView[ObjectIdentifier(view)] = noteId
         return view
     }
 

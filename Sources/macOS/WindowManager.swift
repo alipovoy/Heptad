@@ -32,11 +32,11 @@ extension Notification.Name {
 ///
 /// Only those two things differ. Level and mask are set once, at creation, and never toggled per
 /// mode; the mask never carries `.miniaturizable`, because minimising was the one way off the
-/// screen that bypassed `hide(_:)` (P1-8). Detaching is a drag past `dragToPinThreshold` or ⌘P;
+/// screen that bypassed `hide()` (P1-8). Detaching is a drag past `dragToPinThreshold` or ⌘P;
 /// only ⌘P attaches again without closing — `windowDidMove` arms the gesture in panel mode only.
 ///
 /// They are exact opposites (`isPanelMode == !isPinned`), and pinning lasts only as long as the
-/// window is on screen: `hide(_:)` puts it back. It is state, not a preference — see #123.
+/// window is on screen: `hide()` puts it back. It is state, not a preference — see #123.
 /// Neither mode touches `NSApp.setActivationPolicy`: `LSUIElement: true` keeps the app an
 /// accessory in both, so even a pinned window has no Dock icon and no app menu.
 @MainActor
@@ -51,7 +51,8 @@ class WindowManager: NSObject, NSWindowDelegate {
     private(set) var anchorOrigin: NSPoint = .zero
 
     /// Distance (in points) the panel must travel from its anchor to become a pinned window.
-    private let dragToPinThreshold: CGFloat = AppConstants.Window.dragToPinThreshold
+    /// Not in `AppConstants`: this class is the only thing that measures against it.
+    static let dragToPinThreshold: CGFloat = 20
 
     /// Global event monitor for click-outside-to-dismiss, live only in panel mode.
     private var globalClickMonitor: EventMonitor?
@@ -126,20 +127,22 @@ class WindowManager: NSObject, NSWindowDelegate {
             return
         }
 
-        if !(window?.isVisible ?? false) {
+        if window?.isVisible == true {
+            hide()
+        } else {
             showWindow(sender: sender)
-        } else if let window {
-            hide(window)
         }
     }
 
     // MARK: - Hiding
 
-    /// The one way the window leaves the screen — the menubar icon, ⌘W/close, and a click
-    /// outside the panel all land here, and all four want the same steps.
-    private func hide(_ window: NSWindow) {
+    /// The one way the window leaves the screen — the menubar icon, ⌘W/close, and a click outside
+    /// the panel all land here, and all three want the same steps, on the one window this class
+    /// owns. Which is why it takes none: the argument's only effect was to make ordering out one
+    /// window while restyling another expressible.
+    private func hide() {
         flushPendingSaves()
-        window.orderOut(nil)
+        window?.orderOut(nil)
 
         // Every show starts as the menubar panel. After `orderOut`, so the panel styling this
         // restores stops the click-outside monitor rather than installing one.
@@ -148,12 +151,10 @@ class WindowManager: NSObject, NSWindowDelegate {
         notificationCenter.post(name: .windowDidHide, object: nil)
     }
 
-    /// Writes out any text still sitting in a `NoteContentSaver`'s debounce window.
-    ///
-    /// Dismissing the panel is the action users take constantly, and on macOS nothing else
-    /// triggers a flush before terminate — `ContentView`'s `scenePhase` handler never fires here
-    /// (it is mounted in a bare `NSHostingView`, with no `Scene` behind it). Without this, up to
-    /// one debounce interval of typing is dropped on every dismissal.
+    /// Asks every `NoteContentSaver` to write out text still in its debounce window — up to one
+    /// interval of typing, dropped on every dismissal without this. Nothing else on macOS
+    /// flushes before terminate: `ContentView`'s `scenePhase` handler never fires in a bare
+    /// `NSHostingView`. Committing those writes is the view's half, on `.windowDidHide`.
     private func flushPendingSaves() {
         notificationCenter.post(name: .flushPendingSaves, object: nil)
     }
@@ -256,7 +257,7 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         // Closing reattaches, like every other way off the screen: `hide` owns that.
-        hide(sender)
+        hide()
         return false
     }
 
@@ -267,16 +268,15 @@ class WindowManager: NSObject, NSWindowDelegate {
         guard movedWindow === window, isPanelMode, !isPositioningPanel else { return }
 
         // When threshold is exceeded, wait for mouse-up before transitioning.
-        if panelDragDistance(of: movedWindow) > dragToPinThreshold && pendingPinMonitor == nil {
+        if panelDragDistance(of: movedWindow) > Self.dragToPinThreshold, pendingPinMonitor == nil {
             pendingPinMonitor = EventMonitor(local: true, mask: .leftMouseUp) { [weak self] event in
-                guard let self = self else { return event }
-                // Remove the one-shot monitor
+                guard let self else { return event }
                 self.pendingPinMonitor?.stop()
                 self.pendingPinMonitor = nil
 
                 // Verify we're still in the drag-away state
                 if self.isPanelMode, let window = self.window,
-                    self.panelDragDistance(of: window) > self.dragToPinThreshold {
+                    self.panelDragDistance(of: window) > Self.dragToPinThreshold {
                     self.setPinned(true)
                 }
                 return event
@@ -362,11 +362,11 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// Centres the panel under the status item. The caller owns `isPositioningPanel` and the
     /// anchor that follows, both of which have to outlast the ordering this does not do.
     private func anchorBelowStatusItem(sender: NSStatusBarButton, window: NSPanel) {
-        guard sender.window?.screen != nil else { return }
+        guard let buttonWindow = sender.window, buttonWindow.screen != nil else { return }
 
-        let buttonRect = sender.window?.convertToScreen(sender.frame) ?? .zero
+        let buttonRect = buttonWindow.convertToScreen(sender.frame)
         let xPos = buttonRect.midX - (window.frame.width / 2)
-        let yPos = buttonRect.minY - window.frame.height - 5
+        let yPos = buttonRect.minY - window.frame.height - AppConstants.Window.statusItemGap
 
         window.setFrameOrigin(NSPoint(x: xPos, y: yPos))
     }
@@ -393,8 +393,8 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// note went away under the caret. Hence the guard on the window and not on the status item
     /// alone — an event carrying any window of ours is a click *inside* the app.
     func handleClickOutside(_ event: NSEvent) {
-        guard isPanelMode, let window, window.isVisible, event.window == nil else { return }
+        guard isPanelMode, window?.isVisible == true, event.window == nil else { return }
 
-        hide(window)
+        hide()
     }
 }

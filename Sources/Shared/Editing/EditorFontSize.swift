@@ -14,31 +14,45 @@ extension Notification.Name {
 /// no markdown spelling — and so the one piece that could not survive the swap to a text buffer
 /// (#117). A zoom level is what it always really was for a scratchpad.
 enum EditorFontSize {
+    /// What `⌘+` and `⌘-` step between. Both ends matter: without the ceiling a held `⌘+` grows the
+    /// font without limit, and without the floor `⌘-` walks it down through zero.
+    ///
+    /// Here rather than in `AppConstants` because `clamped` below is the only thing that reads
+    /// them, and its comment is already the explanation they need.
+    static let minimumSize: CGFloat = 8
+    static let maximumSize: CGFloat = 72
+
     /// The current size, clamped on read: the value is plain `UserDefaults` and is writable from
     /// outside the app, and a junk one would otherwise reach text layout.
-    static func current(_ defaults: UserDefaults = .standard) -> CGFloat {
+    ///
+    /// `defaults` is required here and on `step`. Every caller already passes one, and a
+    /// `.standard` default on a store this small only exists to be the wrong thing to reach for
+    /// from a test — which is how a suite ends up asserting against the user's own preferences.
+    static func current(_ defaults: UserDefaults) -> CGFloat {
         guard let stored = defaults.object(forKey: AppConstants.editorFontSizeKey) as? Double
         else { return AppConstants.Layout.defaultFontSize }
 
         return clamped(CGFloat(stored))
     }
 
-    /// Steps the size by two points and reports the new one, or nil when it was already at the
-    /// bound in that direction — in which case nothing is written and nothing is posted, so a
-    /// held-down `⌘+` stops repainting once it hits the ceiling.
-    @discardableResult
+    /// Steps the size by two points, or does nothing at all when it is already at the bound in
+    /// that direction — nothing written and nothing posted, so a held-down `⌘+` stops repainting
+    /// once it hits the ceiling.
+    ///
+    /// Reports nothing: the new size reaches the editors through the notification, which is the
+    /// point of having one. It used to hand back a `@discardableResult CGFloat?` that its one
+    /// caller discarded and no test read.
     static func step(
         increase: Bool,
-        defaults: UserDefaults = .standard,
-        notificationCenter: NotificationCenter = .default
-    ) -> CGFloat? {
+        defaults: UserDefaults,
+        notificationCenter: NotificationCenter
+    ) {
         let size = current(defaults)
         let stepped = clamped(size + (increase ? 2 : -2))
-        guard stepped != size else { return nil }
+        guard stepped != size else { return }
 
         defaults.set(Double(stepped), forKey: AppConstants.editorFontSizeKey)
         notificationCenter.post(name: .editorFontSizeDidChange, object: nil)
-        return stepped
     }
 
     /// `isFinite` first, because `min`/`max` are comparisons and every comparison against NaN is
@@ -50,6 +64,6 @@ enum EditorFontSize {
     private static func clamped(_ size: CGFloat) -> CGFloat {
         guard size.isFinite else { return AppConstants.Layout.defaultFontSize }
 
-        return min(max(size, AppConstants.Layout.minFontSize), AppConstants.Layout.maxFontSize)
+        return min(max(size, minimumSize), maximumSize)
     }
 }

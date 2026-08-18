@@ -70,15 +70,14 @@ enum AttributedFormatting {
         _ emphasis: Emphasis, over range: NSRange,
         in storage: NSMutableAttributedString, appearance: MarkdownStyling.Appearance
     ) -> [NSAttributedString.Key: Any] {
-        let core = trimmed(range, in: storage.string as NSString)
-        let applying = !isApplied(emphasis, over: core, in: storage)
+        let core = MarkdownSlicing.trimmed(range, in: storage.string as NSString)
 
         guard core.length > 0 else {
             return typingAttributes(
-                emphasis, applying: applying, at: range.location, in: storage,
-                appearance: appearance)
+                emphasis, at: range.location, in: storage, appearance: appearance)
         }
 
+        let applying = !isApplied(emphasis, over: core, in: storage)
         set(emphasis, applying, over: core, in: storage, appearance: appearance)
         return storage.attributes(at: core.location, effectiveRange: nil)
     }
@@ -105,9 +104,6 @@ enum AttributedFormatting {
     /// Removing a font trait means rebuilding the font from the base one and putting back the
     /// *other* trait, because a symbolic trait cannot be subtracted from a font that has it.
     ///
-    /// The colour is re-derived rather than carried over, so `⌘B` puts the note's tint on and
-    /// takes it off. Nothing else would: this writes attributes, not characters, so the storage
-    /// delegate that normalizes every other edit never sees it.
     private static func applied(
         _ emphasis: Emphasis, _ applying: Bool,
         to attributes: [NSAttributedString.Key: Any], appearance: MarkdownStyling.Appearance
@@ -124,8 +120,11 @@ enum AttributedFormatting {
             updated[.font] = rebuilt(font, bold: font.isBold, italic: applying, appearance)
         }
 
-        updated[.foregroundColor] = MarkdownStyling.foregroundColor(for: updated, in: appearance)
-        return updated
+        // Back through the same filter every other edit meets, rather than restating the one rule
+        // from it this needs. It re-derives the colour, which is what makes `⌘B` put the note's
+        // tint on and take it off — nothing else would: this writes attributes, not characters, so
+        // the storage delegate that normalizes every other edit never sees it.
+        return MarkdownStyling.normalized(updated, in: appearance)
     }
 
     private static func rebuilt(
@@ -141,8 +140,11 @@ enum AttributedFormatting {
     ///
     /// `⌘B` then typing is bold, the way it is in every other editor. Nothing is written to the
     /// buffer, so nothing is left behind if the user presses it and types nothing.
+    ///
+    /// The direction is the caret's own run inverted, decided here rather than passed in: there is
+    /// no selection to read, and `isApplied` over an empty range is false whatever the run says.
     private static func typingAttributes(
-        _ emphasis: Emphasis, applying: Bool, at caret: Int,
+        _ emphasis: Emphasis, at caret: Int,
         in storage: NSAttributedString, appearance: MarkdownStyling.Appearance
     ) -> [NSAttributedString.Key: Any] {
         let current =
@@ -152,20 +154,5 @@ enum AttributedFormatting {
 
         return applied(
             emphasis, !emphasis.isOn(current), to: current, appearance: appearance)
-    }
-
-    // MARK: - Reading
-
-    /// `range` with leading and trailing whitespace dropped, so a selection with a trailing space
-    /// formats the word and not the space — the writer would put the space outside the pair
-    /// anyway, and a trait that vanishes on save is worse than one that never went on.
-    private static func trimmed(_ range: NSRange, in text: NSString) -> NSRange {
-        var start = range.location
-        var end = min(NSMaxRange(range), text.length)
-
-        while start < end, MarkdownSyntax.isWhitespace(text.character(at: start)) { start += 1 }
-        while end > start, MarkdownSyntax.isWhitespace(text.character(at: end - 1)) { end -= 1 }
-
-        return NSRange(location: start, length: end - start)
     }
 }
