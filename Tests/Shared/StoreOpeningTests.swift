@@ -40,14 +40,49 @@ struct StoreOpeningTests {
         defer { try? FileManager.default.removeItem(at: url) }
 
         let schema = Schema([NoteItem.self])
-        let container = HeptadApp.container(
+        let opening = HeptadApp.opening(
             for: schema, configuration: ModelConfiguration(schema: schema, url: url))
 
-        #expect(container.configurations.first?.isStoredInMemoryOnly == true)
+        #expect(opening.container.configurations.first?.isStoredInMemoryOnly == true)
         #expect(
-            try container.mainContext.fetch(FetchDescriptor<NoteItem>()).count
+            try opening.container.mainContext.fetch(FetchDescriptor<NoteItem>()).count
                 == AppConstants.noteCount,
             "and the seven notes are there to be written in, for this session at least")
+        #expect(
+            opening.health == .ephemeral,
+            "and the app is told, because those seven notes are indistinguishable from the store")
+    }
+
+    /// The store opens and holds the notes, but will not take a write — a read-only or full
+    /// volume. `allowsSave: false` is that store without needing one.
+    ///
+    /// Seeded with note 0 alone first, because `seed` is a top-up: against a complete store it
+    /// writes nothing, reaches no `save()`, and a read-only file is indistinguishable from a
+    /// healthy one at launch. That gap is real and is why `ContentView` reports its own failed
+    /// saves — this test covers the launch that does try to write.
+    ///
+    /// The failure used to be a bare `try?`, so a launch onto a full disk looked like any other.
+    @Test func aStoreThatWillNotTakeAWriteIsReportedAsNotSaving() throws {
+        let url = scratchStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let schema = Schema([NoteItem.self])
+        let writable = try ModelContainer(
+            for: schema, configurations: ModelConfiguration(schema: schema, url: url))
+        writable.mainContext.insert(NoteItem(id: 0, modifiedAt: .now))
+        try writable.mainContext.save()
+
+        let opening = HeptadApp.opening(
+            for: schema,
+            configuration: ModelConfiguration(schema: schema, url: url, allowsSave: false))
+
+        #expect(opening.health == .notSaving)
+        #expect(
+            opening.container.configurations.first?.isStoredInMemoryOnly == false,
+            "the file itself is still the one in use — the notes in it are the user's own")
+        #expect(
+            opening.container.mainContext.hasChanges,
+            "and the six notes the save could not write are still in the context, to be shown")
     }
 
     /// A store written by an older schema — the one thing no other test does, since every other one
@@ -69,12 +104,12 @@ struct StoreOpeningTests {
         try legacy.mainContext.save()
 
         let schema = Schema([Heptad.NoteItem.self])
-        let container = HeptadApp.container(
+        let opening = HeptadApp.opening(
             for: schema, configuration: ModelConfiguration(schema: schema, url: url))
-        let notes = try container.mainContext.fetch(FetchDescriptor<Heptad.NoteItem>())
+        let notes = try opening.container.mainContext.fetch(FetchDescriptor<Heptad.NoteItem>())
 
         #expect(
-            container.configurations.first?.isStoredInMemoryOnly == false,
+            opening.health == .healthy,
             "the file itself opened — otherwise this would be the fallback above, not a migration")
         #expect(notes.count == AppConstants.noteCount, "the app comes up with its seven notes")
         #expect(
@@ -87,13 +122,14 @@ struct StoreOpeningTests {
         defer { try? FileManager.default.removeItem(at: url) }
 
         let schema = Schema([NoteItem.self])
-        let container = HeptadApp.container(
+        let opening = HeptadApp.opening(
             for: schema, configuration: ModelConfiguration(schema: schema, url: url))
 
-        #expect(container.configurations.first?.isStoredInMemoryOnly == false)
-        #expect(container.configurations.first?.url == url)
+        #expect(opening.health == .healthy)
+        #expect(opening.container.configurations.first?.isStoredInMemoryOnly == false)
+        #expect(opening.container.configurations.first?.url == url)
         #expect(
-            try container.mainContext.fetch(FetchDescriptor<NoteItem>()).count
+            try opening.container.mainContext.fetch(FetchDescriptor<NoteItem>()).count
                 == AppConstants.noteCount)
     }
 }
