@@ -119,6 +119,27 @@ struct ListEditingTests {
         #expect(textView.markdown == "- [x] **task**")
     }
 
+    /// And it leaves the caret's own face alone.
+    ///
+    /// The box is behind the caret, not under it: nothing about a ⌘⇧U moves the insertion point,
+    /// so what is typed next continues the run it was already in. The list continuation wants the
+    /// opposite — there the caret ends up on the marker just written, and has to stop being bold —
+    /// and giving both edits that one answer took the bold off everything typed after a ⌘⇧U.
+    @Test func flippingACheckboxLeavesTheCaretTypingInTheRunItWasIn() throws {
+        load("- [ ] **task**")
+
+        // The caret put where the user's is when they hit ⌘⇧U mid-word: inside the bold run,
+        // carrying it. Read off the storage rather than assembled, so it is the note's own bold.
+        let storage = try #require(textView.textStorage)
+        textView.typingAttributes = storage.attributes(at: 6, effectiveRange: nil)
+        try #require(Emphasis.strong.isOn(textView.typingAttributes), "the caret starts bold")
+
+        manager.toggleCheckbox(on: textView)
+
+        #expect(textView.string == "- [x] task")
+        #expect(Emphasis.strong.isOn(textView.typingAttributes))
+    }
+
     // MARK: - ⌘⇧U
 
     @Test func toggleCheckboxFlipsTheBoxOnTheCaretsLine() {

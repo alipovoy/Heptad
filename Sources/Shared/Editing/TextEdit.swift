@@ -28,39 +28,51 @@ struct TextEdit: Equatable {
 // A bare string dropped into an attributed buffer inherits the run it lands in, so Return at the
 // end of `- **item**` gave the new line a bold `- `, which is `**-** ` in the store: the line stops
 // being a list item. In formatted mode the traits are the note, and nothing re-derives them.
+//
+// `caretFollowsMarkup` is the other half of that, and only the caller knows it. Return leaves the
+// caret at the end of the marker it just wrote, so the marker's face is what typing continues in.
+// A checkbox is flipped in place, somewhere behind a caret that never left the run it was in, and
+// carrying the marker's face out to the caret there takes the bold off whatever is typed next.
 #if canImport(UIKit)
     extension UITextView {
         /// Applies `edit` through the text input system, which is what registers it for undo.
         /// Mutating `textStorage` directly would leave the step un-undoable.
         ///
         /// The input system inserts with `typingAttributes`, so those are what carry `attributes`
-        /// in. They are left as the marker's afterwards: the caret is on a fresh list item, not
-        /// continuing the bold run the last one ended with.
-        func apply(_ edit: TextEdit, attributes: [NSAttributedString.Key: Any]) {
+        /// in — and what has to be put back when the caret is not the thing that moved.
+        func apply(
+            _ edit: TextEdit, attributes: [NSAttributedString.Key: Any], caretFollowsMarkup: Bool
+        ) {
             guard let start = position(from: beginningOfDocument, offset: edit.range.location),
                 let end = position(from: start, offset: edit.range.length),
                 let range = textRange(from: start, to: end)
             else { return }
 
+            let typing = typingAttributes
             typingAttributes = attributes
             replace(range, withText: edit.replacement)
+
+            if !caretFollowsMarkup { typingAttributes = typing }
         }
     }
 #else
     extension NSTextView {
         /// Applies `edit` through the view's own change hooks, so the per-note undo manager
         /// records it as one step.
-        func apply(_ edit: TextEdit, attributes: [NSAttributedString.Key: Any]) {
+        func apply(
+            _ edit: TextEdit, attributes: [NSAttributedString.Key: Any], caretFollowsMarkup: Bool
+        ) {
             guard let textStorage,
                 shouldChangeText(in: edit.range, replacementString: edit.replacement)
             else { return }
 
+            let typing = typingAttributes
             textStorage.replaceCharacters(
                 in: edit.range,
                 with: NSAttributedString(string: edit.replacement, attributes: attributes))
             didChangeText()
 
-            typingAttributes = attributes
+            typingAttributes = caretFollowsMarkup ? attributes : typing
         }
     }
 #endif

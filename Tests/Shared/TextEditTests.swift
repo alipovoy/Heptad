@@ -23,7 +23,7 @@ struct TextEditApplyTests {
 
         textView.apply(
             TextEdit(range: NSRange(location: 6, length: 0), replacement: "\n- "),
-            attributes: [.font: body])
+            attributes: [.font: body], caretFollowsMarkup: true)
 
         #expect(currentText(of: textView) == "- item\n- ")
     }
@@ -33,7 +33,7 @@ struct TextEditApplyTests {
 
         textView.apply(
             TextEdit(range: NSRange(location: 7, length: 2), replacement: ""),
-            attributes: [.font: body])
+            attributes: [.font: body], caretFollowsMarkup: true)
 
         #expect(currentText(of: textView) == "- item\n")
     }
@@ -47,11 +47,44 @@ struct TextEditApplyTests {
 
         textView.apply(
             TextEdit(range: NSRange(location: 6, length: 0), replacement: "\n- "),
-            attributes: [.font: body])
+            attributes: [.font: body], caretFollowsMarkup: true)
 
         #expect(currentText(of: textView) == "- item\n- ")
         #expect(try font(of: textView, at: 0).isBold, "the run it was inserted beside is untouched")
         #expect(try font(of: textView, at: 8).isBold == false, "and the replacement is not bold")
+    }
+
+    /// The caret takes the markup's face when it follows the markup.
+    ///
+    /// Return lands on the marker it just wrote, so it has to stop continuing the bold run the
+    /// item before it ended with — otherwise the next thing typed makes the new `- ` bold, which
+    /// is `**-** ` in the store and not a list marker at all.
+    @Test func theCaretTakesTheMarkupsFaceWhenItFollowsIt() {
+        let textView = makeTextView(text: "- item", font: body.bolded())
+        textView.typingAttributes = [.font: body.bolded()]
+
+        textView.apply(
+            TextEdit(range: NSRange(location: 6, length: 0), replacement: "\n- "),
+            attributes: [.font: body], caretFollowsMarkup: true)
+
+        #expect((textView.typingAttributes[.font] as? PlatformFont)?.isBold == false)
+    }
+
+    /// And keeps its own when it does not.
+    ///
+    /// ⌘⇧U flips a box behind a caret that never moves, so what is typed next is still part of the
+    /// run the caret was in. One answer for both edits took the bold off everything typed after a
+    /// checkbox toggle.
+    @Test func theCaretKeepsItsOwnFaceWhenTheMarkupIsBehindIt() {
+        let textView = makeTextView(text: "- [ ] task", font: body.bolded())
+        textView.typingAttributes = [.font: body.bolded()]
+
+        textView.apply(
+            TextEdit(range: NSRange(location: 3, length: 1), replacement: "x"),
+            attributes: [.font: body], caretFollowsMarkup: false)
+
+        #expect(currentText(of: textView) == "- [x] task")
+        #expect((textView.typingAttributes[.font] as? PlatformFont)?.isBold == true)
     }
 
     #if canImport(UIKit)

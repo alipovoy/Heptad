@@ -226,8 +226,13 @@ class MarkdownTextView: UITextView, NSTextStorageDelegate {
     }
 
     /// Applies an edit whose replacement is markup this app wrote — a list marker, a checkbox —
-    /// in the note's own body face rather than in whatever run it lands in. See `TextEdit`.
-    func applyMarkup(_ edit: TextEdit) {
-        apply(edit, attributes: MarkdownStyling.baseAttributes(styling))
+    /// in the note's own body face rather than in whatever run it lands in.
+    ///
+    /// `caretFollowsMarkup` defaults to true for the list continuation, which is where the caret
+    /// ends up. See `TextEdit` for what it costs to get it wrong.
+    func applyMarkup(_ edit: TextEdit, caretFollowsMarkup: Bool = true) {
+        apply(
+            edit, attributes: MarkdownStyling.baseAttributes(styling),
+            caretFollowsMarkup: caretFollowsMarkup)
     }
 }
