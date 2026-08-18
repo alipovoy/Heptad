@@ -292,8 +292,10 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// The pin toggle reads `state` out of the environment, so ⌘P and a drag-to-pin redraw it
     /// without either of them knowing a view exists.
     private lazy var mainHostingView: NSView = {
-        let content = ContentView().environment(state)
-        return NSHostingView(rootView: content.modelContainer(HeptadApp.sharedModelContainer))
+        let content = ContentView()
+            .environment(state)
+            .environment(HeptadApp.sharedStatus)
+        return NSHostingView(rootView: content.modelContainer(HeptadApp.sharedStore.container))
     }()
 
     // MARK: - Showing the Window

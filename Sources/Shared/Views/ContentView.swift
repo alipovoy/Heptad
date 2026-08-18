@@ -5,6 +5,13 @@ import SwiftUI
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    /// Whether the store behind `stored` below is keeping anything, and where this view reports
+    /// a save that did not land. See `StoreHealthBanner`.
+    ///
+    /// Optional because only the two mount sites that opened the real store supply it — a preview
+    /// or a test host puts this view on a container of its own, where an absent status is the
+    /// truthful answer rather than a missing dependency to trap on.
+    @Environment(StoreStatus.self) private var storeStatus: StoreStatus?
     /// Everything the store holds, in id order. Read through `notes` below, never directly.
     @Query(sort: \NoteItem.id) private var stored: [NoteItem]
     /// The raw stored selection. Read through `selectedNoteIndex` and written through
@@ -35,15 +42,21 @@ struct ContentView: View {
                 VStack(spacing: 0) {
                     #if os(macOS)
                         macOSTitleBar
+                    #else
+                        ColorPickerRow(selectedNoteIndex: selection, notes: notes)
+                            .padding(.vertical, AppConstants.Layout.rowInset)
+                            .padding(.horizontal, AppConstants.Layout.defaultSpacing)
+                    #endif
 
+                    // Under the note switcher rather than over it: the switcher is where the eye
+                    // starts, and the warning belongs against the text it is about.
+                    StoreHealthBanner(health: storeStatus?.health ?? .healthy)
+
+                    #if os(macOS)
                         MacRichTextEditor(notes: notes, selectedNoteIndex: selection, statistics: statistics)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(backgroundFill)
                     #else
-                        ColorPickerRow(selectedNoteIndex: selection, notes: notes)
-                        .padding(.vertical, AppConstants.Layout.rowInset)
-                        .padding(.horizontal, AppConstants.Layout.defaultSpacing)
-
                         IOSRichTextEditor(notes: notes, selectedNoteIndex: selection, statistics: statistics)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     #endif
@@ -131,9 +144,18 @@ struct ContentView: View {
     /// `NotificationCenter.post` is synchronous, so all the model writes have landed by the time
     /// `save()` runs. Without it durability rests on `autosaveEnabled`, whose trigger points are
     /// undocumented — at terminate that is a race against process exit.
+    ///
+    /// A failure here is reported rather than swallowed, and this is the path that matters: the
+    /// only other write in the app is `HeptadApp.seed`, which writes on the launch that fills the
+    /// store and never again. A volume that fills up afterwards is first noticed right here, one
+    /// hide or one quit's worth of typing at a time.
     private func flushPendingSaves() {
         NotificationCenter.default.post(name: .flushPendingSaves, object: nil)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            storeStatus?.writeFailed(error)
+        }
     }
 
     /// The selection, brought inside the bounds of `notes` — see `NoteSelection`. Only read
@@ -219,6 +241,30 @@ struct ContentView: View {
 #Preview("Notes missing") {
     ContentView()
         .modelContainer(PreviewFixtures.container(seeded: false))
+        .frame(width: 420, height: 320)
+        #if os(macOS)
+            .environment(WindowState())
+        #endif
+}
+
+/// The store opened, but will not take a write: real notes on screen, nothing kept.
+#Preview("Not saving") {
+    ContentView()
+        .modelContainer(PreviewFixtures.container())
+        .environment(StoreStatus(.notSaving))
+        .frame(width: 420, height: 320)
+        #if os(macOS)
+            .environment(WindowState())
+        #endif
+}
+
+/// The store could not be opened at all, so the seven notes are blank stand-ins in memory. The
+/// fixture is seeded regardless — the point of the preview is the banner over a normal editor,
+/// which is exactly what makes this failure invisible without one.
+#Preview("In memory") {
+    ContentView()
+        .modelContainer(PreviewFixtures.container())
+        .environment(StoreStatus(.ephemeral))
         .frame(width: 420, height: 320)
         #if os(macOS)
             .environment(WindowState())

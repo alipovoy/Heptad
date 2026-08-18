@@ -3,8 +3,8 @@ import SwiftData
 
 /// Sample data for the `#Preview` blocks.
 ///
-/// Deliberately not `HeptadApp.sharedModelContainer`: that one opens the real store and
-/// calls `fatalError` if it cannot, neither of which a preview should be doing.
+/// Deliberately not `HeptadApp.sharedModelContainer`: that one opens the real store — the
+/// user's own notes — which is not a preview's to read or to write over.
 ///
 /// Deliberately not behind `#if DEBUG` either. `#Preview` expands into a type the compiler
 /// type-checks in every configuration, so a DEBUG-only fixture fails to resolve in Release

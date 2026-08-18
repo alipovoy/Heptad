@@ -90,6 +90,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func statusItemMenu() -> NSMenu {
         let menu = NSMenu()
 
+        // The same warning `StoreHealthBanner` carries. Repeated here because the panel may never
+        // be opened: the user who notices their notes are gone reaches for this menu to quit.
+        if let storeWarning {
+            menu.addItem(NSMenuItem(title: storeWarning, action: nil, keyEquivalent: ""))
+            menu.addItem(.separator())
+        }
+
         if !hotKeyManager.isRegistered {
             menu.addItem(
                 NSMenuItem(
@@ -102,5 +109,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             NSMenuItem(
                 title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         return menu
+    }
+
+    /// The store's failure as one menu line, or nothing on a healthy launch. Shorter than the
+    /// banner's wording: a menu item does not wrap.
+    private var storeWarning: String? {
+        switch HeptadApp.sharedStatus.health {
+        case .healthy: nil
+        case .notSaving: "Not saving — the note store will not take changes"
+        case .ephemeral: "Not saving — your notes could not be opened"
+        }
     }
 }

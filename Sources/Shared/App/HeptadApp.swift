@@ -2,36 +2,67 @@ import OSLog
 import SwiftData
 import SwiftUI
 
+/// The container the app runs on, together with what had to go wrong to get it.
+///
+/// One value rather than two: the health is only ever true of the container beside it, and the
+/// pair is decided once, at launch, by `HeptadApp.opening(for:configuration:)`.
+struct StoreOpening {
+    let container: ModelContainer
+    let health: StoreHealth
+}
+
 @main
 struct HeptadApp: App {
-    static let sharedModelContainer: ModelContainer = {
+    static let sharedStore: StoreOpening = {
         let schema = Schema([NoteItem.self])
         ensureApplicationSupportDirectoryExists()
 
-        return container(
+        return opening(
             for: schema,
             configuration: ModelConfiguration(schema: schema, isStoredInMemoryOnly: false))
     }()
+
+    /// The container alone, for the callers that only mount it or read a context off it.
+    static var sharedModelContainer: ModelContainer { sharedStore.container }
+
+    /// The health of `sharedStore`, in the form the views take. Built once, here, so that the two
+    /// mount sites and the status-item menu are all looking at the same object.
+    @MainActor static let sharedStatus = StoreStatus(sharedStore.health)
 
     /// The note store, or an in-memory stand-in that lasts the session when it cannot be opened.
     ///
     /// Not a `fatalError`: a store truncated by a power loss, left behind by a newer build, on a
     /// read-only or full volume, or needing a migration that will not run would otherwise crash
     /// every launch, with no recourse from inside the app.
-    static func container(for schema: Schema, configuration: ModelConfiguration) -> ModelContainer {
+    ///
+    /// The failure is returned rather than only logged. Both fallbacks hand back a container that
+    /// answers every query with seven notes, so nothing downstream can tell them from a healthy
+    /// launch — see `StoreHealthBanner`, which is the only thing that tells the user.
+    static func opening(for schema: Schema, configuration: ModelConfiguration) -> StoreOpening {
         do {
             let container = try ModelContainer(for: schema, configurations: [configuration])
 
-            // A store that opens but will not take a write still has the notes in it — not a
-            // reason to hide them behind the stand-in below.
-            try? seed(container.mainContext)
-            return container
-        } catch {
-            Logger(subsystem: Bundle.main.bundleIdentifier ?? "Heptad", category: "store")
-                .error("The note store could not be opened, running in memory: \(error)")
+            do {
+                try seed(container.mainContext)
+            } catch {
+                // A store that opens but will not take a write still has the notes in it — not a
+                // reason to hide them behind the stand-in below. The seeded rows stay in the
+                // context unsaved, which is exactly what everything typed after them will do.
+                log(error, "The note store would not take a write")
+                return StoreOpening(container: container, health: .notSaving)
+            }
 
-            return ephemeralContainer(for: schema)
+            return StoreOpening(container: container, health: .healthy)
+        } catch {
+            log(error, "The note store could not be opened, running in memory")
+
+            return StoreOpening(container: ephemeralContainer(for: schema), health: .ephemeral)
         }
+    }
+
+    private static func log(_ error: Error, _ message: String) {
+        Logger(subsystem: Bundle.main.bundleIdentifier ?? "Heptad", category: "store")
+            .error("\(message): \(error)")
     }
 
     /// The stand-in. `try!` because reaching it means the schema itself cannot be built, which no
@@ -110,8 +141,9 @@ struct HeptadApp: App {
         #else
         WindowGroup {
             ContentView()
+                .environment(Self.sharedStatus)
         }
-        .modelContainer(Self.sharedModelContainer)
+        .modelContainer(Self.sharedStore.container)
         #endif
     }
 }
