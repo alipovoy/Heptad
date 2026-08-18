@@ -13,16 +13,9 @@ import UIKit
 @MainActor
 struct MarkdownTextViewCopyTests {
 
-    private func textView(_ markdown: String, plainText: Bool = false) -> MarkdownTextView {
-        let view = MarkdownTextView()
-        view.apply(MarkdownStyling.Appearance(plainText: plainText, fontSize: 16))
-        view.load(markdown: markdown)
-        return view
-    }
-
     /// A copied run carries its `**` even though nothing on screen shows one.
     @Test func copyingAStyledSelectionTakesItsDelimitersWithIt() {
-        let view = textView("pass: **rotate-me**")
+        let view = makeTextView("pass: **rotate-me**")
 
         // "pass: rotate-me" — the bold run, without the space before it.
         view.selectedRange = NSRange(location: 6, length: 9)
@@ -33,7 +26,7 @@ struct MarkdownTextViewCopyTests {
     /// The whole note, so a copy from one note into another is exact.
     @Test func copyingEverythingGivesTheNoteBack() {
         let source = "- [ ] rotate ~~the~~ _keys_"
-        let view = textView(source)
+        let view = makeTextView(source)
 
         view.selectedRange = NSRange(location: 0, length: (view.text ?? "").utf16.count)
 
@@ -42,7 +35,7 @@ struct MarkdownTextViewCopyTests {
 
     /// In plain mode the buffer already is the source, so a copy is the characters as they are.
     @Test func copyingInPlainModeTakesTheCharactersAsTheyAre() {
-        let view = textView("pass: **rotate-me**", plainText: true)
+        let view = makeTextView("pass: **rotate-me**", plainText: true)
 
         view.selectedRange = NSRange(location: 6, length: 13)
 
@@ -51,7 +44,7 @@ struct MarkdownTextViewCopyTests {
 
     /// Nothing selected is nothing to write: a stray ⌘C must not empty the clipboard.
     @Test func copyingAnEmptySelectionWritesNothing() {
-        let view = textView("keys")
+        let view = makeTextView("keys")
 
         view.selectedRange = NSRange(location: 2, length: 0)
 
