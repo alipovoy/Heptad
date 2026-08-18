@@ -55,4 +55,27 @@ struct NoteItemTests {
 
         #expect(note.lastEditedAt == testCase.expected)
     }
+
+    // MARK: - Which rows a view may address
+
+    /// The seven the app is about, whatever else the store turns out to hold.
+    @Test func addressableKeepsTheSevenAndDropsWhatIsBesideThem() {
+        let stored = (-2..<(AppConstants.noteCount + 2)).map { NoteItem(id: $0) }
+
+        let addressable = NoteItem.addressable(in: stored)
+
+        #expect(addressable.map(\.id) == Array(0..<AppConstants.noteCount))
+    }
+
+    /// Both ends of the range, not just the top.
+    ///
+    /// An id below zero is as much a stranger as one above six, and bounding only the top made the
+    /// count read seven-plus-one — which puts `ContentView` on its "notes could not be loaded"
+    /// branch, and nothing in the app gets back off that.
+    @Test(arguments: [-1, AppConstants.noteCount])
+    func aStrayIdDoesNotChangeHowManyNotesThereAre(stray: Int) {
+        let stored = (0..<AppConstants.noteCount).map { NoteItem(id: $0) } + [NoteItem(id: stray)]
+
+        #expect(NoteItem.addressable(in: stored).count == AppConstants.noteCount)
+    }
 }

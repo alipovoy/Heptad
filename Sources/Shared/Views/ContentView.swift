@@ -20,12 +20,9 @@ struct ContentView: View {
     /// never ticks against a window nobody can see.
     @State private var ticker = RelativeTimeTicker()
 
-    /// The seven notes this view addresses, by id rather than by row count.
-    ///
-    /// A note is addressed by its position here, so this has to hold ids `0..<noteCount` in order;
-    /// a store carrying an eighth id still has seven good notes in it. Extras are ignored rather
-    /// than deleted: they are not this view's to remove.
-    private var notes: [NoteItem] { stored.filter { $0.id < AppConstants.noteCount } }
+    /// The seven notes this view addresses, by id rather than by row count. The rule is
+    /// `NoteItem.addressable(in:)`, which is where it can be tested.
+    private var notes: [NoteItem] { NoteItem.addressable(in: stored) }
 
     #if os(macOS)
         private static let willTerminateNotification = NSApplication.willTerminateNotification

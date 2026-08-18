@@ -38,6 +38,21 @@ final class NoteItem {
 extension NoteItem {
     var isEmpty: Bool { text.isEmpty }
 
+    /// The rows a view may address by position — ids `0..<AppConstants.noteCount`, in the order
+    /// the store handed them over.
+    ///
+    /// A note is addressed by its place in this array, so an id outside the range has no place in
+    /// it, at either end: letting one through makes the count read seven-plus-one and strands
+    /// `ContentView` on its "notes could not be loaded" branch, which nothing in the app can get
+    /// back from. Extras are ignored rather than deleted — a store carrying an eighth row still
+    /// has seven good notes in it, and they are not a view's to remove.
+    ///
+    /// Lifted out of `ContentView` so it can be tested: the branch it decides is a live editor
+    /// against a screen with no way off it.
+    static func addressable(in notes: [NoteItem]) -> [NoteItem] {
+        notes.filter { (0..<AppConstants.noteCount).contains($0.id) }
+    }
+
     /// When the note was last edited, or nil when there is no edit to report.
     ///
     /// Two cases have a `modifiedAt` that is worse than useless to show. An empty note has
