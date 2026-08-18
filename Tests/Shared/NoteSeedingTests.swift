@@ -65,9 +65,8 @@ struct NoteSeedingTests {
         #expect(restored.isPlainText, "or reset how it is displayed")
     }
 
-    /// Seven rows is not the same as these seven notes. A store with a hole in it and a stray id
-    /// beside it has the right *count*, and a count check in front of the loop returned early —
-    /// so the hole was never filled, on this launch or any later one.
+    /// Seven rows is not the same as these seven notes: a hole plus a stray id has the right count,
+    /// and a count check in front of the loop returned early, so the hole was never filled.
     @Test func aStoreWithTheRightCountAndTheWrongIdsIsStillRepaired() throws {
         let context = try inMemoryContext()
         for id in [0, 1, 2, 4, 5, 6, 9] { context.insert(NoteItem(id: id, text: "note \(id)")) }

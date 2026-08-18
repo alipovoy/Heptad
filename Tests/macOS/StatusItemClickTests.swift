@@ -3,12 +3,9 @@ import Testing
 
 @testable import Heptad
 
-/// Which status-item clicks open the menu rather than the panel.
-///
-/// The menu is the app's only chrome — the Quit item in it is the only way out other than ⌘Q — so
-/// a click that should raise it and instead opens a note is a dead end for anyone who does not
-/// know the shortcut. What the branch does either way (a menu popping up, a window appearing) is
-/// not assertable in a test host; the decision is.
+/// Which status-item clicks open the menu rather than the panel. The menu is the app's only
+/// chrome, and its Quit item the only way out other than ⌘Q. What each branch then does — a menu
+/// popping up, a window appearing — is not assertable in a test host; the decision is.
 @MainActor
 struct StatusItemClickTests {
 

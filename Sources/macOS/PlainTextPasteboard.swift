@@ -29,18 +29,14 @@ extension NSPasteboard {
     /// The most markup ⌘V will decode before falling back to pasting the clipboard's characters.
     static let richPasteByteLimit = 1 << 20
 
-    /// Whether the clipboard's markup is small enough to be worth decoding, which is the one
-    /// thing standing between ⌘V and an unbounded main-thread stall.
+    /// Whether the clipboard's markup is small enough to be worth decoding, which is what stands
+    /// between ⌘V and an unbounded main-thread stall.
     ///
-    /// The whole of `markdownForPaste` runs inside the key-event monitor with the key-down still
-    /// undelivered, and the decode is super-linear: 23 KB of HTML measured at 250 ms, 203 KB at
-    /// **2.9 seconds** — long enough for macOS to start calling the app unresponsive. Bounding the
-    /// *input* rather than the algorithm is what makes the worst case "the bold did not survive"
-    /// instead of "frozen for three seconds"; `plainTextForPaste` reads the `.string` flavor and
-    /// costs nothing.
-    ///
-    /// The limit is far past any realistic scratchpad paste, so nothing anyone would type reaches
-    /// it. Sizes are read rather than decoded — `data(forType:)` is a copy, not a parse.
+    /// `markdownForPaste` runs inside the key-event monitor with the key-down still undelivered,
+    /// and the decode is super-linear: 23 KB of HTML measured at 250 ms, 203 KB at 2.9 seconds.
+    /// Bounding the input makes the worst case "the bold did not survive" rather than a hang, and
+    /// the limit is far past any realistic paste. Sizes are read rather than decoded —
+    /// `data(forType:)` is a copy, not a parse.
     private var richFlavorsAreWorthDecoding: Bool {
         let types: [NSPasteboard.PasteboardType] = [.html, .rtfd, .rtf]
         let markup = (pasteboardItems ?? []).reduce(0) { total, item in
@@ -86,10 +82,8 @@ extension NSPasteboard {
     /// declared and left empty: it contributes nothing, so the search moves on to the next
     /// flavor instead of calling that clipboard successfully pasted.
     ///
-    /// Every reading above ends here, which is why the characters a note may not hold are taken
-    /// out here too — the `.string` flavor is tried first and never goes near the writer, and ⌘⇧V
-    /// inserts what this returns directly. A clipboard whose whole content was an image's
-    /// placeholder comes back empty, so the search falls through to a flavor with text in it.
+    /// Every reading above ends here, so the characters a note may not hold are taken out here too:
+    /// the `.string` flavor never goes near the writer, and ⌘⇧V inserts what this returns directly.
     private static func joined(_ texts: [String]) -> String? {
         let joined = texts.map(NoteCharacters.storable).filter { !$0.isEmpty }.joined(separator: "\n")
         return joined.isEmpty ? nil : joined

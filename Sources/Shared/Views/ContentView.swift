@@ -20,13 +20,11 @@ struct ContentView: View {
     /// never ticks against a window nobody can see.
     @State private var ticker = RelativeTimeTicker()
 
-    /// The seven notes this view addresses, by id rather than by how many rows there are.
+    /// The seven notes this view addresses, by id rather than by row count.
     ///
-    /// Everything above `NoteEditorCoordinator` addresses a note by its position in this array,
-    /// so what it has to hold is ids `0..<noteCount` in order — which counting rows is only a
-    /// proxy for. A store holding an eighth id has seven perfectly good notes in it, and the
-    /// count made that a permanent "could not be loaded" with all seven intact on disk and
-    /// unreachable. Extras are ignored rather than deleted: they are not this view's to remove.
+    /// A note is addressed by its position here, so this has to hold ids `0..<noteCount` in order;
+    /// a store carrying an eighth id still has seven good notes in it. Extras are ignored rather
+    /// than deleted: they are not this view's to remove.
     private var notes: [NoteItem] { stored.filter { $0.id < AppConstants.noteCount } }
 
     #if os(macOS)
@@ -56,10 +54,9 @@ struct ContentView: View {
 
                     statisticsBar(for: selectedNote)
                     #if os(macOS)
-                        // macOS alone: there is no root background there, so each part of the
-                        // stack paints its own. iOS has one below, and painting the bar again
-                        // composited a second 0.1 of the note's colour under it — a tint 26%
-                        // stronger than the same bar on macOS.
+                        // macOS has no root background, so each part of the stack paints its own.
+                        // iOS has one below, and painting the bar again would composite a second
+                        // wash under it.
                         .background(backgroundFill)
                     #endif
                 }
@@ -67,11 +64,8 @@ struct ContentView: View {
                     .background(backgroundFill.ignoresSafeArea(edges: [.bottom, .leading, .trailing]))
                 #endif
             } else {
-                // Not a state anything is working its way out of. `sharedModelContainer` seeds
-                // before it hands the container over, and both mount sites take it from there, so
-                // the first pass never runs against an unseeded store — and nothing afterwards
-                // adds or removes a note. Taken once, this branch is taken forever, and the
-                // spinner that used to be here promised progress that was not happening.
+                // Not a loading state: `sharedModelContainer` seeds before either mount site gets
+                // it, and nothing afterwards adds or removes a note. Taken once, taken forever.
                 ContentUnavailableView(
                     "Notes could not be loaded",
                     systemImage: "exclamationmark.triangle",
@@ -81,9 +75,8 @@ struct ContentView: View {
             }
         }
         #if os(macOS)
-            // On the `Group`, so the unavailable branch is sized and inset like the editor is:
-            // the panel draws no title bar, and without these the message sat under one that is
-            // not there, in a window the user could shrink to nothing.
+            // On the `Group`, so the unavailable branch is sized and inset like the editor: the
+            // panel has no title bar of its own for the content to sit under.
             .frame(
                 minWidth: AppConstants.Window.minimumContentSize.width,
                 minHeight: AppConstants.Window.minimumContentSize.height)
@@ -112,11 +105,9 @@ struct ContentView: View {
                 ticker.start()
             }
             .onReceive(NotificationCenter.default.publisher(for: .windowDidHide)) { _ in
-                // `WindowManager.hide` has already asked the savers to flush — this is the half it
-                // cannot do, having no model context. The second post is inert (nothing is pending
-                // by now) and keeps one name for "make the notes durable". Without it, a dismissal
-                // was durable only because SwiftData's autosave happens to fire on the
-                // deactivation that follows.
+                // Committing the context is the half `WindowManager.hide` cannot do, having no
+                // model context; its own flush post has already run, so the one here is inert.
+                // Without this, a dismissal is durable only by SwiftData's autosave.
                 flushPendingSaves()
                 ticker.stop()
             }
@@ -125,11 +116,9 @@ struct ContentView: View {
 
     /// The bar, built against the note itself rather than against `selectedNote`.
     ///
-    /// `togglePlainText` escapes: `TextStatisticsBar` stores it and a `Button` calls it later, at
-    /// which point reading `selectedNote` would mean reading `@Query` and `@AppStorage` off a
-    /// captured copy of this view, outside the `body` pass that made it — the hazard `selection`
-    /// below is built the way it is to avoid. A `NoteItem` is a reference, so capturing one is
-    /// capturing the note and nothing else.
+    /// `togglePlainText` escapes, and reading `selectedNote` when it fires would mean reading
+    /// `@Query` and `@AppStorage` off a captured copy of this view, outside the `body` pass that
+    /// made it. A `NoteItem` is a reference, so capturing one captures the note alone.
     private func statisticsBar(for note: NoteItem) -> some View {
         TextStatisticsBar(
             statistics: statistics,
@@ -176,16 +165,15 @@ struct ContentView: View {
 
     private var selectedNote: NoteItem { notes[selectedNoteIndex] }
 
-    /// The note's colour, faintly. Plain, with no `ignoresSafeArea` folded in: only the root fill
-    /// on iOS has a safe area to ignore, and carrying it on the shared value applied it to two
-    /// more uses that sit in the middle of a `VStack`.
+    /// The note's colour, faintly. No `ignoresSafeArea` folded in: only the root fill on iOS has a
+    /// safe area to ignore, and the other uses sit in the middle of a `VStack`.
     private var backgroundFill: some View {
         NotePalette.colors[selectedNoteIndex].opacity(AppConstants.Layout.noteTintOpacity)
     }
 
     #if os(macOS)
-        /// The close button, and the hidden copy of it that balances the row. Drawn as it stands:
-        /// the panel is a menubar popover and there is no title bar on iOS to scale.
+        /// The close button, and the hidden copy that balances the row. Fixed rather than scaled:
+        /// the panel is a menubar popover built around these sizes.
         private static let titleBarIconSize: CGFloat = 18
 
         private var macOSTitleBar: some View {
@@ -231,7 +219,7 @@ struct ContentView: View {
 }
 
 /// The branch that shows when the store does not hold the seven notes — an empty store stands in
-/// for a seed that did not happen. Not a loading state: nothing later fills it in.
+/// for a seed that did not happen.
 #Preview("Notes missing") {
     ContentView()
         .modelContainer(PreviewFixtures.container(seeded: false))

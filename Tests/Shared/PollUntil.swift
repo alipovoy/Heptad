@@ -4,12 +4,9 @@ import Foundation
 ///
 /// Failing by *throwing* — rather than recording an `Issue` and returning — stops the test
 /// at the wait. Otherwise the assertions that follow run against a value that was never
-/// written and fail a second time with an unrelated message: an unwritten `NoteItem.text` is
-/// `""`, so the comparison after the wait reports the note's whole content missing, which reads
-/// like the writer dropped it rather than like a debounce that had not fired yet.
-///
-/// (The example this used to give was `rtfData`, which #118 removed along with every trace of RTF
-/// in the app.)
+/// written and fail a second time with an unrelated message: an unwritten `NoteItem.text` is `""`,
+/// so the comparison after the wait reports the note's whole content missing, which reads like the
+/// writer dropped it rather than like a debounce that had not fired yet.
 struct ConditionTimeout: Error, CustomStringConvertible {
     let condition: String
     let timeout: Duration

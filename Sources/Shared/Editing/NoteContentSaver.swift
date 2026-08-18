@@ -12,9 +12,9 @@ class NoteContentSaver {
 
     /// The longest a burst of typing may go unwritten, however continuous it is.
     ///
-    /// The debounce alone means "300 ms after you stop", not "at most 300 ms": anything above
-    /// roughly 40 wpm keeps rearming the timer, and a paragraph typed without a pause lives only
-    /// in the text view. This bounds what a crash can take.
+    /// The debounce alone means "300 ms after you stop", not "at most 300 ms": continuous typing
+    /// keeps rearming the timer, so the whole burst lives only in the text view. This bounds what
+    /// a crash can take.
     nonisolated static let defaultMaxDelay: Duration = .seconds(2)
 
     private var saveTask: Task<Void, Never>?
@@ -56,10 +56,8 @@ class NoteContentSaver {
 
     /// Debounces a write, reading the text when the write actually happens.
     ///
-    /// The debounce is what keeps a save from being paid per keystroke, and the ceiling is what
-    /// keeps it from never being paid at all: every keystroke restarts the timer, so typing
-    /// faster than the debounce leaves the whole burst in the text view and nowhere else. The
-    /// wait is whichever of the two comes first.
+    /// The debounce keeps a save from being paid per keystroke; the ceiling keeps it from never
+    /// being paid at all. The wait is whichever of the two comes first.
     func save(_ text: @escaping @MainActor () -> String?) {
         saveTask?.cancel()
         pendingText = text

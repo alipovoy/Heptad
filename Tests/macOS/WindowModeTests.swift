@@ -42,9 +42,9 @@ extension WindowServerTests {
             #expect(window.isFloatingPanel, "A detached window stays above other apps")
         }
 
-        /// P1-8: minimising was the one way off the screen that did not go through `hide(_:)`, so a
-        /// minimised window came back still detached, with no flush and no `.windowDidHide` behind it.
-        /// The mask is fixed at creation now, so there is no branch that can put the button back.
+        /// Minimising was the one way off the screen that did not go through `hide(_:)`, so a
+        /// minimised window came back still detached, with no flush and no `.windowDidHide` behind
+        /// it. The mask is fixed at creation, so no branch can put the button back.
         @Test func theWindowIsNeverMiniaturizableInEitherMode() throws {
             let window = try fixture.showWindow()
 
@@ -96,9 +96,8 @@ extension WindowServerTests {
                 "and reattaching does not put it back")
         }
 
-        /// Unpinning leaves the window where it is — it is not yanked back under the status item until
-        /// the next show. So the drag-away gesture has to be re-armed from where the window actually
-        /// is, or the distance from a stale anchor immediately reads as a drag.
+        /// Unpinning leaves the window where it is until the next show, so the drag-away gesture has
+        /// to re-arm from there: measured from a stale anchor, the distance already reads as a drag.
         @Test func unpinningRestoresPanelBehaviourInPlace() throws {
             let window = try fixture.showWindow()
             manager.setPinned(true)

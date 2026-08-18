@@ -3,12 +3,8 @@ import Testing
 
 @testable import Heptad
 
-// The stand-ins `EditorShortcutManagerTests` drives the dispatch table against. Split out of that
-// file so the tests are the file: what these record is one question ("which command did the key
-// reach?") and it is answered the same way for all of them.
-//
-// Not `private`, because they are used from another file now — which is also why the spy text view
-// is `final` and its `record` stays as narrow as the subclassing allows.
+// The stand-ins `EditorShortcutManagerTests` drives the dispatch table against, all answering one
+// question: which command did the key reach? Not `private`, since they are used from another file.
 
 /// Records the editing commands `handleTextViewShortcut` dispatches instead of running them.
 ///

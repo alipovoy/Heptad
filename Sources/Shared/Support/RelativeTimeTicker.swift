@@ -15,8 +15,7 @@ import Foundation
 @MainActor
 @Observable
 final class RelativeTimeTicker {
-    /// How often the clock is re-read while the window is on screen. Coarse on purpose — the
-    /// edit-time label is a staleness cue, not a stopwatch, as the note above argues at length.
+    /// How often the clock is re-read while the window is on screen. Coarse for the reason above.
     nonisolated static let defaultInterval: Duration = .seconds(30)
 
     /// The instant the labels format against. Re-read on `start()` and on every tick.

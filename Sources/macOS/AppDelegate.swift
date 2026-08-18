@@ -31,10 +31,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let button = self.statusBarItem.button else { return }
             self.windowManager.toggleWindow(sender: button)
         }
-        // A failure here is not fatal — everything else keeps working, only the hotkey is inert —
-        // but the app advertises a summon key and has no settings UI, so a user whose combination
-        // is owned by Spotlight or Raycast would otherwise have nothing at all to go on. The
-        // right-click menu says so too; see `statusItemMenu`.
+        // Not fatal — only the hotkey is inert — but the app advertises a summon key and has no
+        // settings UI, so this and `statusItemMenu` are all a user whose combination is already
+        // owned has to go on.
         if !hotKeyManager.register() {
             Logger(subsystem: Bundle.main.bundleIdentifier ?? "Heptad", category: "hotkey")
                 .warning("The global hotkey could not be claimed; another app owns it.")
@@ -44,10 +43,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         _ = HeptadApp.sharedModelContainer
     }
 
-    /// Not the app's shutdown path, despite being the place a reader looks for one: the pending-save
-    /// flush lives in `ContentView`, on `willTerminateNotification`, because that is what holds the
-    /// model context. This releases the hotkey, which `deinit` also does and process exit does
-    /// anyway — kept only because a registration this explicit reads wrong without a release.
+    /// Not the app's shutdown path: the pending-save flush lives in `ContentView`, on
+    /// `willTerminateNotification`, because that is what holds the model context. This releases the
+    /// hotkey, which `deinit` and process exit would do anyway.
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyManager.unregister()
     }
@@ -72,12 +70,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Whether the event asks for the menu rather than the panel.
     ///
-    /// ⌃-click is the documented equivalent of a right-click on macOS, and it arrives as a
-    /// `.leftMouseUp` carrying `.control` — so it used to open the panel, leaving ⌘Q as the only
-    /// way to quit for anyone who reaches for the menu that way.
+    /// ⌃-click is the documented equivalent of a right-click on macOS, and arrives as a
+    /// `.leftMouseUp` carrying `.control`.
     ///
-    /// Internal so a test can hand it an event: what it decides between is a menu popping up and a
-    /// window appearing, neither of which is assertable in a test host.
+    /// Internal so a test can hand it an event: neither a menu popping up nor a window appearing
+    /// is assertable in a test host.
     func isSecondaryClick(_ event: NSEvent?) -> Bool {
         guard let event else { return false }
 
@@ -86,8 +83,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The right-click menu, which carries a disabled line when the summon key could not be
-    /// claimed. This menu is the app's only chrome, so it is the only place that can say why the
-    /// advertised shortcut does nothing.
+    /// claimed — this menu is the app's only chrome, so nowhere else can say so.
     ///
     /// Disabled by having no action rather than by `isEnabled`, which an enclosing menu
     /// recomputes for itself.

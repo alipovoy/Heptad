@@ -8,14 +8,9 @@ struct TextStatisticsBar: View {
     /// When the selected note was last edited, or nil for a note with no edit to report.
     let lastEditedAt: Date?
 
-    /// The clock the edit time is measured against, handed over as the ticker rather than as the
-    /// `Date` it is currently showing.
-    ///
-    /// Reading `now` is what subscribes a view to the tick, and this is the only view that wants
-    /// it: read in `ContentView`'s body instead, every 30 seconds re-evaluated the whole tree —
-    /// title bar, seven colour circles, background and the representable — measured at root=1,
-    /// circles=7, `updateNSView`=1 per tick against 0/0/0 for this shape. That is the same
-    /// invalidation the `EditorStatistics` hoist above exists to avoid, arriving next door.
+    /// The clock the edit time is measured against, handed over as the ticker rather than as a
+    /// `Date`: reading `now` is what subscribes a view to the tick, and reading it in
+    /// `ContentView`'s body re-evaluated the whole tree every 30 seconds.
     let ticker: RelativeTimeTicker
 
     let color: Color
@@ -36,15 +31,15 @@ struct TextStatisticsBar: View {
         private let statisticsFontSize = Self.baseStatisticsFontSize
         private let toggleIconSize = Self.baseToggleIconSize
     #else
-        /// Scaled: iOS is a full-screen window, not a popover, and its text size is one the user
-        /// sets and expects to be honoured. The same numbers, so nothing moves at the default.
+        /// Scaled: iOS is a full-screen window whose text size the user sets. The same numbers,
+        /// so nothing moves at the default.
         @ScaledMetric(relativeTo: .caption2) private var statisticsFontSize =
             Self.baseStatisticsFontSize
         @ScaledMetric(relativeTo: .body) private var toggleIconSize = Self.baseToggleIconSize
     #endif
 
     /// The sizes the two `#if` branches above start from: drawn as they stand on macOS, scaled
-    /// with Dynamic Type on iOS. Base sizes, not drawn ones — which is why they are named so.
+    /// with Dynamic Type on iOS.
     private static let baseStatisticsFontSize: CGFloat = 11
     private static let baseToggleIconSize: CGFloat = 13
 
@@ -53,9 +48,8 @@ struct TextStatisticsBar: View {
         // the leftover width and truncate into it, so the buttons keep the same place at every
         // window size instead of being shunted about by the length of the text beside them.
         //
-        // The 8 here is the gap between the counts and the buttons, not the bar's own padding
-        // below — the same number twice by coincidence, so reading either from the other would
-        // tie two unrelated measurements together.
+        // The 8 is the gap between the counts and the buttons, unrelated to the padding below
+        // despite matching it.
         HStack(spacing: 8) {
             countsText
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -71,9 +65,9 @@ struct TextStatisticsBar: View {
         .foregroundStyle(.secondary)  // Vivid text color relying on the background
     }
 
-    /// Twice the window's own wash, so the bar reads as a band across the bottom of the note
-    /// rather than as more of the note. Not the same value as `Layout.noteTintOpacity` and not
-    /// derived from it: one is the paper, this is the band on it.
+    /// Twice the window's own wash, so the bar reads as a band across the bottom rather than as
+    /// more of the note. Not derived from `Layout.noteTintOpacity`: that is the paper, this is the
+    /// band on it.
     private static let tintOpacity: Double = 0.2
 
     /// The per-note plain-text switch. It sits here rather than in the macOS title bar the

@@ -15,9 +15,8 @@ import Testing
 /// `handleClickOutside(_:)` is handed a synthesized click rather than a real one.
 ///
 /// Both tests that depend on real key-window status live here rather than being spread across
-/// suites, so they cannot race each other for it. What that used to say — that `.serialized` on
-/// this suite guaranteed it — was only true of these two: three other suites were ordering windows
-/// front in parallel. They are all inside one serialized suite now; see `WindowServerTests`.
+/// suites; every suite that orders a window front is serialized against them by
+/// `WindowServerTests`.
 extension WindowServerTests {
     /// Nested for the window server — see `WindowServerTests`.
     @MainActor
@@ -59,12 +58,10 @@ extension WindowServerTests {
 
         // MARK: - Activation
 
-        /// Heptad is made active *before* the window is ordered on, not after.
+        /// Heptad is made active before the window is ordered on, not after.
         ///
-        /// Key status is granted by the window server and only to the active application, so asking
-        /// for it from the background asks for something that cannot be given: the panel came up
-        /// without key, and without a caret, until something else activated the app. Measured on the
-        /// real app after a dismissal, it was still inactive a second later.
+        /// Key status is granted by the window server and only to the active application, so a
+        /// window ordered on from the background comes up without key and without a caret.
         @Test func theAppIsActivatedBeforeTheWindowIsOrderedOn() throws {
             fixture.activation.whileActivating = { [manager] in
                 #expect(
@@ -80,13 +77,12 @@ extension WindowServerTests {
 
         // MARK: - The click-outside monitor
 
-        /// A click carrying one of this app's own windows is a click *inside* it.
+        /// A click carrying one of this app's own windows is a click inside it.
         ///
-        /// The monitor is global, and a global monitor is documented to see only what is dispatched
-        /// to other applications — but not the click that activates an inactive app, which arrives
-        /// here too with `event.window` resolved in this process. Heptad is inactive on every show
-        /// that follows a dismissal, so the first click after one was closing the panel: any click,
-        /// the text included, and the note went away under the caret.
+        /// A global monitor is documented to see only what is dispatched to other applications, but
+        /// the click that activates an inactive app arrives here too, with `event.window` resolved
+        /// in this process. Heptad is inactive on every show that follows a dismissal, so the first
+        /// click after one — the text included — was closing the panel under the caret.
         @Test func aClickCarryingOneOfOurOwnWindowsDoesNotDismissThePanel() throws {
             let window = try fixture.showWindow()
 
@@ -114,8 +110,8 @@ extension WindowServerTests {
             #expect(window.isVisible)
         }
 
-        /// A left mouse-down as the monitor reports it. `windowNumber` is the whole subject: it is
-        /// what `NSEvent.window` resolves from, and 0 is what a click in another process carries.
+        /// A left mouse-down as the monitor reports it. `windowNumber` is what `NSEvent.window`
+        /// resolves from, and 0 is what a click in another process carries.
         private func click(in window: NSWindow?) throws -> NSEvent {
             try #require(
                 NSEvent.mouseEvent(
@@ -196,13 +192,12 @@ extension WindowServerTests {
         }
 
         /// A resized window comes back the size the user left it, across launches — the claim
-        /// `frameAutosaveName` is there for, and one nothing could check, because every fixture
-        /// turns autosaving off to stay out of the installed app's own defaults.
+        /// `frameAutosaveName` is there for.
         ///
-        /// This one asks for a UUID name instead and hands what AppKit wrote to a second manager,
-        /// which is a fresh launch as far as AppKit is concerned. The *origin* is deliberately not
-        /// asserted: every show starts as the panel, so it is re-anchored under the status item
-        /// whatever was saved — measured, and it is why `openingContentSize` names only a size.
+        /// Autosaving under a UUID name, since every other fixture turns it off to stay out of the
+        /// installed app's defaults; handing what AppKit wrote to a second manager is a fresh launch
+        /// as far as AppKit is concerned. The origin is deliberately not asserted: every show starts
+        /// as the panel and is re-anchored under the status item whatever was saved.
         @Test func aResizedWindowComesBackTheSizeItWasLeft() throws {
             let resized = CGSize(width: 480, height: 360)
 

@@ -89,11 +89,10 @@ class GlobalHotKeyManager {
     /// Persists a new binding, re-registering it immediately when the hotkey is already live.
     /// There is no settings UI yet; this is the seam one would drive.
     ///
-    /// A binding that will not register is rolled back, and the one that was working is claimed
-    /// again. Without that, one attempt at a combination another app already owns left the app
-    /// with no hotkey at all and nothing to change it with: `register()` gives up the working
-    /// claim before it tries, and the failed binding was already in `UserDefaults` — so it was
-    /// read back at every launch after, and failed again.
+    /// A binding that will not register is rolled back and the working one reclaimed: `register()`
+    /// gives up its claim before it tries, so a combination another app owns would otherwise be
+    /// left in `UserDefaults` and leave the app with no hotkey at all, at this launch and every
+    /// one after.
     @discardableResult
     func setBinding(keyCode: UInt32, modifierFlags: NSEvent.ModifierFlags) -> Bool {
         let previous = (keyCode: self.keyCode, modifierFlags: self.modifierFlags)

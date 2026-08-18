@@ -35,11 +35,9 @@ struct MarkdownTextViewTests {
         #expect(textView.markdown == "**one**\nplain here\n_three_")
     }
 
-    /// The shape every command downstream of a note switch actually meets, pinned once here.
-    ///
     /// A construct never spans lines, so the writer cannot spell a trait on a terminator
-    /// (`aRunAcrossLinesIsWrittenLineByLine`) — and the renderer must not draw one either, or the
-    /// buffer would claim formatting the next save is bound to drop.
+    /// (`aRunAcrossLinesIsWrittenLineByLine`); the renderer must not draw one either, or the buffer
+    /// would claim formatting the next save is bound to drop.
     @Test func aReloadedNoteCarriesNoTraitOnItsLineTerminators() throws {
         try fixture.loaded("**a**\n**b**")
 
@@ -81,8 +79,7 @@ struct MarkdownTextViewTests {
         EditorShortcutManager(defaults: scratch.defaults).toggleEmphasis(.strong, on: textView)
 
         // What the window does on its way off screen, and what a debounce would do on its own.
-        // On the fixture's own centre: the coordinator now builds its savers with the centre it
-        // was given, so this reaches its saver and no one else's.
+        // On the fixture's own centre, so it reaches this coordinator's saver and no one else's.
         fixture.notificationCenter.post(name: .flushPendingSaves, object: nil)
 
         #expect(note.text == "rotate **keys**")
@@ -147,8 +144,7 @@ struct MarkdownTextViewTests {
             "Typing after the undo is the note's own size, not the clipboard's")
         // The clipboard's red is gone. What is there instead is the note's bold tint, because the
         // caret is still bold — a colour this app derives from the note, not one it was handed.
-        // Both sides required: two `NSColor?` compared equal vacuously if the conversion returned
-        // nil on each, which is a pass that means nothing about the colour.
+        // Both sides unwrapped: two nil conversions would compare equal and mean nothing.
         let caretColor = try #require(textView.typingAttributes[.foregroundColor] as? NSColor)
         let drawn = try #require(caretColor.usingColorSpace(.sRGB))
         let tint = try #require(NotePalette.boldTint(forNoteIndex: 0).usingColorSpace(.sRGB))

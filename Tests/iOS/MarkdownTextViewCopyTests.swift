@@ -3,17 +3,13 @@ import UIKit
 
 @testable import Heptad
 
-/// What ⌘C puts on the clipboard, which on iOS is a whole platform's worth of behaviour the macOS
-/// suites cannot reach.
+/// What ⌘C puts on the clipboard. The buffer holds no delimiters in formatted mode, so copying
+/// its characters loses the note's formatting, and iOS's paste is plain.
+/// `MarkdownTextViewTests.copyingAStyledNoteRoundTripsExactly` pins the same guarantee on macOS;
+/// the iOS target does not compile that suite.
 ///
-/// The buffer holds no delimiters in formatted mode, so copying its characters would take a note's
-/// formatting off the clipboard — and iOS's paste is plain, so pasting it back into another note
-/// gave unformatted text. `MarkdownTextViewTests.copyingAStyledNoteRoundTripsExactly` pins the
-/// same guarantee on macOS; the iOS target does not compile that suite.
-///
-/// Asserted on `markdownForSelection` rather than on `UIPasteboard`, which is a system service
-/// this process cannot depend on being reachable. What the pasteboard is handed is one assignment
-/// past this.
+/// Asserted on `markdownForSelection` rather than on `UIPasteboard`, a system service this process
+/// cannot depend on being reachable.
 @MainActor
 struct MarkdownTextViewCopyTests {
 
@@ -34,7 +30,7 @@ struct MarkdownTextViewCopyTests {
         #expect(view.markdownForSelection == "**rotate-me**")
     }
 
-    /// The whole note, so a copy from one note into another is exact rather than merely close.
+    /// The whole note, so a copy from one note into another is exact.
     @Test func copyingEverythingGivesTheNoteBack() {
         let source = "- [ ] rotate ~~the~~ _keys_"
         let view = textView(source)
@@ -53,8 +49,7 @@ struct MarkdownTextViewCopyTests {
         #expect(view.markdownForSelection == "**rotate-me**")
     }
 
-    /// Nothing selected is nothing to write — and writing it anyway would empty the user's
-    /// clipboard on a stray ⌘C.
+    /// Nothing selected is nothing to write: a stray ⌘C must not empty the clipboard.
     @Test func copyingAnEmptySelectionWritesNothing() {
         let view = textView("keys")
 

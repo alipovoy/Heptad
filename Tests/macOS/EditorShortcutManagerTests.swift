@@ -9,9 +9,8 @@ import Testing
 struct EditorShortcutManagerTests {
     private let scratchDefaults: ScratchDefaults
 
-    /// Private, because `changeFontSize` posts `.editorFontSizeDidChange`: on `.default` that post
-    /// reaches every coordinator alive in the process — every other suite's fixtures — and each one
-    /// repaints its cached views.
+    /// Private, because `changeFontSize` posts `.editorFontSizeDidChange`: on `.default` that would
+    /// reach every other suite's coordinators and repaint their cached views.
     private let notificationCenter = NotificationCenter()
     private let textView: SpyTextView
     private let manager: EditorShortcutManager
@@ -82,9 +81,7 @@ struct EditorShortcutManagerTests {
     }
 
     /// Every `chars` here is lowercase because that is all the table can be handed:
-    /// `KeyboardLayout.commandKey` folds case, so shift is reported once, by `hasShift`. The rows
-    /// that used to pass `"Z"`/`"X"`/`"V"` with `hasShift: false` were covering duplicate cases
-    /// that existed only to tolerate `charactersIgnoringModifiers` reporting the shifted letter.
+    /// `KeyboardLayout.commandKey` folds case, so shift is reported once, by `hasShift`.
     @Test(
         arguments: [
             ("z", false, "undo"), ("z", true, "redo"),
@@ -106,10 +103,9 @@ struct EditorShortcutManagerTests {
     /// they are checked by what they did — to the note for the emphasis commands, and to the
     /// stored zoom for ⌘+/⌘-, which stopped being a text edit when notes became markdown.
     ///
-    /// Which trait landed, and nothing about how the note spells it: that is
-    /// `EditorFormattingTests`, and this test asserting it too made that one a strict subset of
-    /// this one. The trait on the buffer is the cheapest witness that the key reached *this*
-    /// command rather than merely reaching one.
+    /// Which trait landed, and nothing about how the note spells it — that is
+    /// `EditorFormattingTests`. The trait on the buffer is the cheapest witness that the key
+    /// reached this command rather than merely reaching one.
     @Test(
         arguments: [
             ("b", false, Emphasis.strong), ("i", false, .emphasis),
@@ -219,10 +215,9 @@ struct EditorShortcutManagerTests {
         let storage = try #require(textView.textStorage)
         let font = try #require(storage.attribute(.font, at: 2, effectiveRange: nil) as? NSFont)
         #expect(font.pointSize == AppConstants.Layout.defaultFontSize, "at the note's own size")
-        // The exact colour, not `!= .systemRed`: the clipboard's colour never reaches this buffer
-        // to begin with — ⌘V goes clipboard → markdown → `String` → `insertText`, so no attribute
-        // survives the trip — and `normalize` can only write a colour this app derives. The
-        // negation was true of every possible outcome; this is true of one.
+        // The exact colour, not `!= .systemRed`: ⌘V goes clipboard → markdown → `String` →
+        // `insertText`, so no attribute survives the trip and the negation would hold of every
+        // possible outcome.
         #expect(
             storage.attribute(.foregroundColor, at: 2, effectiveRange: nil) as? NSColor
                 == .adaptiveEditorText,

@@ -44,9 +44,8 @@ struct ListContinuationTests {
         #expect(edit.range == NSRange(location: (line as NSString).length, length: 0))
     }
 
-    /// The largest number a marker can hold continues as itself rather than trapping. Return on
-    /// `9223372036854775807. ` closed the app: an overflow on a keystroke, over a line nothing
-    /// stops anyone typing.
+    /// The largest number a marker can hold continues as itself rather than trapping: Return on
+    /// `9223372036854775807. ` overflowed and closed the app.
     @Test func aMarkerAtTheLargestNumberContinuesWithoutOverflowing() throws {
         let edit = try #require(returnEdit(atEndOf: "\(Int.max). item"))
 
@@ -92,8 +91,8 @@ struct ListContinuationTests {
         #expect(edit.range == NSRange(location: 0, length: (line as NSString).length))
     }
 
-    /// And it takes the whole content, not the marker alone: the item is empty of *text*, which
-    /// is not the same as empty. `- [ ]   ` left its two trailing spaces on the line.
+    /// And it takes the whole content, not the marker alone: `- [ ]   ` is empty of text but not
+    /// empty, and left its two trailing spaces on the line.
     @Test func endingAListClearsTheWhitespaceAfterTheMarkerToo() throws {
         let edit = try #require(returnEdit(atEndOf: "- [ ]   "))
 
@@ -117,9 +116,8 @@ struct ListContinuationTests {
 
     /// A caret at or inside the marker is not in the item yet, so Return is an ordinary newline.
     ///
-    /// Continuing there wrote a second marker in front of the first: `- abc` with the caret at 0
-    /// — pressing Return to open a blank line above an item, which is the common way to reach
-    /// this — became `\n- - abc`, and a caret partway through the marker simply mangled the line.
+    /// Continuing there wrote a second marker in front of the first: `- abc` with the caret at 0 —
+    /// opening a blank line above an item — became `\n- - abc`.
     @Test(
         arguments: [
             ("- abc", 0), ("- abc", 1),

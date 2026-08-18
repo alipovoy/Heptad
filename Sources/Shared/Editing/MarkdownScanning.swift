@@ -2,17 +2,15 @@ import Foundation
 
 /// The scanner: where each construct in `MarkdownSyntax`'s vocabulary occurs in a note's text.
 ///
-/// Split from the vocabulary because the two are read for different reasons — that file is what
-/// the app can express, this one is how it is recognised — and because every helper below is
-/// private to the scan. Nothing outside this file needs any of it but `spans(in:)`.
+/// Split from the vocabulary because the two are read for different reasons: that file is what the
+/// app can express, this one is how it is recognised. Nothing outside needs any of it but
+/// `spans(in:)`.
 extension MarkdownSyntax {
     /// Every styled run in `text`, in source order.
     ///
     /// Parsed line by line, because a construct never spans lines — which is also what would make
     /// a range-scoped overload safe, if anything wanted one. Nothing does: rendering repaints the
-    /// whole note. One was carried here for the incremental repaint that was never written, along
-    /// with the clamping arithmetic its empty range needed; when that caller arrives it can come
-    /// back, with a test.
+    /// whole note.
     ///
     /// Spans may overlap, because constructs nest — an emphasis run inside a strong one is two
     /// spans over the same characters, the outer appended first.
@@ -219,10 +217,7 @@ extension MarkdownSyntax {
     ///
     /// A label is deliberately not parsed — `[**a**](b)` reads literally — but `index(of:)` honours
     /// escapes when it looks for the closing `]`, which is the only reason a label can hold one.
-    /// That left the escape half-implemented: it worked for the parser and showed up for the user.
-    /// A pasted label containing `]` was written `[a\]b](url)`, read back as the visible text
-    /// `a\]b`, and written again the same way — so the backslash was permanent, and a second one
-    /// did not arrive only because the writer's read-back check compares traits, not characters.
+    /// Without this, the `\` of `[a\]b](url)` stayed visible in the label.
     private static func appendEscapeMarkers(
         in text: NSString, over label: NSRange, into spans: inout [Span]
     ) {
@@ -242,13 +237,9 @@ extension MarkdownSyntax {
 
     /// The `)` that ends a link's destination: the first one not closing a `(` opened inside it.
     ///
-    /// Parentheses in a destination are balanced, as CommonMark balances them, because the
-    /// addresses people paste into notes have them —
-    /// `https://en.wikipedia.org/wiki/Foo_(bar)` is one URL. Taking the first `)` instead gave a
-    /// dead link and left the tail of the address sitting in the note as text.
-    ///
-    /// Unbalanced still means no link: an address holding a lone `)` is one this app has no
-    /// spelling for, and the writer's ladder drops the link rather than the characters.
+    /// Parentheses are balanced, as CommonMark balances them, because pasted addresses have them:
+    /// `https://en.wikipedia.org/wiki/Foo_(bar)` is one URL. Unbalanced still means no link — an
+    /// address holding a lone `)` is one this app has no spelling for.
     private static func destinationEnd(in text: NSString, from: Int, limit: Int) -> Int? {
         var depth = 0
         var cursor = from

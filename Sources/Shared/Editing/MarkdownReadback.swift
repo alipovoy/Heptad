@@ -3,11 +3,9 @@ import Foundation
 /// The half of `MarkdownWriting` that reads: whether a candidate line, put back through the
 /// parser, gives the line it was written from.
 ///
-/// Split out of that file rather than living beside the writing it checks, because the two
-/// together no longer fit under the 400-line ceiling `swiftlint` holds this project to. It is a
-/// clean cut — nothing here writes a character, and the writer reaches it through one call — but
-/// the cut has a cost, and this is it: `reads` and `destination` are internal rather than
-/// `private`, since `private` is file scope and they are now used across two files.
+/// A separate file only because the two together no longer fit under the 400-line ceiling
+/// `swiftlint` holds this project to. That is also why `reads` and `destination` are internal
+/// rather than `private`: `private` is file scope.
 extension MarkdownWriting {
     /// Whether `markdown` reads back as the text it was written from: the same characters, and no
     /// formatting on them the text did not already have.
@@ -15,26 +13,21 @@ extension MarkdownWriting {
     /// The characters alone are not enough. `a***b**` has exactly the characters of `a*` followed
     /// by a bold `b`, and reads back as a bold `*b`; only comparing the formatting catches it.
     ///
-    /// Asymmetric on purpose, and this is the half that is easy to get wrong. Formatting the
-    /// writer *cannot spell* is dropped by design — the rules at the top of this file are all
-    /// losses — so a check that called those failures would reject the writer's own correct
-    /// output and send the line to a candidate that keeps less. What must never pass is the other
-    /// direction: emphasis on characters that never carried it, which is why escaping exists.
+    /// One-way on purpose: formatting the writer cannot spell is dropped by design, so calling
+    /// those losses failures would reject the writer's own correct output. What must never pass is
+    /// the other direction — emphasis on characters that never carried it.
     static func reads(_ markdown: String, as original: NSAttributedString) -> Bool {
         let rendered = RichTextRendering.attributed(from: markdown, appearance: reading)
 
-        // Lengths as well as characters, and the lengths first: `String ==` is canonical
-        // equivalence while `length` counts UTF-16 units, and the two disagree — `\u{1100}\u{1161}`
-        // equals `\u{AC00}` at lengths 2 and 1. Nothing on this path renormalizes, so the loop
-        // below was never actually reading past the end of `original`; this is what makes its
-        // bound correct by construction rather than by that argument.
+        // Lengths first, then characters: `String ==` is canonical equivalence while `length`
+        // counts UTF-16 units, and the two disagree — `\u{1100}\u{1161}` equals `\u{AC00}` at
+        // lengths 2 and 1. This is what keeps the loop below inside `original`.
         guard rendered.length == original.length, rendered.string == original.string else {
             return false
         }
 
-        // Walked by run, not by character: both strings answer alike over the overlap of a run
-        // in each, so asking per UTF-16 unit asked the same two dictionaries over and over —
-        // 63,160 lookups for a 15,790-unit note of ~1,200 runs, 32 ms of a 128 ms save.
+        // Walked by run, not by character: both strings answer alike over the overlap of a run in
+        // each, so asking per UTF-16 unit repeated the same two lookups — 32 ms of a 128 ms save.
         var index = 0
         while index < rendered.length {
             var readRun = NSRange(location: 0, length: 0)
@@ -43,9 +36,8 @@ extension MarkdownWriting {
             var intendedRun = NSRange(location: 0, length: 0)
             _ = original.attributes(at: index, effectiveRange: &intendedRun)
 
-            // The last unit of the overlap is asked on its own, because it is the only one whose
-            // *neighbour* can carry something else — and `intent` reads that neighbour, for the
-            // surrogate pair whose halves were given different attributes. Everywhere before it,
+            // The last unit of the overlap is asked on its own: it is the only one whose neighbour
+            // can carry something else, and `intent` reads that neighbour. Everywhere before it,
             // the neighbour is inside this same run and adds nothing.
             let step = min(NSMaxRange(readRun), NSMaxRange(intendedRun))
             if step - 1 > index, !justifies(intent(of: original, at: index), read) { return false }
@@ -73,8 +65,7 @@ extension MarkdownWriting {
     ///
     /// A surrogate pair is one character across two indices, and an attribute may start between
     /// them. `MarkdownSlicing.aligned` moves the writer's boundaries off that split, so the lead
-    /// half comes back carrying what the trail half was given; reading that as formatting
-    /// appearing out of nowhere would send the line to a candidate that keeps less.
+    /// half comes back carrying what the trail half was given.
     private static func intent(
         of original: NSAttributedString, at index: Int
     ) -> [[NSAttributedString.Key: Any]] {

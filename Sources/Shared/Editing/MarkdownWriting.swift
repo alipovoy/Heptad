@@ -29,10 +29,9 @@ enum MarkdownWriting {
     ///
     /// The last candidate ends the ladder unchecked, because it cannot be wrong about the
     /// characters: no delimiters, and a backslash in front of everything the parser would act on.
-    /// Something has to be unconditional, or a line the check rejects twice is written rejected —
-    /// which is how a link this app cannot spell used to change the note's own text. **A save may
-    /// lose formatting; it may never lose a character.** The one exception is what a note may not
-    /// hold at all: `NoteCharacters` says which, taken out before any of this runs.
+    /// Something has to be unconditional — a save may lose formatting; it may never lose a
+    /// character. The one exception is what a note may not hold at all, which `NoteCharacters`
+    /// takes out before any of this runs.
     ///
     /// Per line, because escapes are noise in the source and a note is read in that mode too: a
     /// line that needs them gets them, and the rest of the note stays as clean as it reads.
@@ -58,20 +57,17 @@ enum MarkdownWriting {
     /// `attributed` without the characters a note may not hold, and the same object when there
     /// are none.
     ///
-    /// Taken out here rather than as each slice is written, so every index the check compares
-    /// still lines up: a line whose attachment placeholder went missing between the writing and
-    /// the reading looks like a line the writer got wrong, and would be sent to a candidate that
-    /// keeps nothing.
+    /// Taken out here rather than as each slice is written, so every index the check compares still
+    /// lines up: a placeholder that went missing between the writing and the reading looks like a
+    /// line the writer got wrong.
     private static func storable(_ attributed: NSAttributedString) -> NSAttributedString {
         let source = attributed.string as NSString
         let unstorable: (Int) -> Bool = { !NoteCharacters.isStorable(source.character(at: $0)) }
         guard (0..<source.length).contains(where: unstorable) else { return attributed }
 
-        // Built by appending the runs that stay, rather than deleting the ones that go: each
-        // `deleteCharacters` shifts every character after it, so a 145 KB Windows-line-ending
-        // paste was ~70k O(n) deletions on the save path. Coalescing them into ranges would not
-        // have helped — a `\r` in `\r\n` has a storable character on both sides, so there are no
-        // runs to coalesce in the case that hurts.
+        // Built by appending the runs that stay rather than deleting the ones that go: each
+        // `deleteCharacters` shifts every character after it, and coalescing the deletions into
+        // ranges would not help — a `\r` in `\r\n` has a storable character on both sides.
         let filtered = NSMutableAttributedString()
         var kept = 0
 
@@ -86,9 +82,9 @@ enum MarkdownWriting {
 
     /// How hard one candidate line tries, and the order they are tried in.
     ///
-    /// Two independent retreats, because they give up different things. Escaping costs the source
-    /// its cleanliness; caution costs the note a trait. Neither is worth spending until the
-    /// spelling that keeps both has been written and rejected.
+    /// Two independent retreats, because they give up different things: escaping costs the source
+    /// its cleanliness, caution costs the note a trait. Neither is spent until the spelling that
+    /// keeps both has been written and rejected.
     private struct Spelling {
         /// Every character the parser could act on gets a backslash in front of it.
         let escaping: Bool
@@ -106,10 +102,10 @@ enum MarkdownWriting {
             /// Write `*`, which minds no boundaries and so can be written anywhere `_` cannot.
             case fallback
 
-            /// Write no pair, and lose the trait. What is left when `*` will not read back
-            /// either — the corner where the pair lands inside a `**` one, since `**Test*ing***`
-            /// is a run of asterisks no parser resolves as this meant it. The choice by then is
-            /// between dropping this trait and dropping every trait on the line.
+            /// Write no pair, and lose the trait. What is left when `*` will not read back either —
+            /// the pair landing inside a `**` one, since `**Test*ing***` is a run of asterisks no
+            /// parser resolves. The choice by then is between this trait and every trait on the
+            /// line.
             case dropped
         }
 
@@ -136,9 +132,9 @@ enum MarkdownWriting {
 
         var markdown = ""
         text.enumerateAttribute(.link, in: range, options: []) { value, subrange, _ in
-            // The terminator is not part of the label. A link carrying one reaches the end of
-            // its line rather than spanning two, and writing the `\n` inside the brackets is what
-            // used to drop it everywhere but the note's last line, which has none to carry.
+            // The terminator is not part of the label: a link carrying one reaches the end of its
+            // line rather than spanning two, and a `\n` inside the brackets is not a link the
+            // parser reads back.
             let core = MarkdownSlicing.withoutTerminator(subrange, in: source)
 
             guard let destination = destination(value), core.length > 0 else {
@@ -152,21 +148,18 @@ enum MarkdownWriting {
             // The destination is written as it is: a URL holding a bracket of its own cannot be
             // spelled either way, and escaping there would move the problem into the address.
             //
-            // The pair goes through `delimiter` for the same reason `delimited` does, and it used
-            // not to: writing `_` unconditionally made every rung of the ladder produce the same
-            // bytes for an italic link against a word character, so all six were rejected and the
-            // line fell to `.plain` — which writes the label's characters and no brackets, losing
-            // the destination for good. The neighbours are `core`'s either way, since the pair
-            // still lands outside the whole bracketed form.
+            // The pair goes through `delimiter` for the same reason `delimited` does: writing `_`
+            // unconditionally makes every rung of the ladder produce the same bytes for an italic
+            // link against a word character, and the line falls to `.plain`, which writes no
+            // brackets and loses the destination. The neighbours are `core`'s either way, since the
+            // pair lands outside the whole bracketed form.
             var traits: [String] = []
 
             for trait in uniform(over: core, in: text) {
-                // Except for the pair this same loop has already written, which is the boundary the
-                // inner one needs: what sits beside `_` in `**_[a](u)_**` is an asterisk, not the
-                // word character `mayClose` found in the rendered text. Told otherwise,
-                // `.fallback` spells this italic `*` and writes `***[a](u)***`, which no parser
-                // resolves — so a line sent past `.preferred` by some *other* run on it retreated
-                // all the way to `.dropped` and lost an italic it could have kept.
+                // Shielded by the pair this same loop has already written, which is the boundary
+                // the inner one needs: what sits beside `_` in `**_[a](u)_**` is an asterisk, not
+                // the word character `mayClose` found in the rendered text. Told otherwise,
+                // `.fallback` writes `***[a](u)***`, which no parser resolves.
                 guard
                     let delimiter = delimiter(
                         for: trait, around: core, in: source, as: spelling,
@@ -224,12 +217,11 @@ enum MarkdownWriting {
     /// `**a _b_** _c_`, never as the interleaved `**a _b**c_` that reads as neither.
     ///
     /// Nothing here splits by line: `markdown(from:)` did that and calls `emit` once per line, so
-    /// no section reaching this can span a terminator. A second split used to sit on the `isOn`
-    /// branch — instrumented at 9 of 9 sections returning a single range.
+    /// no section reaching this can span a terminator.
     ///
-    /// `shielded` travels on to the section that *is* the whole of `range`, and to no other: only
-    /// that one has the caller's pair against both of its ends with none of this range's own
-    /// characters in between. See `delimiter(for:around:in:as:shielded:)`.
+    /// `shielded` travels on only to the section that *is* the whole of `range`: only that one has
+    /// the caller's pair against both of its ends with none of this range's own characters in
+    /// between. See `delimiter(for:around:in:as:shielded:)`.
     private static func wrap(
         _ range: NSRange, of text: NSAttributedString, in traits: [Emphasis],
         as spelling: Spelling, shielded: Bool = false
@@ -252,11 +244,9 @@ enum MarkdownWriting {
 
     /// One line's worth of a run, with the pair written around its non-whitespace core.
     ///
-    /// The list marker stays outside the pair, for the reason `content` gives about escaping it:
-    /// `- [ ] ` is content, and a pair written around the whole of it — `**- [ ] task**` — is not a
-    /// line `ListContinuation.markerLength` recognises any more. The characters and the traits both
-    /// survive that spelling, so the check accepts it and the note silently stops being a task:
-    /// Return no longer continues it and `⌘⇧U` finds nothing to toggle.
+    /// The list marker stays outside the pair: `**- [ ] task**` is not a line
+    /// `ListContinuation.markerLength` recognises, and since both the characters and the traits
+    /// survive that spelling the check accepts it — so the note silently stops being a task.
     private static func delimited(
         _ line: NSRange, of text: NSAttributedString, with trait: Emphasis, then rest: [Emphasis],
         as spelling: Spelling, shielded: Bool = false
@@ -266,9 +256,9 @@ enum MarkdownWriting {
         let core = MarkdownSlicing.trimmed(
             NSRange(location: line.location + marker, length: line.length - marker), in: source)
 
-        // Nothing to put a pair around: whitespace has to stay outside one, so a run that is all
-        // whitespace is written as the characters it is. A `.dropped` spelling ends up here too,
-        // for the italics it has given up on.
+        // Nothing to put a pair around: whitespace has to stay outside one, so an all-whitespace
+        // run is written as the characters it is. A `.dropped` spelling ends up here too.
+        //
         // The caller's shield reaches this pair only when the pair goes where the line does: a
         // marker or trimmed whitespace written before it puts a character of the note in between.
         guard core.length > 0,
@@ -297,21 +287,17 @@ enum MarkdownWriting {
     /// Only italic ever has a choice to make, and only where `_` would not read back. `_` is the
     /// quieter character and the one the parser guards with the word-boundary rule that keeps
     /// `AWS_SECRET_KEY` a name, so the ladder spends both of its permissive rungs on it before
-    /// reaching for `*`. Before `*` was written at all, those runs were dropped — which is why
-    /// `⌘I` mid-word showed italic that the next save took away.
+    /// reaching for `*`.
     ///
     /// `shielded` is the caller saying it has already written a pair immediately outside this one,
-    /// which settles the boundary question `mayClose` can only guess at — the delimiter beside this
-    /// one is not a word character, whatever the rendered text had there. It buys `.fallback`
-    /// nothing to reach for `*` in that position: `***hard***` is the one place `*` reads *worse*
-    /// than `_`, since no parser resolves the run of three as this meant it. So the rung failed too
-    /// and the line retreated to `.dropped`, which is how `the **_hard_**ware` — this codebase's own
-    /// example of a `_` that reads back perfectly — came out as `the **hard**ware` whenever some
-    /// *other* run on its line was one `_` could not spell.
+    /// which settles the boundary question `mayClose` can only guess at: the delimiter beside this
+    /// one is not a word character, whatever the rendered text had there. `.fallback` must not reach
+    /// for `*` there — `***hard***` is the one place `*` reads worse than `_`, since no parser
+    /// resolves a run of three.
     ///
     /// It deliberately does not reprieve `.dropped`: the retreat has to stay monotone, or a shielded
-    /// pair that still fails to read back would be written again by every rung and take the line
-    /// all the way to `Spelling.plain`, where a link loses its destination.
+    /// pair that still fails to read back is written again by every rung and takes the line all the
+    /// way to `Spelling.plain`, where a link loses its destination.
     private static func delimiter(
         for trait: Emphasis, around core: NSRange, in source: NSString, as spelling: Spelling,
         shielded: Bool = false
@@ -329,10 +315,10 @@ enum MarkdownWriting {
     /// judged on the neighbours it has in the rendered text. True for every other trait, whose
     /// delimiters mind no boundaries — see `MarkdownSyntax.isWordCharacter`.
     ///
-    /// A lower bound, not an answer: the delimiters this writer is about to put between `core`
-    /// and those neighbours are not here to be seen, so a pair that would have read back can
-    /// still be refused. Which is why refusing it decides nothing on its own — `Spelling.Italic`
-    /// is what a refusal costs, and each rung of the ladder pays more for it than the last.
+    /// A lower bound, not an answer: the delimiters this writer is about to put between `core` and
+    /// those neighbours are not here to be seen, so a pair that would have read back can still be
+    /// refused. Which is why a refusal decides nothing on its own — `Spelling.Italic` is what it
+    /// costs, and each rung of the ladder pays more than the last.
     private static func mayClose(
         _ trait: Emphasis, around core: NSRange, in source: NSString
     ) -> Bool {
@@ -358,11 +344,9 @@ enum MarkdownWriting {
     /// characters that happen to be part of a construct *this* time would leave the result
     /// depending on what the parser found, which is the thing being defended against.
     ///
-    /// With one exception, and it is not one: the list marker at the head of a line is not
-    /// syntax the escaping is defending against. `- [ ] ` is content the user typed or had typed
-    /// for them, and a backslash through it demotes the checkbox to a bare bullet in the stored
-    /// file — a line that read as a task before the save does not after it, and `⌘⇧U` in plain
-    /// mode then has nothing to toggle.
+    /// The list marker at the head of a line is the exception: `- [ ] ` is content, not syntax this
+    /// is defending against, and a backslash through it demotes the checkbox to a bare bullet in
+    /// the stored file, leaving `⌘⇧U` nothing to toggle.
     private static func content(
         _ range: NSRange, of text: NSAttributedString, as spelling: Spelling
     ) -> String {

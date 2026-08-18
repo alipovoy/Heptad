@@ -71,11 +71,8 @@ struct TextStats: Equatable {
         self.lines = lines
     }
 
-    /// The two membership tests, spelled without `CharacterSet`.
-    ///
-    /// `CharacterSet.contains` was the whole cost of this: the same counts came out twice as fast
-    /// on every size measured, 9.8 ms → 5.3 ms for a 145 KB note. The answers are unchanged —
-    /// these are the same two sets, written as the ranges they are.
+    /// The two membership tests, spelled without `CharacterSet`: `CharacterSet.contains` cost the
+    /// loop twice its time (9.8 ms → 5.3 ms for a 145 KB note). Same two sets, written as ranges.
     private static func isNewline(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x0A...0x0D, 0x85, 0x2028, 0x2029: true
@@ -83,14 +80,11 @@ struct TextStats: Equatable {
         }
     }
 
-    /// ASCII first, because notes are mostly ASCII and the property lookup is what costs.
-    /// Everything above it defers to Unicode's own answer, which is what `.alphanumerics`
-    /// documents itself as.
+    /// ASCII first, because notes are mostly ASCII and the property lookup is what costs; above it,
+    /// Unicode's own answer, which is what `.alphanumerics` documents itself as.
     ///
-    /// Not quite what it *answered*, though: Foundation's tables lag the ones
-    /// `Unicode.Scalar.Properties` reads, so scalars it has not caught up with — Tangut, Todhri —
-    /// were letters to Unicode and not to it. They count as words now. That is the only direction
-    /// the two differ in, and it is the newer answer.
+    /// Foundation's tables lag `Unicode.Scalar.Properties`, so scalars it had not caught up with
+    /// (Tangut, Todhri) count as words now. That is the only way the two differ.
     private static func isAlphanumeric(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x30...0x39, 0x41...0x5A, 0x61...0x7A: return true
@@ -98,9 +92,8 @@ struct TextStats: Equatable {
         default: break
         }
 
-        // Letters, marks and numbers — `CharacterSet.alphanumerics` is L* ∪ M* ∪ N*, and the marks
-        // are the half that is easy to miss: a decomposed `é` is a letter followed by a combining
-        // accent, and dropping the accent from the set cuts the word in two.
+        // `CharacterSet.alphanumerics` is L* ∪ M* ∪ N*. The marks matter: a decomposed `é` is a
+        // letter followed by a combining accent, and dropping the accent cuts the word in two.
         switch scalar.properties.generalCategory {
         case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
             .nonspacingMark, .spacingMark, .enclosingMark,

@@ -90,12 +90,11 @@ final class WindowManagerFixture {
 
     /// Frame autosaving is off by default. AppKit keys it on the name in *standard* defaults,
     /// outside any scratch suite, so the shipping name would have this fixture restoring the
-    /// installed app's parked frame — and writing its own back over it. That is what made the
-    /// position assertions pass or fail on what the machine already had.
+    /// installed app's parked frame and writing its own back over it — which is what made the
+    /// position assertions turn on whatever the machine already had.
     ///
-    /// `autosaving: true` opts one test into a UUID name instead, which is the only way to cover
-    /// the claim that a pinned window comes back where the user left it. The key is removed in
-    /// `deinit`, so the run leaves nothing behind either way.
+    /// `autosaving: true` opts one test into a UUID name instead, the only way to cover the claim
+    /// that a window comes back the size the user left it. `deinit` removes the key either way.
     init(autosaving: Bool = false) throws {
         notificationCenter = NotificationCenter()
         workspaceNotificationCenter = NotificationCenter()
@@ -124,8 +123,8 @@ final class WindowManagerFixture {
         manager.window?.close()
         standInWindows.forEach { $0.close() }
 
-        // The autosave writes to standard defaults, so a test that turned it on has to clean up
-        // after itself. A UUID name means nothing else could be reading this key.
+        // The autosave writes to standard defaults, so a test that turned it on cleans up after
+        // itself.
         if !autosaveName.isEmpty {
             UserDefaults.standard.removeObject(forKey: "NSWindow Frame \(autosaveName)")
         }
@@ -134,8 +133,7 @@ final class WindowManagerFixture {
     // MARK: - Showing the window
 
     /// Shows the window and returns it, failing the test when either step doesn't work out.
-    /// `sourceLocation` threaded through, because 20 tests across four files call this: without it
-    /// every failure in here names this line instead of the test that got there.
+    /// `sourceLocation` is threaded through so a failure names the calling test, not this line.
     func showWindow(sourceLocation: SourceLocation = #_sourceLocation) throws -> NSPanel {
         manager.toggleWindow(sender: statusBarButton)
         return try #require(

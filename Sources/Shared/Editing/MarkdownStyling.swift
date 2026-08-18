@@ -48,17 +48,12 @@ enum MarkdownStyling {
         /// what a caller with no note in hand gets: `MarkdownWriting` reads traits, never draws.
         let tintedNoteIndex: Int?
 
-        /// The font every attribute in the note is derived from — resolved when the appearance is
-        /// built rather than each time it is read, which is what puts the *drawn* size into this
-        /// type's identity.
+        /// The font every attribute in the note is derived from, resolved on init so that the
+        /// *drawn* size is part of this type's identity.
         ///
-        /// That matters because `fontSize` is not the size on screen. On iOS `editorBody` scales
-        /// it by Settings › Text Size, and none of the three fields above move when that setting
-        /// does: an appearance carrying only them compared equal across the change, so both
-        /// editors' `apply` guard swallowed the repaint and notes stayed at the old size until the
-        /// app was relaunched. Resolving here means a new appearance built after the change
-        /// differs, and every path that reconfigures — the notification, and a cached view coming
-        /// back in — repaints.
+        /// `fontSize` is not the size on screen: on iOS `editorBody` scales it by Settings › Text
+        /// Size, and none of the fields above move when that setting does. Appearances built either
+        /// side of the change compared equal, so both editors' `apply` guard swallowed the repaint.
         let baseFont: PlatformFont
 
         init(plainText: Bool, fontSize: CGFloat, tintedNoteIndex: Int? = nil) {
@@ -167,12 +162,9 @@ enum MarkdownStyling {
     /// that stopped looking like a link would trade one signal for another. Bold takes the note's
     /// tint, which is the delimiter formatted mode no longer has.
     ///
-    /// Told what the run is rather than handed the run. It used to take the dictionary and dig the
-    /// font back out to ask `symbolicTraits` — an answer both callers had already computed, at the
-    /// price of a fresh `NSFontDescriptor` per run on every normalize, twice per keystroke. Worse,
-    /// it made the call site's position load-bearing with nothing to say so: it read `.font` and
-    /// `.link` out of the dictionary being built, so moving it up a few lines silently stopped
-    /// tinting anything.
+    /// Told what the run is rather than handed the run: digging the traits back out of a dictionary
+    /// costs an `NSFontDescriptor` per run, and reading them from the dictionary being built made
+    /// the call site's position silently load-bearing.
     private static func foregroundColor(
         isLink: Bool, isBold: Bool, in appearance: Appearance
     ) -> PlatformColor {
@@ -186,14 +178,11 @@ enum MarkdownStyling {
     /// Paints the note's tint onto its bold runs, and nothing else.
     ///
     /// What `RichTextRendering` needs after its span loop, in place of a whole-buffer `normalize`
-    /// whose only net effect was this colour: the loop starts from `baseAttributes` and writes
-    /// nothing outside the vocabulary, so every font that pass rebuilt was byte-identical to the
-    /// one already there. It was not free — `MarkdownWriting.reads` renders once per line on every
-    /// save, ⌘C and mode switch, which made it 300 full rebuilds per save of a 300-line note.
+    /// whose only net effect was this colour: that loop starts from `baseAttributes` and writes
+    /// nothing outside the vocabulary, so every font it rebuilt was identical to the one there.
     ///
-    /// Order-independence survives, and is stated more plainly than it was: this runs after every
-    /// span, and skips runs carrying a link, so the link colour wins whichever order the parser
-    /// emitted the two in.
+    /// This runs after every span and skips runs carrying a link, so the link colour wins whichever
+    /// order the parser emitted the two in.
     static func tintBold(_ appearance: Appearance, in storage: NSMutableAttributedString) {
         guard appearance.isStyled, let index = appearance.tintedNoteIndex else { return }
 
@@ -251,17 +240,13 @@ enum MarkdownStyling {
 }
 
 extension PlatformFont {
-    /// The font every note is drawn in, and the one every other cut is derived from — see
-    /// `bolded()`, `italicized()` and `MarkdownStyling.baseAttributes`. So this is the single place
-    /// text size is decided, on either platform.
+    /// The font every note is drawn in, and the one every other cut is derived from — so the single
+    /// place text size is decided, on either platform.
     ///
-    /// On iOS `size` is a *base* that Dynamic Type scales, not the final point size. It has to be:
-    /// iOS carries a system-wide text size (Settings › Display & Brightness, and the Accessibility
-    /// larger-text slider), the user has already stated a preference there, and a fixed
-    /// `.systemFont(ofSize:)` overrode it — the notes stayed 16 pt for someone who needs 24, with
-    /// nothing in the app to change them, while `TextStatisticsBar` and `ColorCircle` scaled
-    /// around them (`c80c55b`). At the default content size category the metrics are the identity,
-    /// so nothing moves for anyone who has not changed the setting.
+    /// On iOS `size` is a *base* that Dynamic Type scales, not the final point size: a fixed
+    /// `.systemFont(ofSize:)` overrides the system text size the user has already set, with nothing
+    /// in the app to change it back. At the default content size category the metrics are the
+    /// identity, so nothing moves for anyone who has not changed the setting.
     ///
     /// macOS has no such system setting, which is why `⌘+`/`⌘-` and `EditorFontSize` exist there
     /// and why this stays an exact point size on that platform.
@@ -272,14 +257,11 @@ extension PlatformFont {
             : .systemFont(ofSize: size)
 
         #if canImport(UIKit)
-            // `.body` for both modes: the plain-text note is the same prose at the same size in a
-            // different face, so scaling it as a caption or a footnote would make the two modes
-            // disagree about how big the note is.
+            // `.body` for both modes, or the two modes would disagree about how big the note is.
             //
             // `compatibleWith:` rather than the bare `scaledFont(for:)`, which reads `UIScreen`'s
-            // own category and nothing else — it ignores the trait collection it is called under,
-            // so it could not be driven from a test and would ignore a view whose environment
-            // differs from the screen's.
+            // own category and ignores the trait collection it is called under — untestable, and
+            // wrong for a view whose environment differs from the screen's.
             return UIFontMetrics(forTextStyle: .body).scaledFont(for: base, compatibleWith: .current)
         #else
             return base
@@ -346,8 +328,7 @@ extension PlatformColor {
     ///
     /// Both steps and in this order on macOS: `getHue` and `getRed` trap on a colour that is not
     /// already in an RGB space, and a dynamic `NSColor` is in none until it is resolved inside an
-    /// explicit appearance. The fork was written twice, once in `NotePalette` and once in
-    /// `BoldTintTests`, which is two places for the same platform difference to be got wrong.
+    /// explicit appearance. Shared so the platform fork is spelled once.
     func resolved(dark: Bool) -> PlatformColor? {
         #if canImport(UIKit)
             return resolvedColor(with: UITraitCollection(userInterfaceStyle: dark ? .dark : .light))

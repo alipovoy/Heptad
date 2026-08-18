@@ -25,8 +25,8 @@ struct ListEditingTests {
         textView.isRichText = true
         textView.allowsUndo = true
 
-        // A scratch suite, so a killed run cannot leave state in the real app's defaults — and so
-        // the coordinator's own zoom read cannot pick a font size out of them either.
+        // A scratch suite, so neither a killed run nor the coordinator's zoom read touches the real
+        // app's defaults.
         scratchDefaults = try ScratchDefaults(name: "ListEditingTests")
         coordinator = makeTestCoordinator(
             defaults: scratchDefaults.defaults, notificationCenter: notificationCenter)
@@ -49,12 +49,9 @@ struct ListEditingTests {
         textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
     }
 
-    /// The same view holding `markdown` as *formatted* text — the delimiters gone and the traits
-    /// on the characters, which is the shape a note is actually edited in.
-    ///
-    /// `type` above gives a flat buffer, and a flat buffer cannot show what an inserted marker
-    /// inherits: every list test in this suite ran against text with no formatting anywhere in
-    /// it, which is why a bold marker went unnoticed through a green suite.
+    /// The same view holding `markdown` as formatted text: delimiters gone, traits on the
+    /// characters. `type` above gives a flat buffer, which cannot show what an inserted marker
+    /// inherits.
     private func load(_ markdown: String) {
         textView.apply(
             MarkdownStyling.Appearance(
@@ -91,9 +88,8 @@ struct ListEditingTests {
     /// Return at the end of a formatted item gives the next one a plain marker.
     ///
     /// A bare string inserted into an attributed buffer inherits the run it lands in, so the new
-    /// `- ` came out bold — `**-** ` in the store, which is not a list marker at all: Return
-    /// would not continue it, `⌘⇧U` would find no checkbox on it, and every other reader of the
-    /// file sees a bold hyphen where a bullet should be.
+    /// `- ` came out bold — `**-** ` in the store, which is not a list marker at all, so Return
+    /// would not continue it and ⌘⇧U would find no checkbox on it.
     @Test(arguments: [
         ("- **item**", "- item\n- ", "- **item**\n- "),
         ("1. **a**", "1. a\n2. ", "1. **a**\n2. "),
@@ -143,10 +139,9 @@ struct ListEditingTests {
         #expect(textView.string == "- item")
     }
 
-    /// ⌘⇧U reaches the toggle only with shift held; the plain form is checked below.
-    ///
-    /// `chars` is lowercase even though this event types "U": `KeyboardLayout.commandKey` folds
-    /// case, so `hasShift` is the only thing that reports shift to the table.
+    /// ⌘⇧U reaches the toggle only with shift held; the plain form is checked below. `chars` comes
+    /// out lowercase even though the event types "U": `commandKey` folds case, and `hasShift` is
+    /// what reports shift to the table.
     @Test func shiftCommandUReachesTheToggle() throws {
         type("- [ ] task")
         let event = try #require(

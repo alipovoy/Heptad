@@ -13,25 +13,17 @@ struct HeptadApp: App {
             configuration: ModelConfiguration(schema: schema, isStoredInMemoryOnly: false))
     }()
 
-    /// The note store, or a stand-in that lasts the session when it cannot be opened.
+    /// The note store, or an in-memory stand-in that lasts the session when it cannot be opened.
     ///
-    /// This used to be a `fatalError`, which made every problem with one file a crash on every
-    /// launch with no way back from inside the app — reachable from a store truncated by a power
-    /// loss, one left by a newer build after a downgrade, a full or read-only volume, or a schema
-    /// change that will not migrate. The user's recourse was to find and delete the store by hand.
-    ///
-    /// `NoteSelection` already makes this argument for a far smaller input: it refuses to turn a
-    /// junk `UserDefaults` integer into a launch crash "in a menubar app with no window and no
-    /// Dock icon", where clicking the icon would simply do nothing with no visible explanation.
-    /// The same reasoning cannot stop at the file holding all seven notes.
-    ///
-    /// Seven notes that work until quit beat an app that will not open.
+    /// Not a `fatalError`: a store truncated by a power loss, left behind by a newer build, on a
+    /// read-only or full volume, or needing a migration that will not run would otherwise crash
+    /// every launch, with no recourse from inside the app.
     static func container(for schema: Schema, configuration: ModelConfiguration) -> ModelContainer {
         do {
             let container = try ModelContainer(for: schema, configurations: [configuration])
 
-            // A store that opens but will not take a write still has the notes in it, so a
-            // failure here is not a reason to hide them behind the stand-in below.
+            // A store that opens but will not take a write still has the notes in it — not a
+            // reason to hide them behind the stand-in below.
             try? seed(container.mainContext)
             return container
         } catch {
@@ -64,12 +56,6 @@ struct HeptadApp: App {
     ///
     /// Runs on every launch, so leaving what is already there untouched is the whole contract.
     ///
-    /// By id and *only* by id: a count check in front of this loop meant "seven rows" rather than
-    /// "these seven notes", which is a different thing on any store that holds an id outside
-    /// `0..<noteCount`. Seven rows with a hole in them were left unrepaired, and a store the
-    /// count said was full was never looked at — so a build that lowered `noteCount` would leave
-    /// the user's notes on disk and unreachable.
-    ///
     /// Lifted out of the container above purely so it can be tested: the partial-store case is
     /// the one that matters and it cannot be arranged against the app's own on-disk store.
     static func seed(_ context: ModelContext) throws {
@@ -78,8 +64,7 @@ struct HeptadApp: App {
             context.insert(NoteItem(id: noteId, modifiedAt: .now))
         }
 
-        // The launch after the first inserts nothing, and a store with nothing to add is not
-        // written to at all — the fetch above is the only round trip it costs.
+        // Every launch after the first has nothing to add, and costs the fetch above alone.
         guard context.hasChanges else { return }
         try context.save()
     }

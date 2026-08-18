@@ -58,8 +58,8 @@ class EditorShortcutManager {
             guard let self = self else { return event }
             guard Self.handlesModifiers(event.modifierFlags) else { return event }
 
-            // Not `charactersIgnoringModifiers`: that reports what the current layout types, and
-            // on a non-Latin one every case below would miss. See `KeyboardLayout`.
+            // Not `charactersIgnoringModifiers`: on a non-Latin layout every case below would
+            // miss. See `KeyboardLayout`.
             let chars = KeyboardLayout.commandKey(for: event)
             let hasShift = event.modifierFlags.contains(.shift)
 
@@ -156,10 +156,8 @@ class EditorShortcutManager {
         case "a" where !hasShift:
             textView.selectAll(nil)
             return nil
-        // ⌘⌫ is deliberately absent. It used to clear the whole note, wherever the caret was,
-        // which cost `NSTextView` its "delete to beginning of line" — the thing the key means
-        // in every other editor, and what a hand reaching for it expects. Emptying a note is
-        // ⌘A ⌫, two keystrokes and one undo, so nothing needed a key of its own.
+        // ⌘⌫ is deliberately absent: the key belongs to `NSTextView`'s "delete to beginning of
+        // line", and emptying a note is ⌘A ⌫.
         default:
             return event  // pass through
         }

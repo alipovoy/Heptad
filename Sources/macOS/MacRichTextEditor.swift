@@ -26,8 +26,8 @@ struct MacRichTextEditor: NSViewRepresentable {
     class Coordinator: NoteEditorCoordinator, NSTextViewDelegate {
         private let statistics: EditorStatistics
 
-        /// The two seams are the base class's, forwarded so a test can hand this a scratch
-        /// defaults suite and a private notification centre. The app takes the defaults.
+        /// Forwards the base class's two seams, so a test can hand this a scratch defaults suite
+        /// and a private notification centre.
         init(
             statistics: EditorStatistics,
             defaults: UserDefaults = .standard,
@@ -166,11 +166,10 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
     /// How this view draws, and which of the two shapes its buffer is in. Display only — none of
     /// it is ever stored.
     ///
-    /// Held as `nil` until something configures it, and that is what makes the first `configure`
-    /// do anything: `apply` returns early on an appearance it already has, so any stand-in
-    /// starting value silently swallows the first call whenever it happens to match — a formatted
-    /// note at the default zoom, in the note's own colour, is exactly that shape. Nothing equals
-    /// nothing, so there is no coincidence left to depend on.
+    /// Held as `nil` until something configures it, which is what makes the first `configure` do
+    /// anything: `apply` returns early on an appearance it already has, so any stand-in starting
+    /// value would swallow a first call that happened to match it — a formatted note at the default
+    /// zoom is exactly that shape.
     private var configuredStyling: MarkdownStyling.Appearance?
 
     /// What the view draws as now: what it was last configured with, or what a bare text view is
@@ -246,10 +245,9 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
         guard let textStorage else { return }
         guard appearance != configuredStyling else { return }
 
-        // Read before the new appearance is recorded, and only when a mode step is going to use
-        // it: writing the buffer out renders every line through the spelling ladder, which is
-        // more work than the repaint a zoom step asks for. It used to run on every step, on every
-        // key repeat of `⌘+`, and be discarded — defeating the one-note-per-step repaint above it.
+        // Read before the new appearance is recorded, and only for a mode step: writing the buffer
+        // out renders every line through the spelling ladder, which is more work than the repaint
+        // a zoom step asks for.
         let source = appearance.plainText != styling.plainText ? markdown : nil
         configuredStyling = appearance
 

@@ -19,9 +19,9 @@ struct EditorFormattingTests {
     private let textView: MarkdownTextView
     private let manager: EditorShortcutManager
 
-    /// What the buffer carries, which is what the user is looking at — see `carrying(_:)`. Every
-    /// command assertion below reads this beside the markdown, because the writer can correct on
-    /// the way to the store exactly what a broken command got wrong.
+    /// Which characters of the buffer carry `emphasis` — see `NSAttributedString.carrying(_:)`.
+    /// Asserted beside the markdown, because the writer can correct on the way to the store exactly
+    /// what a broken command got wrong.
     private func carrying(_ emphasis: Emphasis) throws -> String {
         try #require(textView.textStorage).carrying(emphasis)
     }
@@ -100,9 +100,9 @@ struct EditorFormattingTests {
     /// One press, on the buffer a note switch produces rather than a freshly typed line.
     ///
     /// The direction is decided by asking whether the selection already carries the trait, and a
-    /// reloaded note has bare newlines between its runs — so the terminator answered "no", the
-    /// press re-applied bold that was already there, and nothing appeared to happen until the
-    /// second press. Single-line selections never showed it.
+    /// reloaded note has bare line terminators between its runs — so the terminator answered "no"
+    /// and the press re-applied bold instead of taking it off. Single-line selections cannot show
+    /// it.
     @Test(arguments: [("**a**\n**b**", "a\nb"), ("**a**\n\n**b**", "a\n\nb")])
     func takingEmphasisOffAReloadedMultiLineRunTakesOnePress(
         source: String, stripped: String
@@ -112,8 +112,8 @@ struct EditorFormattingTests {
 
         manager.toggleEmphasis(.strong, on: textView)
 
-        // On the buffer, because this is the press that used to be a no-op: the store was right
-        // one press late, so a store-only assertion saw the correct answer and not the bug.
+        // On the buffer: the store was right one press late, so a store-only assertion saw the
+        // correct answer and not the bug.
         #expect(
             try carrying(.strong).allSatisfy { $0 == "." },
             "one press, and nothing is left bold")
@@ -131,9 +131,8 @@ struct EditorFormattingTests {
         #expect(try carrying(.strong) == ".........", "and nothing already there turned bold")
 
         textView.insertText(" more", replacementRange: NSRange(location: 9, length: 0))
-        // All five typed characters are bold, the leading space included — the writer is what
-        // puts that space outside the pair on the way to the store. The two lines disagreeing is
-        // the normal case, not a bug: one is what the user sees, the other is what is stored.
+        // All five typed characters are bold, the leading space included; the writer is what puts
+        // that space outside the pair on the way to the store.
         #expect(try carrying(.strong) == ".........#####")
         #expect(textView.markdown == "Test Text **more**")
     }
@@ -215,9 +214,8 @@ struct EditorFormattingTests {
 
     /// A junk value written from outside the app is clamped on read rather than reaching text
     /// layout. The stored size is plain `UserDefaults` and nothing sanity-checks it on write.
-    ///
-    /// The non-finite three are here because the clamp is two comparisons, and every comparison
-    /// against NaN is false — so it passed straight through both bounds.
+    /// The non-finite three are here because every comparison against NaN is false, so a clamp
+    /// written as two comparisons passes it straight through both bounds.
     @Test(arguments: [Double(0), -12, 5000, .nan, .infinity, -.infinity])
     func anOutOfRangeStoredSizeIsClampedOnRead(stored: Double) {
         scratchDefaults.defaults.set(stored, forKey: AppConstants.editorFontSizeKey)
@@ -228,11 +226,8 @@ struct EditorFormattingTests {
         #expect(size <= EditorFontSize.maximumSize)
     }
 
-    /// And a stored NaN can be stepped off, which is what made it worse than the rest of the junk.
-    ///
-    /// `step` bails on `stepped != size`, and `nan != nan` is true, so both keys rewrote the NaN
-    /// and posted a repaint at a size AppKit substitutes 13 pt for. The only way out was
-    /// `defaults delete`.
+    /// And a stored NaN can be stepped off. `step` guards on `stepped != size`, and `nan != nan` is
+    /// true, so ⌘+ and ⌘- both rewrote the NaN and left `defaults delete` as the only way out.
     @Test func aStoredNaNIsSteppedOffRatherThanRewritten() {
         scratchDefaults.defaults.set(Double.nan, forKey: AppConstants.editorFontSizeKey)
 

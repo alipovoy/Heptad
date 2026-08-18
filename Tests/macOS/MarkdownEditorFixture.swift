@@ -54,12 +54,9 @@ final class MarkdownEditorFixture {
             sourceLocation: sourceLocation)
     }
 
-    /// The appearance the coordinator would build for note 0 in this mode.
-    ///
-    /// Asked of the coordinator rather than assembled here. It used to restate all three fields —
-    /// mode, zoom and tint — which is a copy that has to be updated by hand every time `Appearance`
-    /// gains one: the tint was added to it by hand, months after the field existed, and until then
-    /// a bold run came up in the body-text colour here and in the note's own colour in the app.
+    /// The appearance the coordinator would build for note 0 in this mode. Asked of the coordinator
+    /// rather than assembled here, so a field `Appearance` gains cannot go missing on this side and
+    /// leave the fixture drawing what the app does not.
     func appearance(plainText: Bool) -> MarkdownStyling.Appearance {
         coordinator.appearance(for: NoteItem(id: 0, isPlainText: plainText), at: 0)
     }
@@ -73,11 +70,9 @@ final class MarkdownEditorFixture {
         coordinator.configure(scrollView, appearance: appearance(plainText: plainText))
     }
 
-    /// A formatted buffer loaded the way a note switch loads one, so a command meets the buffer it
-    /// meets in the app: traits derived from markdown, and bare line terminators between the lines.
-    ///
-    /// A freshly typed line answers differently — every character in it can carry a trait — which
-    /// is why a bug that only shows on a reloaded note survived the suite.
+    /// A formatted buffer loaded the way a note switch loads one: traits derived from markdown, and
+    /// bare line terminators between the lines. A freshly typed line answers differently, since
+    /// every character in it can carry a trait.
     @discardableResult
     func loaded(_ markdown: String) throws -> MarkdownTextView {
         configure(plainText: false)

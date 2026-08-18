@@ -51,13 +51,12 @@ enum MarkdownSyntax {
     static let emphasis = "_"
 
     /// The other spelling of italic, for the runs `_` refuses — `Test_ing_` is italic to no
-    /// markdown parser, and `⌘I` has to be writable wherever the caret is. `*` minds no
-    /// boundaries, so it covers exactly those.
+    /// markdown parser, and `⌘I` has to be writable wherever the caret is. `*` minds no boundaries,
+    /// so it covers exactly those.
     ///
     /// Read here, but written only as `MarkdownWriting`'s fallback, because text is full of loose
-    /// asterisks. What keeps them ordinary is this file's own rules: a delimiter never opens
-    /// against whitespace, so `2 * 3` and `SELECT * FROM` mean what they say, and `**` is matched
-    /// before `*` is tried, so a bold pair is never read as two italic ones.
+    /// asterisks. They stay ordinary because a delimiter never opens against whitespace — `2 * 3`
+    /// and `SELECT * FROM` mean what they say — and `**` is matched before `*` is tried.
     static let emphasisAlternate = "*"
 
     static let strikethrough = "~~"
@@ -79,10 +78,9 @@ enum MarkdownSyntax {
 
     // MARK: - Character classes
     //
-    // The four below are the primitives the writer and the commands share with the scanner, which
-    // is why they are here rather than beside the scan that uses them most: a second spelling of
-    // "word character" or "whitespace" anywhere else would let this app emit markdown it does not
-    // read back the same way.
+    // Here rather than beside the scan that uses them most, because the writer and the commands
+    // share them: a second spelling of "word character" or "whitespace" would let this app emit
+    // markdown it does not read back the same way.
 
     /// `MarkdownWriting` asks this when it chooses between `_` and `*`, so the pair it writes is
     /// one the scanner reads back.
@@ -105,8 +103,8 @@ enum MarkdownSyntax {
         return CharacterSet.whitespacesAndNewlines.contains(scalar)
     }
 
-    /// Shared for the same reason as `isWhitespace`: the writer has to know where a line ends to
-    /// keep a construct off the terminator, and two spellings of "newline" could disagree.
+    /// Shared for the same reason as `isWhitespace`: the writer keeps a construct off a line's
+    /// terminator, so it has to agree with the scanner about where one is.
     static func isNewline(_ character: unichar) -> Bool {
         guard let scalar = Unicode.Scalar(character) else { return false }
         return CharacterSet.newlines.contains(scalar)
