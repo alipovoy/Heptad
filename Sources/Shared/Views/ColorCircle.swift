@@ -48,6 +48,12 @@ struct ColorCircle: View {
             circle(isSelected: isSelected)
         }
         .buttonStyle(.plain)
+        #if os(macOS)
+            // As every other control in the chrome: Full Keyboard Access would otherwise walk the
+            // seven circles, and the text view losing first responder takes ⌘B, ⌘I and ⌘V with it —
+            // `EditorShortcutManager` finds the view to act on through `firstResponder`.
+            .focusable(false)
+        #endif
         // Only the selected circle is numbered, so without this the rest reach assistive
         // technology as identical unnamed shapes.
         .accessibilityLabel("Note \(index + 1)")
