@@ -30,11 +30,16 @@ enum Emphasis: CaseIterable {
     }
 
     /// Whether a run carrying `attributes` has this emphasis on it.
+    ///
+    /// Strikethrough is read as a *drawn* line rather than as a key that is present:
+    /// `NSUnderlineStyle.none` is the raw value `0`, and a dropped or pasted run that spells "no
+    /// strikethrough" explicitly would otherwise be given one by the next `normalize` — and
+    /// `~~…~~` in the store by the save after that.
     func isOn(_ attributes: [NSAttributedString.Key: Any]) -> Bool {
         switch self {
         case .strong: (attributes[.font] as? PlatformFont)?.isBold ?? false
         case .emphasis: (attributes[.font] as? PlatformFont)?.isItalic ?? false
-        case .strikethrough: attributes[.strikethroughStyle] != nil
+        case .strikethrough: (attributes[.strikethroughStyle] as? Int).map { $0 != 0 } ?? false
         }
     }
 }

@@ -149,7 +149,10 @@ enum MarkdownStyling {
         kept[.foregroundColor] = foregroundColor(
             isLink: attributes[.link] != nil, isBold: isBold, in: appearance)
 
-        if attributes[.strikethroughStyle] != nil {
+        // Through `Emphasis`, which is the one place that decides what a trait being "on" means:
+        // asking the dictionary here was a second answer, and it read `NSUnderlineStyle.none` as a
+        // strikethrough.
+        if Emphasis.strikethrough.isOn(attributes) {
             kept[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
         }
 

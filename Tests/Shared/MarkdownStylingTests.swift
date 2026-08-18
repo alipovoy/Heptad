@@ -95,6 +95,23 @@ struct MarkdownStylingTests {
         #expect(text.attribute(.kern, at: 0, effectiveRange: nil) == nil)
     }
 
+    /// A run that spells "no strikethrough" is not a strikethrough.
+    ///
+    /// `NSUnderlineStyle.none` is the raw value `0`, and an attributed string arriving by drag or
+    /// by `readSelection` may carry it. Asking whether the key was present rather than what it
+    /// said gave the run a line through it here, and `~~…~~` in the store on the next save.
+    @Test func anExplicitlyAbsentStrikethroughIsNotOne() {
+        let text = storage("dragged")
+        text.addAttribute(
+            .strikethroughStyle, value: NSUnderlineStyle().rawValue,
+            range: NSRange(location: 0, length: 7))
+
+        MarkdownStyling.normalize(appearance, in: text)
+
+        #expect(text.attribute(.strikethroughStyle, at: 0, effectiveRange: nil) == nil)
+        #expect(MarkdownWriting.markdown(from: text) == "dragged")
+    }
+
     /// Plain mode is flat by definition — it shows the source, and source has no formatting.
     @Test func plainModeKeepsNothingAtAll() throws {
         let text = storage("**keys**")
