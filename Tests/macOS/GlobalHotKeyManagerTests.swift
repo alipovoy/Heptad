@@ -119,6 +119,32 @@ struct GlobalHotKeyManagerTests {
         #expect(manager.modifierFlags == GlobalHotKeyManager.defaultModifierFlags)
     }
 
+    // MARK: - Description
+
+    /// The menu's only line about the hotkey names what is stored, since a hardcoded `⌃⌥Space`
+    /// would go on claiming the default after a rebind.
+    @Test func theDefaultBindingDescribesItselfAsControlOptionSpace() {
+        #expect(GlobalHotKeyManager(defaults: defaults).bindingDescription == "⌃⌥Space")
+    }
+
+    /// Glyphs in Apple's order, and the key by the character the Latin layout types on it.
+    @Test func aStoredBindingIsDescribedFromItsOwnKeyAndModifiers() {
+        defaults.set(Int(kVK_ANSI_J), forKey: AppConstants.globalHotKeyKeyCodeKey)
+        defaults.set(
+            Int(NSEvent.ModifierFlags([.command, .shift]).rawValue),
+            forKey: AppConstants.globalHotKeyModifierFlagsKey)
+
+        #expect(GlobalHotKeyManager(defaults: defaults).bindingDescription == "⇧⌘J")
+    }
+
+    /// A key with no character to show is named by its number rather than by a guess.
+    @Test func aKeyWithNoCharacterIsNamedByItsNumber() {
+        defaults.set(Int(kVK_F16), forKey: AppConstants.globalHotKeyKeyCodeKey)
+        defaults.set(0, forKey: AppConstants.globalHotKeyModifierFlagsKey)
+
+        #expect(GlobalHotKeyManager(defaults: defaults).bindingDescription == "key \(kVK_F16)")
+    }
+
     // MARK: - Persistence
     //
     // Both of these bind the spare combination rather than an arbitrary one: `setBinding` checks
@@ -164,9 +190,11 @@ struct GlobalHotKeyManagerTests {
     @Test(.requiresTheSpareCombination)
     func doubleRegisterAndDoubleUnregisterAreSafe() {
         let manager = GlobalHotKeyManager(defaults: defaults)
+        #expect(manager.isRegistered == false, "A fresh manager holds no claim")
+
         manager.setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers)
 
-        #expect(manager.isRegistered == false, "Checking a binding does not leave it claimed")
+        #expect(manager.isRegistered, "and a binding the system grants is left claimed")
         #expect(manager.register(), "Registering a free combination should succeed")
         // The second call must tear the first registration down rather than stack on it.
         #expect(manager.register(), "Re-registering should replace, not fail")
@@ -175,6 +203,22 @@ struct GlobalHotKeyManagerTests {
         manager.unregister()
         manager.unregister()
         #expect(manager.isRegistered == false)
+    }
+
+    /// A binding set while the hotkey is inert is live once it is stored.
+    ///
+    /// Inert is the state a launch that lost the race to the combination leaves behind, and it is
+    /// the state a user rebinding is trying to get out of. Answering `true` and handing the claim
+    /// back would leave them with no summon key until the next launch.
+    @Test(.requiresTheSpareCombination)
+    func aBindingSetWhileInertIsLeftLive() {
+        let manager = GlobalHotKeyManager(defaults: defaults)
+        #expect(manager.isRegistered == false)
+
+        #expect(manager.setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers))
+        #expect(manager.isRegistered, "the combination it reported as granted is the one it holds")
+
+        manager.unregister()
     }
 
     @Test func unregisterBeforeRegisterIsSafe() {
@@ -238,14 +282,17 @@ struct GlobalHotKeyManagerTests {
 
         let manager = GlobalHotKeyManager(defaults: defaults)
         try #require(manager.setBinding(keyCode: spareKeyCode, modifierFlags: spareModifiers))
-        try #require(manager.isRegistered == false, "checking a binding does not claim it")
+
+        // A working binding stored and no claim held: what a lost launch race leaves behind.
+        manager.unregister()
+        try #require(manager.isRegistered == false)
 
         let took = manager.setBinding(
             keyCode: spareSuccessorKeyCode, modifierFlags: spareModifiers)
 
         #expect(took == false)
         #expect(manager.keyCode == spareKeyCode, "The binding that works is what is stored")
-        #expect(manager.isRegistered == false, "and registration is left as it was found")
+        #expect(manager.isRegistered == false, "and an attempt that failed claims nothing")
     }
 
     @Test(.requiresTheSpareCombination)

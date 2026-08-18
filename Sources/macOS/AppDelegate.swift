@@ -93,8 +93,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if !hotKeyManager.isRegistered {
             menu.addItem(
                 NSMenuItem(
-                    title: "⌃⌥Space unavailable — another app owns it", action: nil,
-                    keyEquivalent: ""))
+                    title: "\(hotKeyManager.bindingDescription) unavailable — another app owns it",
+                    action: nil, keyEquivalent: ""))
             menu.addItem(.separator())
         }
 
