@@ -38,19 +38,26 @@ enum MarkdownWriting {
     static func markdown(from attributed: NSAttributedString) -> String {
         let attributed = storable(attributed)
         let whole = NSRange(location: 0, length: attributed.length)
+        let source = attributed.string as NSString
 
         return MarkdownSlicing.lines(of: whole, in: attributed).reduce(into: "") { markdown, line in
             let original = attributed.attributedSubstring(from: line)
 
+            // Once per line, then carried down: every slice of the line asks where the marker
+            // ends, and finding it copies the line out. See `MarkdownSlicing.markerEnd`.
+            let markerEnd = MarkdownSlicing.markerEnd(ofLineAt: line.location, in: source)
+
             for spelling in Spelling.ladder {
-                let written = emit(line, of: attributed, as: spelling)
+                let pass = Pass(spelling: spelling, markerEnd: markerEnd)
+                let written = emit(line, of: attributed, as: pass)
                 guard reads(written, as: original) else { continue }
 
                 markdown += written
                 return
             }
 
-            markdown += content(line, of: attributed, as: .plain)
+            markdown += content(
+                line, of: attributed, as: Pass(spelling: .plain, markerEnd: markerEnd))
         }
     }
 
@@ -119,13 +126,25 @@ enum MarkdownWriting {
         static let plain = Self(escaping: true, italic: .dropped)
     }
 
+    /// One line's worth of context: the candidate spelling being tried, and where that line's
+    /// list marker ends.
+    ///
+    /// Both are fixed for the whole of a line and every slice of it needs both, so they travel as
+    /// one rather than as two more parameters on four mutually recursive functions. Where the
+    /// marker ends is also the expensive half — see `MarkdownSlicing.markerEnd` — so it is found
+    /// once per line here rather than once per slice down there.
+    private struct Pass {
+        let spelling: Spelling
+        let markerEnd: Int
+    }
+
     // MARK: - Links
 
     /// Links first, because a label is not parsed: `[**a**](b)` reads literally, so whatever is
     /// inside one is written as plain characters. Emphasis over a link is written *around* it —
     /// `**[docs](url)**`, the spelling the parser already reads.
     private static func emit(
-        _ range: NSRange, of text: NSAttributedString, as spelling: Spelling
+        _ range: NSRange, of text: NSAttributedString, as pass: Pass
     ) -> String {
         guard range.length > 0 else { return "" }
         let source = text.string as NSString
@@ -138,7 +157,7 @@ enum MarkdownWriting {
             let core = MarkdownSlicing.withoutTerminator(subrange, in: source)
 
             guard let destination = destination(value), core.length > 0 else {
-                markdown += wrap(subrange, of: text, in: Emphasis.allCases, as: spelling)
+                markdown += wrap(subrange, of: text, in: Emphasis.allCases[...], as: pass)
                 return
             }
 
@@ -162,7 +181,7 @@ enum MarkdownWriting {
                 // `.fallback` writes `***[a](u)***`, which no parser resolves.
                 guard
                     let delimiter = delimiter(
-                        for: trait, around: core, in: source, as: spelling,
+                        for: trait, around: core, in: source, as: pass.spelling,
                         shielded: !traits.isEmpty)
                 else { continue }
 
@@ -170,9 +189,9 @@ enum MarkdownWriting {
             }
 
             markdown += traits.joined()
-                + "[" + content(core, of: text, as: spelling) + "](" + destination + ")"
+                + "[" + content(core, of: text, as: pass) + "](" + destination + ")"
                 + traits.reversed().joined()
-                + content(terminator, of: text, as: spelling)
+                + content(terminator, of: text, as: pass)
         }
 
         return markdown
@@ -223,11 +242,11 @@ enum MarkdownWriting {
     /// the caller's pair against both of its ends with none of this range's own characters in
     /// between. See `delimiter(for:around:in:as:shielded:)`.
     private static func wrap(
-        _ range: NSRange, of text: NSAttributedString, in traits: [Emphasis],
-        as spelling: Spelling, shielded: Bool = false
+        _ range: NSRange, of text: NSAttributedString, in traits: ArraySlice<Emphasis>,
+        as pass: Pass, shielded: Bool = false
     ) -> String {
-        guard let trait = traits.first else { return content(range, of: text, as: spelling) }
-        let rest = Array(traits.dropFirst())
+        guard let trait = traits.first else { return content(range, of: text, as: pass) }
+        let rest = traits.dropFirst()
 
         return MarkdownSlicing.sections(of: range, in: text, carrying: trait)
             .reduce(into: "") { markdown, section in
@@ -235,10 +254,8 @@ enum MarkdownWriting {
 
                 markdown +=
                     section.isOn
-                    ? delimited(
-                        section.range, of: text, with: trait, then: rest, as: spelling,
-                        shielded: flush)
-                    : wrap(section.range, of: text, in: rest, as: spelling, shielded: flush)
+                    ? delimited(section.range, of: text, in: traits, as: pass, shielded: flush)
+                    : wrap(section.range, of: text, in: rest, as: pass, shielded: flush)
             }
     }
 
@@ -247,12 +264,19 @@ enum MarkdownWriting {
     /// The list marker stays outside the pair: `**- [ ] task**` is not a line
     /// `ListContinuation.markerLength` recognises, and since both the characters and the traits
     /// survive that spelling the check accepts it — so the note silently stops being a task.
+    ///
+    /// Takes the whole of `traits` rather than its head and tail separately: the pair written here
+    /// is the first one's, and the rest go inside it. `wrap` has already established there is a
+    /// first, so the guard below is only the compiler's.
     private static func delimited(
-        _ line: NSRange, of text: NSAttributedString, with trait: Emphasis, then rest: [Emphasis],
-        as spelling: Spelling, shielded: Bool = false
+        _ line: NSRange, of text: NSAttributedString, in traits: ArraySlice<Emphasis>,
+        as pass: Pass, shielded: Bool = false
     ) -> String {
+        guard let trait = traits.first else { return content(line, of: text, as: pass) }
+        let rest = traits.dropFirst()
+
         let source = text.string as NSString
-        let marker = MarkdownSlicing.markerPrefix(of: line, in: source)
+        let marker = MarkdownSlicing.markerPrefix(of: line, endingAt: pass.markerEnd)
         let core = MarkdownSlicing.trimmed(
             NSRange(location: line.location + marker, length: line.length - marker), in: source)
 
@@ -263,10 +287,10 @@ enum MarkdownWriting {
         // marker or trimmed whitespace written before it puts a character of the note in between.
         guard core.length > 0,
             let delimiter = delimiter(
-                for: trait, around: core, in: source, as: spelling,
+                for: trait, around: core, in: source, as: pass.spelling,
                 shielded: shielded && NSEqualRanges(core, line))
         else {
-            return content(line, of: text, as: spelling)
+            return content(line, of: text, as: pass)
         }
 
         let before = NSRange(location: line.location, length: core.location - line.location)
@@ -275,11 +299,11 @@ enum MarkdownWriting {
 
         // Whatever `rest` writes around the whole of `core` is written between this pair, so it is
         // shielded by it — the `_` of `the **_hard_**ware` is against an asterisk, not the `e`.
-        return content(before, of: text, as: spelling)
+        return content(before, of: text, as: pass)
             + delimiter
-            + wrap(core, of: text, in: rest, as: spelling, shielded: true)
+            + wrap(core, of: text, in: rest, as: pass, shielded: true)
             + delimiter
-            + content(after, of: text, as: spelling)
+            + content(after, of: text, as: pass)
     }
 
     /// Which pair to write around `core`, or nil to write no pair and drop the trait.
@@ -348,14 +372,14 @@ enum MarkdownWriting {
     /// is defending against, and a backslash through it demotes the checkbox to a bare bullet in
     /// the stored file, leaving `⌘⇧U` nothing to toggle.
     private static func content(
-        _ range: NSRange, of text: NSAttributedString, as spelling: Spelling
+        _ range: NSRange, of text: NSAttributedString, as pass: Pass
     ) -> String {
         let source = text.string as NSString
         let range = MarkdownSlicing.aligned(range, in: source)
         guard range.length > 0 else { return "" }
-        guard spelling.escaping else { return source.substring(with: range) }
+        guard pass.spelling.escaping else { return source.substring(with: range) }
 
-        let marker = MarkdownSlicing.markerPrefix(of: range, in: source)
+        let marker = MarkdownSlicing.markerPrefix(of: range, endingAt: pass.markerEnd)
         let rest = NSRange(
             location: range.location + marker, length: range.length - marker)
 
