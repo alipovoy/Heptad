@@ -79,9 +79,7 @@ struct TextStatisticsBar: View {
                 .font(.system(size: toggleIconSize))
         }
         .buttonStyle(.plain)
-        #if os(macOS)
-            .focusable(false)
-        #endif
+        .chromeControl()
         // Named for what the toggle does to the note's Markdown, since that is the visible
         // difference: one mode draws it, the other leaves it as the characters you typed.
         .accessibilityLabel(isPlainText ? "Show Markdown formatting" : "Show Markdown as plain text")
@@ -132,7 +130,7 @@ struct TextStatisticsBar: View {
                     .font(.system(size: toggleIconSize))
             }
             .buttonStyle(.plain)
-            .focusable(false)
+            .chromeControl()
             .accessibilityLabel(windowState.isPinned ? "Unpin window" : "Pin window")
             .help(windowState.isPinned ? "Unpin window (⌘P)" : "Keep window open (⌘P)")
         }

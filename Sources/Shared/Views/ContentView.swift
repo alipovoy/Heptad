@@ -204,7 +204,7 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .focusable(false)
+                .chromeControl()
                 .accessibilityLabel("Close window")
                 .padding(.leading, AppConstants.Layout.edgeInset)
 

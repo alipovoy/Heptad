@@ -15,16 +15,9 @@ import UIKit
 @MainActor
 struct MarkdownTextViewPasteTests {
 
-    private func textView(_ markdown: String = "", plainText: Bool = false) -> MarkdownTextView {
-        let view = MarkdownTextView()
-        view.apply(MarkdownStyling.Appearance(plainText: plainText, fontSize: 16))
-        view.load(markdown: markdown)
-        return view
-    }
-
     /// The round trip a copy and a paste inside the same note make.
     @Test func aPastedRunArrivesAsWhatItDescribes() {
-        let view = textView()
+        let view = makeTextView()
 
         view.paste(markdown: "pass: **rotate-me**")
 
@@ -35,7 +28,7 @@ struct MarkdownTextViewPasteTests {
     /// Every trait with a spelling, and the marker of a list line, in one paste.
     @Test func aPastedNoteKeepsEverythingTheWriterCanSpell() {
         let source = "- [ ] rotate ~~the~~ _keys_"
-        let view = textView()
+        let view = makeTextView()
 
         view.paste(markdown: source)
 
@@ -44,7 +37,7 @@ struct MarkdownTextViewPasteTests {
 
     /// A pasted link arrives as a link, not as its brackets.
     @Test func aPastedLinkKeepsItsDestination() throws {
-        let view = textView()
+        let view = makeTextView()
 
         view.paste(markdown: "see [docs](https://e.co)")
 
@@ -55,7 +48,7 @@ struct MarkdownTextViewPasteTests {
 
     /// The paste replaces the selection, as any insertion does.
     @Test func aPasteReplacesTheSelection() {
-        let view = textView("keep this")
+        let view = makeTextView("keep this")
 
         view.selectedRange = NSRange(location: 5, length: 4)
         view.paste(markdown: "**that**")
@@ -67,7 +60,7 @@ struct MarkdownTextViewPasteTests {
     /// What is typed after a pasted bold run is not itself bold: the caret keeps the attributes it
     /// had, rather than inheriting the last run of the paste.
     @Test func typingAfterAPastedRunContinuesInTheNotesOwnFace() throws {
-        let view = textView()
+        let view = makeTextView()
 
         view.paste(markdown: "**bold**")
         view.insertText("plain")
@@ -80,7 +73,7 @@ struct MarkdownTextViewPasteTests {
     /// symmetry with `copyingInPlainModeTakesTheCharactersAsTheyAre`. `paste(_:)` sends that mode
     /// to `super`; this pins the decision rather than the route.
     @Test func pastingInPlainModeTakesTheCharactersAsTheyAre() {
-        let view = textView(plainText: true)
+        let view = makeTextView(plainText: true)
 
         view.paste(markdown: "pass: **rotate-me**")
 
@@ -89,7 +82,7 @@ struct MarkdownTextViewPasteTests {
 
     /// An undo takes the whole paste back, not one run of it.
     @Test func undoTakesTheWholePasteBack() {
-        let view = textView("keys")
+        let view = makeTextView("keys")
         view.selectedRange = NSRange(location: 4, length: 0)
 
         view.paste(markdown: " **rotate** ~~the~~ _keys_")
