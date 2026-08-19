@@ -41,16 +41,21 @@ enum MarkdownWriting {
         let source = attributed.string as NSString
 
         return MarkdownSlicing.lines(of: whole, in: attributed).reduce(into: "") { markdown, line in
+            if let verbatim = verbatimLine(line, of: attributed, in: source) {
+                markdown += verbatim
+                return
+            }
             let original = attributed.attributedSubstring(from: line)
 
             // Once per line, then carried down: finding it copies the line out, and every slice
             // of the line asks. See `MarkdownSlicing.markerEnd`.
             let markerEnd = MarkdownSlicing.markerEnd(ofLineAt: line.location, in: source)
+            var tried: Set<String> = []
 
             for spelling in Spelling.ladder {
                 let pass = Pass(spelling: spelling, markerEnd: markerEnd)
                 let written = emit(line, of: attributed, as: pass)
-                guard reads(written, as: original) else { continue }
+                guard tried.insert(written).inserted, reads(written, as: original) else { continue }
 
                 markdown += written
                 return

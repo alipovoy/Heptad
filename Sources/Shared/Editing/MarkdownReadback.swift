@@ -49,6 +49,32 @@ extension MarkdownWriting {
         return true
     }
 
+    /// The line's own characters, when no candidate spelling could have written anything else.
+    ///
+    /// A line with no trait and no link has nothing to delimit, and one with no escapable
+    /// character escapes to itself — so every rung and the unconditional fallback produce the same
+    /// bytes, and the check can only agree with them. One walk of the line in place of a parse.
+    static func verbatimLine(
+        _ line: NSRange, of text: NSAttributedString, in source: NSString
+    ) -> String? {
+        var formatted = false
+        text.enumerateAttributes(in: line, options: []) { attributes, _, stop in
+            guard attributes[.link] != nil || Emphasis.allCases.contains(where: { $0.isOn(attributes) })
+            else { return }
+
+            formatted = true
+            stop.pointee = true
+        }
+        guard !formatted else { return nil }
+
+        for index in line.location..<NSMaxRange(line)
+        where MarkdownSyntax.isEscapable(source.character(at: index)) {
+            return nil
+        }
+
+        return source.substring(with: line)
+    }
+
     /// Whether what the note meant at a position can account for what was read back at it.
     /// One-way, for the reason `reads` gives.
     private static func justifies(
