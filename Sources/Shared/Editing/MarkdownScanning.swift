@@ -59,9 +59,10 @@ extension MarkdownSyntax {
 
     // MARK: - Inline
 
-    /// The order below is load-bearing for one pair: `*` is a prefix of `**`, so `**` is matched
-    /// first and a bold pair is never read as two italic ones. The rest are disjoint and their
-    /// order is only a convention.
+    /// The order below is load-bearing wherever one delimiter is a prefix of another: `***` is
+    /// matched before `**`, and `**` before `*`, so the longest spelling claims the run instead of
+    /// leaving its remainder as a stray character. The rest are disjoint and their order is only a
+    /// convention.
     ///
     /// `range` is also the boundary a `_` measures itself against, so a construct's content can
     /// be handed straight back here to be parsed in its own right.
@@ -93,16 +94,20 @@ extension MarkdownSyntax {
     /// A delimiter and what it means, so the scan passes one thing where it used to pass two.
     private struct Delimiter {
         let characters: String
-        let style: Style
+
+        /// Every style the pair carries — more than one only for `***`, which is bold and italic
+        /// in a single pair rather than the `**` and `_` this app writes them as.
+        let styles: [Style]
 
         var width: Int { characters.utf16.count }
     }
 
     private static let inlineDelimiters = [
-        Delimiter(characters: strong, style: .strong),
-        Delimiter(characters: strikethrough, style: .strikethrough),
-        Delimiter(characters: emphasis, style: .emphasis),
-        Delimiter(characters: emphasisAlternate, style: .emphasis)
+        Delimiter(characters: strongEmphasis, styles: [.strong, .emphasis]),
+        Delimiter(characters: strong, styles: [.strong]),
+        Delimiter(characters: strikethrough, styles: [.strikethrough]),
+        Delimiter(characters: emphasis, styles: [.emphasis]),
+        Delimiter(characters: emphasisAlternate, styles: [.emphasis])
     ]
 
     /// Matches `<delimiter>content<delimiter>` at `start`, appending its spans and returning the
@@ -137,7 +142,12 @@ extension MarkdownSyntax {
                 let content = NSRange(location: contentStart, length: closing - contentStart)
 
                 spans.append(Span(range: NSRange(location: start, length: width), style: .marker))
-                spans.append(Span(range: content, style: delimiter.style))
+
+                // One span per style, over the same characters. `MarkdownStyling.restyle` reads
+                // each run's current font, so the two compose into a bold italic face.
+                for style in delimiter.styles {
+                    spans.append(Span(range: content, style: style))
+                }
 
                 // One construct may sit inside another — `**_keys_**` is bold *and* italic — so
                 // the content is parsed in its own right. Later spans are painted over earlier
@@ -178,7 +188,7 @@ extension MarkdownSyntax {
     // asterisks hidden. CommonMark's flanking rules are the ones that tell those two apart, and
     // being the ones every other parser uses, they are also what the note means elsewhere.
     //
-    // `**` and `~~` still have no rule of their own: bold has no fallback spelling to keep
+    // `***`, `**` and `~~` still have no rule of their own: bold has no fallback spelling to keep
     // working, so flanking there would cost the trait rather than protect the text — `a**/usr**`
     // could not open, and the line would fall to `Spelling.plain`. See `Spelling.Italic`.
 

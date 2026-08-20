@@ -45,6 +45,12 @@ enum MarkdownSyntax {
 
     static let strong = "**"
 
+    /// Both traits at once, and read-only: `⌘B` then `⌘I` produce `**_x_**`, which is what the
+    /// writer spells and what this app's own notes hold. `***x***` is what markdown written
+    /// elsewhere uses, and left unread it matched as `**` and drew a bold `*x` with a stray
+    /// asterisk after it — the one spelling this app got visibly wrong rather than literal.
+    static let strongEmphasis = "***"
+
     /// Italic is written `_` by preference, and this is the delimiter the word-boundary rule
     /// below is about: `_` never opens or closes against a word character, so `AWS_SECRET_KEY`
     /// and `snake_case_name` are names rather than italics.

@@ -97,6 +97,22 @@ struct RichTextRoundTripTests {
         #expect(font.isItalic)
     }
 
+    /// `***` carries the same two traits in one pair, and is rewritten in this app's own spelling
+    /// — the normalization `**a *b* c**` already gets. Read but never written, so it is the one
+    /// construct the round-trip property above cannot cover.
+    @Test(.bug(id: 153)) func aTripleAsteriskPairIsReadAndRewritten() throws {
+        let text = rendered("***both***")
+
+        #expect(text.string == "both")
+
+        let font = try #require(text.attribute(.font, at: 0, effectiveRange: nil) as? PlatformFont)
+        #expect(font.isBold)
+        #expect(font.isItalic)
+
+        #expect(MarkdownWriting.markdown(from: text) == "**_both_**")
+        #expect(roundTripIsStable("**_both_**"), "and what it writes parses back to the same thing")
+    }
+
     /// Plain mode is the other half of the switch: it shows the source, so it parses nothing.
     @Test func plainModeRendersTheSourceVerbatim() {
         let plain = MarkdownStyling.Appearance(

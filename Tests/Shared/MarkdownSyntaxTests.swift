@@ -156,6 +156,22 @@ struct MarkdownSyntaxTests {
         #expect(styled("**bold**").map(\.1) == [.strong])
     }
 
+    /// And `**` is a prefix of `***`, the spelling markdown written elsewhere uses for bold
+    /// italic. One pair carrying both traits: unread, it matched as `**` and drew a bold `*both`
+    /// with a stray asterisk after it.
+    @Test(.bug(id: 153)) func aTripleAsteriskPairIsBoldAndItalic() {
+        #expect(styled("***both***").map(\.0) == ["both", "both"])
+        #expect(styled("***both***").map(\.1) == [.strong, .emphasis])
+        #expect(markers("***both***") == ["***", "***"])
+    }
+
+    /// Three asterisks with nothing between them are a thematic break to CommonMark and a
+    /// separator to everyone else. There is no run to style, so the line stays characters.
+    @Test(arguments: ["***", "a\n***\nb", "***\n***"])
+    func aRunOfThreeAsterisksAloneStylesNothing(text: String) {
+        #expect(styled(text).isEmpty)
+    }
+
     /// The second spelling of italic, which is what `MarkdownWriting` falls back to where `_`
     /// cannot be written — against a word character.
     @Test(arguments: ["*italic*", "Test*ing*", "foo*bar*"])
