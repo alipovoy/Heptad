@@ -138,6 +138,9 @@ class EditorShortcutManager {
         case "c" where !hasShift:
             textView.copy(nil)
             return nil
+        case "c" where hasShift:
+            copyAsRichText(on: textView)
+            return nil
         case "v" where !hasShift:
             pasteAsMarkdown(on: textView)
             return nil
@@ -161,6 +164,43 @@ class EditorShortcutManager {
         default:
             return event  // pass through
         }
+    }
+
+    // MARK: - Copy
+
+    /// ⌘⇧C. The selection leaves as RTF, for pasting into Mail, Word or any other rich-text field.
+    ///
+    /// ⌘C cannot do this and should not: it writes the note's own markdown, which is what makes a
+    /// copy from one note into another exact. Sending the note *out* of the app is the other
+    /// question, and there the delimiters are noise.
+    ///
+    /// Both flavors are declared, so an app reading only plain text gets the same characters ⌘C
+    /// would have left rather than nothing at all.
+    func copyAsRichText(on textView: NSTextView) {
+        guard let markdownView = textView as? MarkdownTextView, markdownView.styling.isStyled else {
+            copyCharacters(of: textView)
+            return
+        }
+
+        let markdown = markdownView.selectedMarkdown
+        guard let rtf = RichTextExport.rtf(from: markdown) else { return }
+
+        pasteboard.declareTypes([.rtf, .string], owner: nil)
+        pasteboard.setData(rtf, forType: .rtf)
+        pasteboard.setString(markdown, forType: .string)
+    }
+
+    /// What ⌘⇧C does in a plain-text note: the characters, and no markup at all.
+    ///
+    /// That mode silences ⌘B, ⌘I and ⌘⇧X, so there is no formatting in it to carry out — the same
+    /// reason ⌘V pastes characters there. Written here rather than deferred to `copy(_:)`, which
+    /// always writes `.general` and so would step over the injected board a test hands this.
+    private func copyCharacters(of textView: NSTextView) {
+        let selected = (textView.string as NSString).substring(with: textView.selectedRange())
+        guard !selected.isEmpty else { return }
+
+        pasteboard.declareTypes([.string], owner: nil)
+        pasteboard.setString(selected, forType: .string)
     }
 
     // MARK: - Paste
