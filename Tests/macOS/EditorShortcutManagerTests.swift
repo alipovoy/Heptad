@@ -68,7 +68,7 @@ struct EditorShortcutManagerTests {
     /// The keys `handleTextViewShortcut` hands straight back rather than dispatching anywhere.
     @Test(
         arguments: [
-            ("b", true), ("i", true), ("a", true),
+            ("b", true), ("i", true), ("c", true), ("a", true),
             ("k", false), ("k", true)
         ])
     func dispatchTablePassesThroughUnclaimedKeys(chars: String, hasShift: Bool) throws {
