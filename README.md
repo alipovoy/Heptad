@@ -8,7 +8,7 @@ On macOS the app lives in the status bar. Left-clicking the icon — or pressing
 
 ## Editing
 
-A note is Markdown source. The editor holds the literal text — `**bold**`, `[label](url)` — and styles it in place, dimming the delimiters rather than hiding them, so the caret can move through everything that is there. There is no preview pane and no second representation: what the note stores is what you see, and copying one out gives back the same characters.
+A note is Markdown source. The editor draws what that source means rather than the source itself — `**bold**` is a bold run, with no asterisks left in the buffer for a caret to stall on or a backspace to break in half. The delimiters are written back when the note is saved, so nothing is stored but the Markdown, and copying a note out gives back its own characters. There is no preview pane: switching a note to plain text is how you read the source.
 
 The vocabulary is small on purpose, and it is exactly what the commands can produce and remove:
 
@@ -21,11 +21,11 @@ The vocabulary is small on purpose, and it is exactly what the commands can prod
 
 Return continues a list, numbering upward and keeping the indent; Return on an empty item removes the marker and ends the list.
 
-Italic is `_`, not `*`. Every delimiter is disjoint from every other, which is what makes each command exactly its own inverse: `⌘I` inside `**bold**` has a delimiter of its own to add, so `**_both_**` is reachable and reversible. It also leaves `*` an ordinary character, so `2 * 3` and `SELECT *` mean what they say. An underscore inside a word belongs to the word — `AWS_SECRET_KEY` and `__init__` are never italicised, and `⌘I` declines rather than write a pair it could not read back.
+Italic is written `_`, not `*`. Every delimiter is disjoint from every other, so `**_both_**` is reachable and reversible, and `*` is left an ordinary character — `2 * 3` and `SELECT *` mean what they say. An underscore inside a word belongs to the word, so `AWS_SECRET_KEY` and `__init__` are never italicised; where a `_` pair could not be read back against a word character, the save spells that run `*` instead. `***both***` is read as bold italic, because that is how Markdown written elsewhere spells it, and rewritten as `**_both_**`.
 
 Bold is drawn in the note's own colour, derived from the colour the window is already wearing and adjusted for light and dark so all seven read at the same weight. It is the second signal that a run is bold, which a proportional font gives away only faintly in one word. Plain-text notes are untinted: the delimiters say it there.
 
-Constructs nest but never span lines, and there are no backslash escapes — a note that genuinely contains `**` will show it styled. That is the accepted cost of a parser small enough to hold in your head.
+Constructs nest but never span lines, so a stray `**` can spoil at most its own line — the accepted cost of a parser small enough to hold in your head. A note that genuinely contains `**` keeps it: the save puts a backslash in front of anything that would otherwise read back as formatting nobody applied.
 
 Any note can be switched to plain text from the statistics bar: monospaced, with its Markdown left as literal text and the formatting shortcuts turned off — useful for credentials, keys and anything else where a proportional font gets in the way. Switching is a rendering choice and never edits the note, so it is reversible as often as you like. The mode is stored per note.
 
