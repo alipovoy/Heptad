@@ -31,7 +31,7 @@ Any note can be switched to plain text from the statistics bar: monospaced, with
 
 Pasting converts the clipboard's formatting to Markdown, keeping bold, italic, strikethrough and links, and dropping everything Heptad has no spelling for. In a plain-text note it pastes the characters alone, since that mode turns the formatting commands off. Nothing can enter a note that its own commands cannot take back out.
 
-`⌘C` gives back the note's own characters — its Markdown, not the styling drawn from it — which is what keeps `⌘C` then `⌘V` inside the app exact. `⌘⇧C` copies the selection as rich text instead, for pasting into Mail or a document, where the delimiters are noise and the formatting is the point. It carries bold, italic, strikethrough and links, in no particular colour and at no particular size: the receiving document has its own.
+`⌘C` leaves the selection in three flavours at once, and the app you paste into picks: rich text for Mail or a document, the note's own Markdown for a terminal or a chat box, and a private flavour Heptad reads back verbatim, so a copy from one note into another converts nothing. The rich flavour carries bold, italic, strikethrough and links, in no particular colour and at no particular size — the receiving document has its own — and a plain-text note offers it not at all, having no formatting to carry. `⌘X` and dragging a selection out write the same three.
 
 Emptying a note is `⌘A` then `⌫`, one undo step. There is no shortcut of its own: `⌘⌫` is left to `NSTextView`, where it deletes to the beginning of the line as it does in every other editor.
 
@@ -80,8 +80,7 @@ Tests and contribution details are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 | `⌘+` / `⌘-` | Increase / decrease the editor's zoom |
 | `⌘⇧U` | Toggle the checkbox on the current line |
 | `⌘Z` / `⌘⇧Z` | Undo / redo |
-| `⌘C` / `⌘X` | Copy / cut, as the note's own Markdown |
-| `⌘⇧C` | Copy as rich text, for pasting into another app (plain-text notes copy the characters) |
+| `⌘C` / `⌘X` | Copy / cut — rich text and the note's own Markdown, whichever the destination reads |
 | `⌘V` | Paste, converting the clipboard's formatting to Markdown (plain-text notes take the characters alone) |
 | `⌘⇧V` | Paste as raw text, dropping the formatting entirely |
 | `⌘A` | Select all |

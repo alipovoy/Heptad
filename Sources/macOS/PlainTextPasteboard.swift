@@ -1,5 +1,15 @@
 import AppKit
 
+extension NSPasteboard.PasteboardType {
+    /// A note's own markdown, under a type only this app writes.
+    ///
+    /// What keeps a copy from one note into another exact now that ⌘C also offers RTF: ⌘V prefers
+    /// rich flavors, so without this an in-app paste would go out through `RichTextExport` and
+    /// back through `MarkdownWriting` — two conversions that are inverse, where reading this one
+    /// is no conversion at all.
+    static let heptadMarkdown = NSPasteboard.PasteboardType("dev.lipovoy.heptad.markdown")
+}
+
 extension NSPasteboard {
     /// The clipboard as markdown: what ⌘V inserts.
     ///
@@ -14,6 +24,14 @@ extension NSPasteboard {
     /// putting them through the writer would escape the delimiters they meant. ⌘⇧V is the
     /// shortcut for reading them literally; ⌘V reads them as the source they look like.
     func markdownForPaste() -> String? {
+        // This app's own copy, read before anything is decoded: it is already the markdown every
+        // branch below is working towards, and taking it verbatim is what keeps ⌘C then ⌘V inside
+        // the app exact rather than merely inverse. It also skips the size bound below, which an
+        // in-app copy has no reason to be held to.
+        if let own = string(forType: .heptadMarkdown), !own.isEmpty {
+            return NoteCharacters.storable(own)
+        }
+
         guard richFlavorsAreWorthDecoding else { return plainTextForPaste() }
 
         let rich = readObjects(forClasses: [NSAttributedString.self]) as? [NSAttributedString] ?? []

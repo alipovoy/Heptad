@@ -179,20 +179,32 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
     private static let unconfigured = MarkdownStyling.Appearance(
         plainText: false, fontSize: AppConstants.Layout.defaultFontSize)
 
-    /// The note leaves on the clipboard as its own characters, never as rich text.
+    /// What ⌘C, ⌘X and a drag out of the note leave on the clipboard.
     ///
-    /// The view is `isRichText` so it can draw derived styling, and AppKit would otherwise write
-    /// that painted-on bold to the pasteboard as RTF. ⌘V reads rich flavors first, so it read the
-    /// paint back and re-derived delimiters from it: copying `**keys**` and pasting it returned
-    /// `****keys****`. The formatting of a note already *is* its characters, so they are the only
-    /// honest thing to write — and it makes the round trip exact rather than merely better.
+    /// Three flavors in formatted mode, so the destination picks rather than this app guessing:
+    /// RTF for a document that draws formatting, the note's markdown for anything that takes
+    /// text, and `.heptadMarkdown` for this app itself — see `markdownForPaste`, which reads it
+    /// verbatim so a copy from one note into another converts nothing at all.
     ///
-    /// Filtered from `super`'s list rather than returned as `[.string]`. AppKit answers this with
-    /// its own legacy constants, and `writeSelection(to:type:)` recognises only those — handed
-    /// the modern `public.utf8-plain-text` spelling of the same flavor it writes nothing at all
-    /// and reports failure, which would make ⌘C copy an empty clipboard.
+    /// AppKit's own RTF is what is filtered out, and both are needed: it writes the *drawn*
+    /// buffer, note tint and editor zoom included, where `RichTextExport` writes the vocabulary
+    /// and nothing else. Before either existed, ⌘V read that painted-on bold back and re-derived
+    /// delimiters from it — copying `**keys**` and pasting it returned `****keys****`.
+    ///
+    /// A plain-text note offers neither: that mode has no formatting to carry, so the rich flavor
+    /// would be the same characters at more expense.
+    ///
+    /// The plain flavors are filtered from `super`'s list rather than spelled `[.string]`. AppKit
+    /// answers this with its own legacy constants, and `super.writeSelection(to:type:)`
+    /// recognises only those — handed the modern `public.utf8-plain-text` spelling of the same
+    /// flavor it writes nothing at all and reports failure, which would make ⌘C copy an empty
+    /// clipboard.
     override var writablePasteboardTypes: [NSPasteboard.PasteboardType] {
-        super.writablePasteboardTypes.filter { !Self.richTextTypes.contains($0.rawValue) }
+        let plain = super.writablePasteboardTypes.filter { !Self.richTextTypes.contains($0.rawValue) }
+        guard styling.isStyled else { return plain }
+
+        // Richest first, which is the order a receiver that asks for a list expects.
+        return [.rtf, .heptadMarkdown] + plain
     }
 
     private static let richTextTypes: Set<String> = [
@@ -303,11 +315,11 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
         typingAttributes = MarkdownStyling.normalized(typingAttributes, in: styling)
     }
 
-    /// The selection leaves on the clipboard as markdown source.
+    /// Fills in one flavor of what `writablePasteboardTypes` offered.
     ///
-    /// The buffer holds no delimiters any more, so the characters alone would put a note's
-    /// formatting on the clipboard and lose it. Writing what the note *stores* keeps a copy from
-    /// one note into another exact, and keeps ⌘C honest about what was copied.
+    /// The two text flavors are the note's own markdown, not the characters on screen: the buffer
+    /// holds no delimiters any more, so the characters alone would put a note's formatting on the
+    /// clipboard and lose it.
     override func writeSelection(
         to pboard: NSPasteboard, type: NSPasteboard.PasteboardType
     ) -> Bool {
@@ -315,6 +327,13 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
             return super.writeSelection(to: pboard, type: type)
         }
 
-        return pboard.setString(selectedMarkdown, forType: type)
+        guard type == .rtf else {
+            return pboard.setString(selectedMarkdown, forType: type)
+        }
+
+        // A selection with nothing in it has no RTF to write. Reported as a failure rather than
+        // written empty, so the flavor is simply absent instead of holding an empty document.
+        guard let rtf = RichTextExport.rtf(from: selectedMarkdown) else { return false }
+        return pboard.setData(rtf, forType: type)
     }
 }

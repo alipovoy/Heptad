@@ -167,10 +167,15 @@ struct MarkdownTextViewTests {
         textView.load(markdown: "**keys** and _more_")
         textView.setSelectedRange(NSRange(location: 0, length: (textView.string as NSString).length))
 
-        // No rich flavor offered, and the plain one still spelled the way AppKit's own writer
-        // recognises — returning `[.string]` here makes `writeSelection` fail and copy nothing.
+        // AppKit's own rich flavors stay filtered out: those write the *drawn* buffer, and #117
+        // was that paint being read back as delimiters. The `.rtf` offered in their place is
+        // `RichTextExport`'s, which carries the vocabulary and none of the drawing —
+        // `CopyAsRichTextTests` pins what is in it.
+        //
+        // The plain flavors are still spelled the way AppKit's own writer recognises: returning
+        // `[.string]` here makes `writeSelection` fail and copy nothing.
         #expect(textView.writablePasteboardTypes.isEmpty == false)
-        #expect(textView.writablePasteboardTypes.allSatisfy { $0 != .rtf && $0 != .rtfd })
+        #expect(textView.writablePasteboardTypes.allSatisfy { $0 != .rtfd })
 
         // `writeSelection(to:types:)` writes into types the caller has already declared, which
         // is what `copy(_:)` does for it.
