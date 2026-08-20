@@ -208,6 +208,20 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
         return styling.isStyled ? MarkdownWriting.markdown(from: textStorage) : string
     }
 
+    /// The selection as markdown — what ⌘C writes, and what ⌘⇧C renders to RTF.
+    ///
+    /// One spelling of "the selected text", so the two commands cannot come to disagree about
+    /// where a run ends.
+    var selectedMarkdown: String {
+        guard let textStorage else { return "" }
+        guard styling.isStyled else {
+            return (string as NSString).substring(with: selectedRange())
+        }
+
+        return MarkdownWriting.markdown(
+            from: textStorage.attributedSubstring(from: selectedRange()))
+    }
+
     /// Puts a note's markdown into the view, in the shape its mode calls for.
     ///
     /// Undo registration is off for this and the stack is emptied after it: what is being
@@ -297,11 +311,10 @@ class MarkdownTextView: NSTextView, NSTextStorageDelegate {
     override func writeSelection(
         to pboard: NSPasteboard, type: NSPasteboard.PasteboardType
     ) -> Bool {
-        guard styling.isStyled, let textStorage else {
+        guard styling.isStyled else {
             return super.writeSelection(to: pboard, type: type)
         }
 
-        let selected = textStorage.attributedSubstring(from: selectedRange())
-        return pboard.setString(MarkdownWriting.markdown(from: selected), forType: type)
+        return pboard.setString(selectedMarkdown, forType: type)
     }
 }

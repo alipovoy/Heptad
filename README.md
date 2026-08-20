@@ -31,7 +31,7 @@ Any note can be switched to plain text from the statistics bar: monospaced, with
 
 Pasting converts the clipboard's formatting to Markdown, keeping bold, italic, strikethrough and links, and dropping everything Heptad has no spelling for. In a plain-text note it pastes the characters alone, since that mode turns the formatting commands off. Nothing can enter a note that its own commands cannot take back out.
 
-Copying gives back the note's own characters — the delimiters are the formatting, so there is nothing else to carry. That also makes `⌘C` then `⌘V` inside the app exact, rather than converting the styling back into a second set of delimiters.
+`⌘C` gives back the note's own characters — its Markdown, not the styling drawn from it — which is what keeps `⌘C` then `⌘V` inside the app exact. `⌘⇧C` copies the selection as rich text instead, for pasting into Mail or a document, where the delimiters are noise and the formatting is the point. It carries bold, italic, strikethrough and links, in no particular colour and at no particular size: the receiving document has its own.
 
 Emptying a note is `⌘A` then `⌫`, one undo step. There is no shortcut of its own: `⌘⌫` is left to `NSTextView`, where it deletes to the beginning of the line as it does in every other editor.
 
@@ -80,13 +80,14 @@ Tests and contribution details are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 | `⌘+` / `⌘-` | Increase / decrease the editor's zoom |
 | `⌘⇧U` | Toggle the checkbox on the current line |
 | `⌘Z` / `⌘⇧Z` | Undo / redo |
-| `⌘C` / `⌘X` | Copy / cut |
+| `⌘C` / `⌘X` | Copy / cut, as the note's own Markdown |
+| `⌘⇧C` | Copy as rich text, for pasting into another app (plain-text notes copy the characters) |
 | `⌘V` | Paste, converting the clipboard's formatting to Markdown (plain-text notes take the characters alone) |
 | `⌘⇧V` | Paste as raw text, dropping the formatting entirely |
 | `⌘A` | Select all |
 | `⌘W` / `⌘Q` | Close window / quit |
 
-`⌘B`, `⌘I` and `⌘⇧X` wrap the selection in delimiters, and each is its own inverse: pressing it again on the text it wrapped takes them off. They do nothing in a plain-text note, which leaves its Markdown literal.
+`⌘B`, `⌘I` and `⌘⇧X` turn the trait on over the selection, or off again, so each is its own inverse and they compose in any order; the delimiters are written when the note is saved. They do nothing in a plain-text note, which leaves its Markdown literal.
 
 `⌘+` and `⌘-` set one zoom level for every note rather than sizing a run of text, since font size is the one thing with no Markdown spelling.
 
