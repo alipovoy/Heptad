@@ -26,10 +26,10 @@ final class SystemActivationCoordinator: ActivationCoordinating {
 
     var frontmostApplication: NSRunningApplication? { NSWorkspace.shared.frontmostApplication }
 
-    /// Not `activate(ignoringOtherApps: true)`: deprecated on macOS 14, where activation is
-    /// cooperative and granted by the user event this responds to — the status item or the hotkey.
+    /// Deprecated, but `NSApp.activate()` is declined after a status item press on macOS 27,
+    /// leaving the window without key.
     func activateCurrentApp() {
-        NSApp.activate()
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func activate(_ app: NSRunningApplication) {
