@@ -25,11 +25,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // intercepted by menu performKeyEquivalent.
         shortcutManager.start()
 
-        // ⌃⌥Space toggles the panel exactly like clicking the status item does — same entry
-        // point, so the panel anchors to the icon and click-outside dismissal behaves the same.
+        // ⌃⌥Space toggles the panel like clicking the status item does, anchored to the icon.
         hotKeyManager.onHotKey = { [weak self] in
             guard let self, let button = self.statusBarItem.button else { return }
-            self.windowManager.toggleWindow(sender: button)
+            self.windowManager.toggleWindow(sender: button, raisesCoveredPinnedWindow: true)
         }
         // Not fatal — only the hotkey is inert — but the app advertises a summon key and has no
         // settings UI, so this and `statusItemMenu` are all a user whose combination is already
@@ -64,7 +63,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             statusBarItem.button?.performClick(nil)
             statusBarItem.menu = nil
         } else {
-            windowManager.toggleWindow(sender: sender)
+            windowManager.statusItemPressed(sender: sender)
         }
     }
 

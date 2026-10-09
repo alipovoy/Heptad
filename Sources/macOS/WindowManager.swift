@@ -54,8 +54,11 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// Not in `AppConstants`: this class is the only thing that measures against it.
     static let dragToPinThreshold: CGFloat = 20
 
-    /// Global event monitor for click-outside-to-dismiss, live only in panel mode.
+    /// Global event monitor for click-outside-to-dismiss. Never stopped: it has to see presses
+    /// made while the window is hidden too, to clear `pressDismissedPanel`.
     private var globalClickMonitor: EventMonitor?
+
+    private var pressDismissedPanel = false
 
     /// One-shot monitor waiting for mouse-up to complete the drag-away-to-pin transition.
     private var pendingPinMonitor: EventMonitor?
@@ -113,11 +116,10 @@ class WindowManager: NSObject, NSWindowDelegate {
 
     // MARK: - API
 
-    func toggleWindow(sender: NSStatusBarButton) {
-        // A pinned window keeps its place, so the menubar icon (and the global hotkey, which
-        // lands here too) acts as show/hide for it: bring it forward when another app covers
-        // it, hide it only when it is already the window in front.
-        if isPinned, let window, window.isVisible {
+    /// Only the hotkey raises a pinned window that is not key: on macOS 27 the icon's press
+    /// deactivates Heptad before its action, so to the icon a pinned window is never key.
+    func toggleWindow(sender: NSStatusBarButton, raisesCoveredPinnedWindow: Bool = false) {
+        if raisesCoveredPinnedWindow, isPinned, let window, window.isVisible {
             if window.isKeyWindow {
                 window.performClose(nil)  // delegates to windowShouldClose
             } else {
@@ -143,8 +145,7 @@ class WindowManager: NSObject, NSWindowDelegate {
         flushPendingSaves()
         window?.orderOut(nil)
 
-        // Every show starts as the menubar panel. After `orderOut`, so the panel styling this
-        // restores stops the click-outside monitor rather than installing one.
+        // Every show starts as the menubar panel.
         setPinned(false)
         yieldActivation()
         notificationCenter.post(name: .windowDidHide, object: nil)
@@ -195,8 +196,8 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// the user sees their editor back with no caret in it until they ⌘-Tab away and return,
     /// which is what forces the real activation.
     private func yieldActivation() {
-        // A click outside the panel has already activated whatever was clicked; only step aside
-        // when Heptad is still the one holding activation.
+        // A click outside the panel, or on the icon on macOS 27, has already moved activation on;
+        // only step aside when Heptad is still the one holding activation.
         guard activation.isCurrentAppActive else { return }
 
         if let previous = previouslyActiveApp, previous != .current, !previous.isTerminated {
@@ -229,27 +230,10 @@ class WindowManager: NSObject, NSWindowDelegate {
         togglePin()
     }
 
-    /// Applies the current mode to the live window: the anchor and click-outside dismissal are
-    /// all that differ, and neither branch touches the level or the mask — see the class doc.
+    /// Unpinning in place can leave the window far from the status item, so the drag-away gesture
+    /// is measured from where the window actually is rather than from a stale anchor.
     private func applyPinnedState(to window: NSPanel) {
-        if isPanelMode {
-            applyPanelStyling(to: window)
-        } else {
-            globalClickMonitor?.stop()
-        }
-    }
-
-    /// Panel styling: re-anchored on every show, click-outside dismisses. Unpinning in place can
-    /// leave the window far from the status item, so the drag-away gesture is measured from where
-    /// the window actually is rather than from a stale anchor.
-    private func applyPanelStyling(to window: NSPanel) {
-        anchorOrigin = window.frame.origin
-
-        if window.isVisible {
-            installGlobalClickMonitor()
-        } else {
-            globalClickMonitor?.stop()
-        }
+        if isPanelMode { anchorOrigin = window.frame.origin }
     }
 
     // MARK: - Window Delegate
@@ -329,6 +313,7 @@ class WindowManager: NSObject, NSWindowDelegate {
             panel.contentView = mainHostingView
 
             self.window = panel
+            installGlobalClickMonitor()
         }
 
         guard let window else { return }
@@ -392,8 +377,21 @@ class WindowManager: NSObject, NSWindowDelegate {
     /// carrying any window of ours is a click inside the app, and without that the first click on
     /// an unactivated panel dismissed it.
     func handleClickOutside(_ event: NSEvent) {
+        pressDismissedPanel = false
         guard isPanelMode, window?.isVisible == true, event.window == nil else { return }
 
         hide()
+        if #available(macOS 27, *) { pressDismissedPanel = true }
+    }
+
+    /// The menubar icon's action. On macOS 27 a press on the status item reaches the monitor
+    /// above first, which hides the panel. The item's hit area is not exposed, so the press is
+    /// matched by order instead — no other press comes between the two — and answered (#158).
+    func statusItemPressed(sender: NSStatusBarButton) {
+        guard !pressDismissedPanel else {
+            pressDismissedPanel = false
+            return
+        }
+        toggleWindow(sender: sender)
     }
 }

@@ -31,7 +31,7 @@ extension WindowServerTests {
         // MARK: - Pinned show/hide
         //
         // A pinned window is neither re-anchored nor dismissed by a click outside, so the menubar
-        // icon (and the global hotkey, which lands in the same place) is its show/hide control.
+        // icon and the global hotkey are its show/hide control. Only the hotkey raises it.
 
         @Test(.bug(id: 59))
         func togglingAPinnedWindowThatIsAlreadyKeyHidesIt() async throws {
@@ -99,6 +99,31 @@ extension WindowServerTests {
             #expect(window.isVisible == false)
             #expect(manager.isPanelMode, "and it comes back as the panel — see #123")
         }
+
+        @Test(.bug(id: 158), .enabled(if: isMacOS27OrLater))
+        func aPressThatDismissedThePanelLeavesItsButtonActionNothingToDo() throws {
+            let window = try fixture.showWindow()
+
+            manager.handleClickOutside(try click(in: nil))
+            manager.statusItemPressed(sender: fixture.statusBarButton)
+
+            #expect(window.isVisible == false, "The press already closed the panel")
+        }
+
+        @Test(.bug(id: 158))
+        func thePressAfterADismissalOpensThePanel() throws {
+            let window = try fixture.showWindow()
+            manager.handleClickOutside(try click(in: nil))
+
+            manager.handleClickOutside(try click(in: nil))
+            manager.statusItemPressed(sender: fixture.statusBarButton)
+
+            #expect(window.isVisible, "A later press opens it again")
+        }
+
+        /// Before macOS 27 the monitor never sees a press on the status item.
+        private static let isMacOS27OrLater = ProcessInfo.processInfo.isOperatingSystemAtLeast(
+            OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
 
         /// A pinned window is not dismissed by a click outside it at all.
         @Test func aClickOutsideAPinnedWindowLeavesItAlone() throws {
@@ -172,23 +197,38 @@ extension WindowServerTests {
         /// from activating, or makes it restart the ticker every time focus comes back to it.
         @Test(.bug(id: 59))
         func raisingACoveredPinnedWindowActivatesButAnnouncesNothing() async throws {
-            let window = try fixture.showWindow()
-            manager.setPinned(true)
+            let window = try showCoveredPinnedWindow()
             let activationsBefore = fixture.activation.activatedCurrentAppCount
 
-            // Stands in for another app's window covering the pinned one: key status sits elsewhere.
-            let cover = fixture.makeStandInWindow()
-            cover.makeKeyAndOrderFront(nil)
-            try #require(window.isKeyWindow == false, "The pinned window must not be the key window")
-
             await fixture.expectingNotification(.windowDidBecomeVisible, count: 0) {
-                manager.toggleWindow(sender: fixture.statusBarButton)
+                manager.toggleWindow(sender: fixture.statusBarButton, raisesCoveredPinnedWindow: true)
             }
 
             #expect(window.isVisible, "A covered pinned window is raised, not hidden")
             #expect(
                 fixture.activation.activatedCurrentAppCount == activationsBefore + 1,
                 "Raising the window is useless without activation — typing would go elsewhere")
+        }
+
+        @Test(.bug(id: 158))
+        func theIconHidesAPinnedWindowThatIsNotKey() throws {
+            let window = try showCoveredPinnedWindow()
+
+            manager.toggleWindow(sender: fixture.statusBarButton)
+
+            #expect(window.isVisible == false, "A visible pinned window hides on the icon")
+            #expect(manager.isPanelMode, "and comes back as the menubar panel — see #123")
+        }
+
+        /// A pinned window on screen with key status elsewhere.
+        private func showCoveredPinnedWindow() throws -> NSPanel {
+            let window = try fixture.showWindow()
+            manager.setPinned(true)
+
+            let cover = fixture.makeStandInWindow()
+            cover.makeKeyAndOrderFront(nil)
+            try #require(window.isKeyWindow == false, "The pinned window must not be the key window")
+            return window
         }
 
         /// A resized window comes back the size the user left it, across launches — the claim
